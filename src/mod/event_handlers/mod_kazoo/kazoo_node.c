@@ -1116,11 +1116,11 @@ switch_status_t new_kazoo_node(int nodefd, ErlConnect *conn) {
 
 	switch_socket_addr_get(&sa, SWITCH_TRUE, ei_node->socket);
 	ei_node->local_port = switch_sockaddr_get_port(sa);
-    switch_get_addr(ei_node->local_ip, sizeof (ei_node->local_ip), sa);
+    switch_get_addr(ei_node->remote_ip, sizeof (ei_node->remote_ip), sa);
 
 	switch_socket_addr_get(&sa, SWITCH_FALSE, ei_node->socket);
 	ei_node->remote_port = switch_sockaddr_get_port(sa);
-    switch_get_addr(ei_node->remote_ip, sizeof (ei_node->remote_ip), sa);
+    switch_get_addr(ei_node->local_ip, sizeof (ei_node->local_ip), sa);
 
 
 	switch_queue_create(&ei_node->asynchronous_msgs, MAX_QUEUE_LEN, pool);
