@@ -124,8 +124,6 @@ cp %{SOURCE5} libs/
 %{__install} -D -m 744 %{_builddir}/Kazoo-FreeSWITCH/build/freeswitch.sysconfig %{buildroot}/etc/sysconfig/freeswitch
 # Add monit file
 %{__install} -D -m 644 %{_builddir}/Kazoo-FreeSWITCH/build/freeswitch.monitrc %{buildroot}/etc/monit.d/freeswitch.monitrc
-# Add security/limits.d
-%{__install} -D -m 644 %{_builddir}/Kazoo-FreeSWITCH-Configs/freeswitch.limits.conf %{buildroot}/etc/security/limits.d/freeswitch.limits.conf
 %endif
 
 ######################################################################################################################
@@ -296,7 +294,6 @@ fi
 %ifos linux
 /etc/rc.d/init.d/freeswitch
 %config(noreplace) /etc/sysconfig/freeswitch
-%config(noreplace) /etc/security/limits.d/freeswitch.limits.conf
 %config(noreplace) %attr(0644, freeswitch, daemon) /etc/monit.d/freeswitch.monitrc
 %if 0%{?suse_version} > 100
 /usr/sbin/rcfreeswitch
