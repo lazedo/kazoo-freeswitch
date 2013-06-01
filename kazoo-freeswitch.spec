@@ -101,11 +101,6 @@ cp %{SOURCE5} libs/
 
 %{__mkdir} -p %{buildroot}%{LOGFILEDIR}
 %{__mkdir} -p %{buildroot}%{RUNDIR}
-%{__mkdir} -p %{buildroot}%{SYSCONFDIR}/autoload_configs
-%{__mkdir} -p %{buildroot}%{SYSCONFDIR}/dialplan
-%{__mkdir} -p %{buildroot}%{SYSCONFDIR}/directory
-%{__mkdir} -p %{buildroot}%{SYSCONFDIR}/lang
-%{__mkdir} -p %{buildroot}%{SYSCONFDIR}/sip_profiles
 %{__mkdir} -p %{buildroot}%{LOCALSTATEDIR}
 %{__mkdir} -p %{buildroot}%{DBDIR}
 %{__mkdir} -p %{buildroot}%{GRAMMARDIR}/model/communicator
@@ -113,13 +108,6 @@ cp %{SOURCE5} libs/
 %{__mkdir} -p %{buildroot}%{LOGFILEDIR}
 %{__mkdir} -p %{buildroot}%{RUNDIR}
 %{__mkdir} -p %{buildroot}%{SCRIPTDIR}
-
-cp -r %{_builddir}/Kazoo-FreeSWITCH/conf/vanilla/lang/en %{buildroot}%{SYSCONFDIR}/lang/
-
-cp %{_builddir}/Kazoo-FreeSWITCH-Configs/autoload_configs/* %{buildroot}%{SYSCONFDIR}/autoload_configs/
-cp %{_builddir}/Kazoo-FreeSWITCH-Configs/sip_profiles/* %{buildroot}%{SYSCONFDIR}/sip_profiles/
-cp %{_builddir}/Kazoo-FreeSWITCH-Configs/freeswitch.xml %{buildroot}%{SYSCONFDIR}/
-cp %{_builddir}/Kazoo-FreeSWITCH/conf/vanilla/mime.types %{buildroot}%{SYSCONFDIR}/
 
 %ifos linux
 # Install init files
@@ -251,7 +239,6 @@ fi
 %{?run_ldconfig:%run_ldconfig}
 # Make FHS2.0 happy
 # %{__mkdir} -p /etc/opt
-# %{__ln_s} -f %{SYSCONFDIR} /etc%{prefix}
 
 chown freeswitch:daemon /var/log/freeswitch /var/run/freeswitch
 
@@ -272,7 +259,6 @@ fi
 %files                                                                                                                                                                                                                                                                                             
 %defattr(-,freeswitch,daemon)
 #################################### Basic Directory Structure #######################################################
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}
 %dir %attr(0750, freeswitch, daemon) %{LOCALSTATEDIR}
 %dir %attr(0750, freeswitch, daemon) %{DBDIR}
 %dir %attr(0750, freeswitch, daemon) %{GRAMMARDIR}
@@ -280,13 +266,6 @@ fi
 %dir %attr(0750, freeswitch, daemon) %{LOGFILEDIR}
 %dir %attr(0750, freeswitch, daemon) %{RUNDIR}
 %dir %attr(0750, freeswitch, daemon) %{SCRIPTDIR}
-
-#################################### Config Directory Structure #######################################################
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/autoload_configs
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/dialplan
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/directory
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/lang
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/sip_profiles
 
 #################################### Grammar Directory Structure #####################################################
 %dir %attr(0750, freeswitch, daemon) %{GRAMMARDIR}/model
@@ -665,35 +644,7 @@ English language phrases module and directory structure for say module and voice
 
 %files lang-en
 %defattr(-, freeswitch, daemon)
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/lang/en
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/lang/en/demo
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/lang/en/vm
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/lang/en/dir
-%dir %attr(0750, freeswitch, daemon) %{SYSCONFDIR}/lang/en/ivr
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/lang/en/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/lang/en/demo/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/lang/en/vm/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/lang/en/dir/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/lang/en/ivr/*.xml
 %{MODINSTDIR}/mod_say_en.so*
-
-######################################################################################################################                                                                                                                                                                             
-# Kazoo FreeSWITCH configuration Package
-######################################################################################################################
-%package configs
-Summary:        Kazoo default FreeSWITCH config files
-Group:          System/Libraries
-Requires:       %{name} = %{version}-%{release}
-
-%description configs
-Kazoo FreeSWITCH config files
-
-%files configs
-%defattr(-, freeswitch, daemon)
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/mime.types
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/freeswitch.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/autoload_configs/*.xml
-%config(noreplace) %attr(0640, freeswitch, daemon) %{SYSCONFDIR}/sip_profiles/*.xml
 
 ######################################################################################################################                                                                                                                                                                             
 # Developer Pacakge
