@@ -221,7 +221,7 @@ unset MODULES
 %install
 
 %{__make} DESTDIR=%{buildroot} install
-rm -rf %{buildroot}%{_sysconfdir}/kazoo
+rm -rf %{buildroot}/%{_sysconfdir}/kazoo
 
 ######################################################################################################################
 # Include a script to add a freeswitch user with group daemon when the core RPM is installed
