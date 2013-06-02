@@ -6,7 +6,7 @@
         <param name="cookie-file" value="/etc/freeswitch/autoload_configs/.erlang.cookie" />
         <param name="shortname" value="false" />
         <param name="nodename" value="freeswitch" />
-		<!--<param name="kazoo-var-prefix" value="ecallmgr" />-->
+                <!--<param name="kazoo-var-prefix" value="ecallmgr" />-->
         <!--<param name="compat-rel" value="12"/> -->
     </settings>
     <event-filter type="whitelist">
@@ -151,5 +151,15 @@
         <header name="effective_caller_id_number" />
         <header name="effective_callee_id_name" />
         <header name="effective_callee_id_number" />
+
+        <header name="Hear" />
+        <header name="Speak" />
+        <header name="Video" />
+        <header name="Talking" />
+        <header name="Mute-Detect" />
+        <header name="Member-ID" />
+        <header name="Member-Type" />
+        <header name="Energy-Level" />
+        <header name="Current-Energy" />
     </event-filter>
 </configuration>
