@@ -180,7 +180,8 @@ typedef enum {
 	MFLAG_NOMOH = (1 << 19),
 	MFLAG_VIDEO_BRIDGE = (1 << 20),
 	MFLAG_INDICATE_MUTE_DETECT = (1 << 21),
-	MFLAG_PAUSE_RECORDING = (1 << 22)
+	MFLAG_PAUSE_RECORDING = (1 << 22),
+	MFLAG_DEFAULT_NOSPEAK = (1 << 23)
 } member_flag_t;
 
 typedef enum {
@@ -7784,6 +7785,70 @@ SWITCH_STANDARD_APP(conference_function)
 		switch_core_codec_destroy(&member.read_codec);
 		goto done;
 	}
+
+	/* Once the caller is added, if there is a relations-based no-speak, handle it */
+	if (switch_true(switch_channel_get_variable(channel, "conference_member_nospeak_relational"))) {
+	        conference_member_t *imember;
+		conference_relationship_t *rel = NULL;
+
+		switch_mutex_lock(conference->mutex);
+
+		/* Cycle through each member in the conference and set this new member to be "nospeak" to the other members */
+		for (imember = conference->members; imember; imember = imember->next) if (member.id != imember->id) {
+			if ((rel = member_get_relationship(&member, imember))) {
+				rel->flags = 0;
+			} else {
+				rel = member_add_relationship(&member, imember->id);
+			}
+
+			/* Assuming we just got an existing relationship or created a new one, let's set this person so they can't speak to the other guy */
+			if (rel) {
+				switch_set_flag(rel, RFLAG_CAN_HEAR);
+				switch_clear_flag(rel, RFLAG_CAN_SPEAK);
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relation set: %u can't speak to %u\n", member.id, imember->id);
+			} else {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relate ERROR: %u can't relate to %u\n", member.id, imember->id);
+			}
+		}
+
+		switch_set_flag_locked((&member), MFLAG_DEFAULT_NOSPEAK);
+
+		switch_mutex_unlock(conference->mutex);
+	}
+
+	/* Once the caller is added, make sure there are no members who have a permanent "no speak" set. If there are, create a relationship for this member too so this new member can't hear the nospeak guy */
+	if (switch_true(switch_channel_get_variable(channel, "conference_member_nospeak_check"))) {
+	        conference_member_t *imember;
+		conference_relationship_t *rel = NULL;
+
+		switch_mutex_lock(conference->mutex);
+
+		/* Cycle through each member in the conference and set this new member to be "nospeak" to the other members */
+		for (imember = conference->members; imember; imember = imember->next) if (member.id != imember->id) {
+			if (switch_test_flag(imember, MFLAG_DEFAULT_NOSPEAK)) {
+				// Found a member we are not supposed to be able to hear.
+				// Make sure there's a relationship to him for not speaking
+
+				if ((rel = member_get_relationship(imember, &member))) {
+					rel->flags = 0;
+				} else {
+					rel = member_add_relationship(imember, member.id);
+				}
+
+				/* Assuming we just got an existing relationship or created a new one, let's set this person so they can't speak to the other guy */
+				if (rel) {
+					switch_set_flag(rel, RFLAG_CAN_HEAR);
+					switch_clear_flag(rel, RFLAG_CAN_SPEAK);
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relation set: %u can't speak to %u\n", imember->id, member.id);
+				} else {
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relate ERROR: %u can't relate to %u\n", imember->id, member.id);
+				}
+			}
+		}
+
+		switch_mutex_unlock(conference->mutex);
+	}
+ 
 
 	msg.from = __FILE__;
 
