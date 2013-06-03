@@ -45,6 +45,9 @@
         <header name="Conference-Name" />
         <header name="Conference-Profile-Name" />
         <header name="Conference-Unique-ID" />
+        <header name="Conference-Size" />
+        <header name="New-ID" />
+        <header name="Old-ID" />
         <header name="contact" />
         <header name="Detected-Tone" />
         <header name="dialog_state" />
@@ -161,5 +164,6 @@
         <header name="Member-Type" />
         <header name="Energy-Level" />
         <header name="Current-Energy" />
+        <header name="Floor" />
     </event-filter>
 </configuration>
