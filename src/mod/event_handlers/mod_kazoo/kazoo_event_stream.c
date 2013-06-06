@@ -99,6 +99,29 @@ static void event_handler(switch_event_t *event) {
 		return;
 	}
 
+	if (event->event_id == SWITCH_EVENT_CUSTOM) {
+		ei_event_binding_t *event_binding = event_stream->bindings;
+		unsigned short int found = 0;
+
+		if (!event->subclass_name) {
+			return;
+		}
+
+		while(event_binding != NULL) {
+			if (event_binding->type == SWITCH_EVENT_CUSTOM) {
+				if(event_binding->subclass_name
+				   && !strcmp(event->subclass_name, event_binding->subclass_name)) {
+					found = 1;
+					break;
+				}
+			}
+
+			if (!found) {
+				return;
+			}
+		}
+	}
+
 	/* try to clone the event and push it to the event stream thread */
 	/* TODO: someday maybe the filter comes from the event_stream (set during init only)
 	 * and is per-binding so we only send headers that a process requests */
@@ -397,7 +420,9 @@ switch_status_t add_event_binding(ei_event_stream_t *event_stream, const switch_
 	/* check if the event binding already exists, ignore if so */
 	while(event_binding != NULL) {
 		if (event_binding->type == SWITCH_EVENT_CUSTOM) {
-			if(subclass_name && !strncmp(event_binding->subclass_name, subclass_name, strlen(event_binding->subclass_name))) {
+			if(subclass_name
+			   && event_binding->subclass_name
+			   && !strcmp(subclass_name, event_binding->subclass_name)) {
 				return SWITCH_STATUS_SUCCESS;
 			}
 		} else if (event_binding->type == event_type) {
@@ -414,7 +439,7 @@ switch_status_t add_event_binding(ei_event_stream_t *event_stream, const switch_
 
 	/* prepare the event binding struct */
 	event_binding->type = event_type;
-	if (zstr(subclass_name)) {
+	if (!subclass_name || zstr(subclass_name)) {
 		event_binding->subclass_name = NULL;
 	} else {
 		/* TODO: free strdup? */
@@ -458,7 +483,9 @@ switch_status_t remove_event_binding(ei_event_stream_t *event_stream, const swit
 	/* try to find the event binding specified */
 	while(event_binding != NULL) {
 		if (event_binding->type == SWITCH_EVENT_CUSTOM 
-			&& event_binding->subclass_name == subclass_name) {
+			&& subclass_name
+			&& event_binding->subclass_name
+			&& !strcmp(subclass_name, event_binding->subclass_name)) {
 			found = 1;
 			break;
 		} else if (event_binding->type == event_type) {
