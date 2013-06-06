@@ -180,15 +180,13 @@ static switch_status_t handle_node_api_event_stream(ei_event_stream_t *event_str
 			ip_addr = globals.ip;
 		}
 
-		stream->write_function(stream, "%s:%d -> disconnected\n", ip_addr, port);
-
-		switch_mutex_unlock(event_stream->socket_mutex);
-		return SWITCH_STATUS_SUCCESS;
+		stream->write_function(stream, "%s:%d -> disconnected\n"
+							   ,ip_addr, port);
+	} else {
+		stream->write_function(stream, "%s:%d -> %s:%d\n"
+							   ,event_stream->local_ip, event_stream->local_port
+							   ,event_stream->remote_ip, event_stream->remote_port);
 	}
-
-	stream->write_function(stream, "%s:%d -> %s:%d\n"
-						   ,event_stream->local_ip, event_stream->local_port
-						   ,event_stream->remote_ip, event_stream->remote_port);
 
 	binding = event_stream->bindings;
 	while(binding != NULL) {
