@@ -220,6 +220,7 @@ unset MODULES
 ######################################################################################################################
 %install
 
+%{__rm} -rf %{buildroot}
 %{__make} DESTDIR=%{buildroot} install
 rm -rf %{buildroot}/%{_sysconfdir}/kazoo
 
