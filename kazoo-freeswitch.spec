@@ -93,6 +93,8 @@ other telephony projects including Kazoo, sipXecs, OpenSER, Asterisk, CodeWeaver
 %prep
 %setup -b0 -q -n Kazoo-FreeSWITCH
 
+%{__rm} -rf %{buildroot}
+
 cp %{SOURCE1} libs/
 cp %{SOURCE2} libs/
 cp %{SOURCE3} libs/
@@ -220,7 +222,6 @@ unset MODULES
 ######################################################################################################################
 %install
 
-%{__rm} -rf %{buildroot}
 %{__make} DESTDIR=%{buildroot} install
 rm -rf %{buildroot}/%{_sysconfdir}/kazoo
 
