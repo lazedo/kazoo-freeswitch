@@ -115,10 +115,11 @@ static void event_handler(switch_event_t *event) {
 					break;
 				}
 			}
+			event_binding = event_binding->next;
+		}
 
-			if (!found) {
-				return;
-			}
+		if (!found) {
+			return;
 		}
 	}
 
