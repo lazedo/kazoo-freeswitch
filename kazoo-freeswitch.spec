@@ -90,12 +90,6 @@ other telephony projects including Kazoo, sipXecs, OpenSER, Asterisk, CodeWeaver
 
 %{__rm} -rf %{buildroot}
 
-cp %{SOURCE1} libs/
-cp %{SOURCE2} libs/
-cp %{SOURCE3} libs/
-cp %{SOURCE4} libs/
-cp %{SOURCE5} libs/
-
 %{__mkdir} -p %{buildroot}%{LOGFILEDIR}
 %{__mkdir} -p %{buildroot}%{RUNDIR}
 %{__mkdir} -p %{buildroot}%{LOCALSTATEDIR}
