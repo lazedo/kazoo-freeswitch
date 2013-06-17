@@ -25,6 +25,7 @@
 %define GRAMMARDIR      %{_prefix}/share/freeswitch/grammar
 %define SCRIPTDIR       %{_prefix}/share/freeswitch/scripts
 %define PKGCONFIGDIR    %{_prefix}/share/freeswitch/pkgconfig
+%define CACHEDIR        %{_prefix}/share/freeswitch/http_cache
 %define LOCALSTATEDIR   %{_localstatedir}/lib/freeswitch
 %define DBDIR           %{_localstatedir}/lib/freeswitch/db
 %define RECORDINGSDIR   %{_localstatedir}/lib/freeswitch/recordings
@@ -99,6 +100,7 @@ other telephony projects including Kazoo, sipXecs, OpenSER, Asterisk, CodeWeaver
 %{__mkdir} -p %{buildroot}%{LOGFILEDIR}
 %{__mkdir} -p %{buildroot}%{RUNDIR}
 %{__mkdir} -p %{buildroot}%{SCRIPTDIR}
+%{__mkdir} -p %{buildroot}%{CACHEDIR}
 
 %ifos linux
 # Install init files
@@ -256,6 +258,7 @@ fi
 %dir %attr(0750, freeswitch, daemon) %{LOGFILEDIR}
 %dir %attr(0750, freeswitch, daemon) %{RUNDIR}
 %dir %attr(0750, freeswitch, daemon) %{SCRIPTDIR}
+%dir %attr(0750, freeswitch, daemon) %{CACHEDIR}
 
 #################################### Grammar Directory Structure #####################################################
 %dir %attr(0750, freeswitch, daemon) %{GRAMMARDIR}/model
