@@ -42,11 +42,6 @@ Packager:       Karl Anderson
 Vendor:         http://www.Kazoo.org/
 
 Source0:        Kazoo-FreeSWITCH.tar
-Source1:        celt-0.10.0.tar.gz
-Source2:        flite-1.5.1-current.tar.bz2
-Source3:        lame-3.97.tar.gz
-Source4:        libshout-2.2.2.tar.gz
-Source5:        mpg123-1.13.2.tar.gz
 
 BuildRequires: make
 BuildRequires: pkgconfig
