@@ -6186,16 +6186,20 @@ int sofia_recover_callback(switch_core_session_t *session)
 			
 			sofia_glue_tech_set_codec(tech_pvt, 1);
 
-			tech_pvt->adv_sdp_audio_ip = tech_pvt->extrtpip = (char *) ip;
-			tech_pvt->adv_sdp_audio_port = tech_pvt->local_sdp_audio_port = (switch_port_t)atoi(port);
+			if (!switch_channel_get_variable(channel, "reset_local_network_on_recovery")) {
+				tech_pvt->adv_sdp_audio_ip = tech_pvt->extrtpip = (char *) ip;
+				tech_pvt->adv_sdp_audio_port = tech_pvt->local_sdp_audio_port = (switch_port_t)atoi(port);
 
-			if (!zstr(ip)) {
-				tech_pvt->local_sdp_audio_ip = switch_core_session_strdup(session, ip);
-				tech_pvt->rtpip = tech_pvt->local_sdp_audio_ip;
-			}
+				if (!zstr(ip)) {
+					tech_pvt->local_sdp_audio_ip = switch_core_session_strdup(session, ip);
+					tech_pvt->rtpip = tech_pvt->local_sdp_audio_ip;
+				}
 
-			if (!zstr(a_ip)) {
-				tech_pvt->adv_sdp_audio_ip = switch_core_session_strdup(session, a_ip);
+				if (!zstr(a_ip)) {
+					tech_pvt->adv_sdp_audio_ip = switch_core_session_strdup(session, a_ip);
+				}
+			} else {
+				sofia_glue_tech_choose_port(tech_pvt, 0);
 			}
 
 			if (r_ip && r_port) {

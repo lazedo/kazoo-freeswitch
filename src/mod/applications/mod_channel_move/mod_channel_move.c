@@ -161,14 +161,19 @@ static char *recover_callback(char *technology, char *xml_str)
 				switch_channel_set_caller_extension(channel, extension);
 			}
 
-			switch_channel_set_state(channel, CS_INIT);
-			switch_channel_set_variable(channel, "channel_is_moving", NULL);
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, 
-							"Move Channel: Resurrecting fallen channel %s\n", switch_channel_get_name(channel));
+			if (switch_channel_get_state(channel) < CS_ROUTING) {
+				switch_channel_set_state(channel, CS_INIT);
+				switch_channel_set_variable(channel, "channel_is_moving", NULL);
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, 
+								"Move Channel: Resurrecting fallen channel %s\n", switch_channel_get_name(channel));
 
-			switch_core_session_thread_launch(session);
+				switch_core_session_thread_launch(session);
 
-			r = switch_channel_get_uuid(channel);
+				r = switch_channel_get_uuid(channel);
+			} else {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, 
+								"Move Channel: Channel state is wrong - %i\n", switch_channel_get_state(channel));
+			}
 		}
 
 	} else {
