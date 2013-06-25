@@ -155,6 +155,28 @@
         <header name="effective_callee_id_name" />
         <header name="effective_callee_id_number" />
 
+        <!-- CDR Headers -->
+        <header name="Hangup-Cause" />
+        <header name="Unique-ID" />
+        <header name="variable_switch_r_sdp" />
+        <header name="variable_sip_local_sdp_str" />
+        <header name="variable_sip_to_uri" />
+        <header name="variable_sip_from_uri" />
+        <header name="variable_effective_caller_id_number" />
+        <header name="Caller-Caller-ID-Number" />
+        <header name="variable_effective_caller_id_name" />
+        <header name="Caller-Caller-ID-Name" />
+        <header name="Caller-Callee-ID-Name" />
+        <header name="Caller-Callee-ID-Number" />
+        <header name="Other-Leg-Unique-ID" />
+        <header name="variable_sip_user_agent" />
+        <header name="variable_duration" />
+        <header name="variable_billsec" />
+        <header name="variable_progresssec" />
+        <header name="variable_digits_dialed" />
+        <header name="variable_sip_cid_type" />
+
+        <!-- Conference Headers -->
         <header name="Hear" />
         <header name="Speak" />
         <header name="Video" />
