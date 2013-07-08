@@ -157,7 +157,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 	/* no client, no work required */
 	if (!client || !client->fetch_handlers) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "No %s XML erlang handler currently available\n"
-						  ,xml_section_to_string(agent->section));
+						  ,section);
 		switch_thread_rwlock_unlock(agent->lock);
 		return xml;
 	}
@@ -204,7 +204,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 
 		if (switch_queue_trypush(client->ei_node->asynchronous_msgs, asynchronous_msg) != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to send %s XML request to %s <%d.%d.%d>\n"
-							  ,xml_section_to_string(agent->section)
+							  ,section
 							  ,fetch_handler->pid.node
 							  ,fetch_handler->pid.creation
 							  ,fetch_handler->pid.num
@@ -213,7 +213,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 			switch_safe_free(asynchronous_msg);
 		} else {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sending %s XML request (%s) to %s <%d.%d.%d>\n"
-							  ,xml_section_to_string(agent->section)
+							  ,section
 							  ,reply.uuid_str
 							  ,fetch_handler->pid.node
 							  ,fetch_handler->pid.creation
@@ -226,6 +226,8 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 
 	/* wait for a reply (if there isnt already one...amazingly improbable but lets not take shortcuts */
     switch_mutex_lock(agent->replies_mutex);
+
+	switch_thread_rwlock_unlock(agent->lock);
 
 	if (!reply.xml_str) {
 		switch_time_t timeout;
@@ -267,17 +269,12 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 	/* we are done with the replies link-list */
 	switch_mutex_unlock(agent->replies_mutex);
 
-	/* we are done with the agent, if we are starving the adding/removing clients
-	 * theoretically we could release before locking replies_mutex for the
-	 * conditional signal */
-	switch_thread_rwlock_unlock(agent->lock);
-
 	/* after all that did we get what we were after?! */
 	if (reply.xml_str) {
 		/* HELL YA WE DID */
 		reply.xml_str = expand_vars(reply.xml_str);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received %s XML (%s) after %dms: %s\n"
-						  ,xml_section_to_string(agent->section)
+						  ,section
 						  ,reply.uuid_str
 						  ,(unsigned int) (switch_micro_time_now() - now) / 1000
 						  ,reply.xml_str);
@@ -286,7 +283,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 	} else {
 		/* facepalm */
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Request for %s XML (%s) timed-out after %dms\n"
-						  ,xml_section_to_string(agent->section)
+						  ,section
 						  ,reply.uuid_str
 						  ,(unsigned int) (switch_micro_time_now() - now) / 1000);
 	}
