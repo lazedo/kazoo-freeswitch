@@ -1411,6 +1411,8 @@ static void base_set (switch_core_session_t *session, const char *data, switch_s
 
 SWITCH_STANDARD_APP(multiset_function)
 {
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	switch_event_t *event;
 	char delim = ' ';
 	char *arg = (char *) data;
 
@@ -1434,21 +1436,50 @@ SWITCH_STANDARD_APP(multiset_function)
 	} else {
 		base_set(session, data, SWITCH_STACK_BOTTOM);
 	}
+
+        if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+		switch_channel_event_set_data(channel, event);
+		switch_event_fire(&event);
+	}
 }
 
 SWITCH_STANDARD_APP(set_function)
 {
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	switch_event_t *event;
+
 	base_set(session, data, SWITCH_STACK_BOTTOM);
+
+        if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+		switch_channel_event_set_data(channel, event);
+		switch_event_fire(&event);
+	}
 }
 
 SWITCH_STANDARD_APP(push_function)
 {
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	switch_event_t *event;
+
 	base_set(session, data, SWITCH_STACK_PUSH);
+
+        if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+		switch_channel_event_set_data(channel, event);
+		switch_event_fire(&event);
+	}
 }
 
 SWITCH_STANDARD_APP(unshift_function)
 {
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	switch_event_t *event;
+
 	base_set(session, data, SWITCH_STACK_UNSHIFT);
+
+        if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+		switch_channel_event_set_data(channel, event);
+		switch_event_fire(&event);
+	}
 }
 
 SWITCH_STANDARD_APP(set_global_function)
@@ -1540,11 +1571,19 @@ SWITCH_STANDARD_APP(bridge_export_function)
 
 SWITCH_STANDARD_APP(unset_function)
 {
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	switch_event_t *event;
+
 	if (zstr(data)) {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "No variable name specified.\n");
 	} else {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "UNSET [%s]\n", (char *) data);
 		switch_channel_set_variable(switch_core_session_get_channel(session), data, NULL);
+	}
+
+        if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+		switch_channel_event_set_data(channel, event);
+		switch_event_fire(&event);
 	}
 }
 
