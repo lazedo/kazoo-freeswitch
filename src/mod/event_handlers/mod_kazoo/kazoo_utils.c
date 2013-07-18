@@ -496,25 +496,26 @@ switch_event_t *create_default_filter() {
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_caller_id_number", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_callee_id_name", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_callee_id_number", "undefined");
-
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Hangup-Cause", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Unique-ID", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_switch_r_sdp", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_local_sdp_str", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_uri", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_uri", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_effective_caller_id_number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Caller-ID-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_effective_caller_id_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Caller-ID-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Callee-ID-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Callee-ID-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Unique-ID", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_user_agent", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_duration", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_billsec", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_progresssec", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_digits_dialed", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Member-ID", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Floor", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Video", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Hear", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Speak", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Talking", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Current-Energy", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Energy-Level", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Mute-Detect", "undefined");
 
 	return filter;
 }
