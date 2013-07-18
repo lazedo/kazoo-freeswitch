@@ -5128,6 +5128,8 @@ SWITCH_STANDARD_API(uuid_setvar_function)
 
 			if ((psession = switch_core_session_locate(uuid))) {
 				switch_channel_t *channel;
+                                switch_event_t *event;
+
 				channel = switch_core_session_get_channel(psession);
 
 				if (zstr(var_name)) {
@@ -5136,6 +5138,11 @@ SWITCH_STANDARD_API(uuid_setvar_function)
 				} else {
 					switch_channel_set_variable(channel, var_name, var_value);
 					stream->write_function(stream, "+OK\n");
+				}
+
+                                if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+                                        switch_channel_event_set_data(channel, event);
+                                        switch_event_fire(&event);
 				}
 
 				switch_core_session_rwunlock(psession);
@@ -5172,6 +5179,7 @@ SWITCH_STANDARD_API(uuid_setvar_multi_function)
 
 		if ((psession = switch_core_session_locate(uuid))) {
 			switch_channel_t *channel = switch_core_session_get_channel(psession);
+			switch_event_t *event;
 			int x, y = 0;
 			argc = switch_separate_string(vars, ';', argv, (sizeof(argv) / sizeof(argv[0])));
 
@@ -5187,6 +5195,11 @@ SWITCH_STANDARD_API(uuid_setvar_multi_function)
 					switch_channel_set_variable(channel, var_name, var_value);
 					y++;
 				}
+			}
+
+			if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
+				switch_channel_event_set_data(channel, event);
+				switch_event_fire(&event);
 			}
 
 			switch_core_session_rwunlock(psession);
