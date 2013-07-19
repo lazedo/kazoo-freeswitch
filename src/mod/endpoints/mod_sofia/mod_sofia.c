@@ -5454,6 +5454,7 @@ static void general_event_handler(switch_event_t *event)
 			const char *to_uri = switch_event_get_header(event, "to-uri");
 			const char *from_uri = switch_event_get_header(event, "from-uri");
 			const char *extra_headers = switch_event_get_header(event, "extra-headers");
+			const char *contact = switch_event_get_header(event, "contact");
 
 			sofia_profile_t *profile;
 
@@ -5487,21 +5488,24 @@ static void general_event_handler(switch_event_t *event)
 					return;
 				}
 
+				if (!contact) {
+					contact = to_uri;
+				}
+
 				if (to_uri && from_uri && ct && es) {
 					sofia_destination_t *dst = NULL;
 					nua_handle_t *nh;
 					char *route_uri = NULL;
 
-					dst = sofia_glue_get_destination((char *) to_uri);
-					
+					dst = sofia_glue_get_destination((char *) contact);
+
 					if (dst->route_uri) {
 						route_uri = sofia_glue_strip_uri(dst->route_uri);
 					}
-					
-					
+	
 					nh = nua_handle(profile->nua,
 									NULL,
-									NUTAG_URL(to_uri), 
+									NUTAG_URL(dst->contact), 
 									SIPTAG_FROM_STR(from_uri),
 									SIPTAG_TO_STR(to_uri),
 									SIPTAG_CONTACT_STR(profile->url),
