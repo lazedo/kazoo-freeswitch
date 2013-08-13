@@ -418,6 +418,7 @@ switch_event_t *create_default_filter() {
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Destination-Number", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Direction", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Unique-ID", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Channel-Name", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Participant-Type", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Path", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "profile_name", "undefined");
