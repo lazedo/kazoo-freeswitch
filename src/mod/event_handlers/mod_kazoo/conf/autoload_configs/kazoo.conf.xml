@@ -48,7 +48,6 @@
         <header name="Conference-Size" />
         <header name="New-ID" />
         <header name="Old-ID" />
-        <header name="contact" />
         <header name="Detected-Tone" />
         <header name="dialog_state" />
         <header name="direction" />
@@ -58,7 +57,6 @@
         <header name="Event-Date-Timestamp" />
         <header name="Event-Name" />
         <header name="Event-Subclass" />
-        <header name="expires" />
         <header name="Expires" />
         <header name="Ext-SIP-IP" />
         <header name="File" />
@@ -82,7 +80,6 @@
         <header name="Profiles" />
         <header name="proto-specific-event-name" />
         <header name="Raw-Application-Data" />
-        <header name="realm" />
         <header name="Resigning-UUID" />
         <header name="set" />
         <header name="sip_auto_answer" />
@@ -96,7 +93,6 @@
         <header name="to" />
         <header name="Unique-ID" />
         <header name="URL" />
-        <header name="username" />
         <header name="variable_channel_is_moving" />
         <header name="variable_collected_digits" />
         <header name="variable_current_application" />
@@ -154,6 +150,24 @@
         <header name="effective_caller_id_number" />
         <header name="effective_callee_id_name" />
         <header name="effective_callee_id_number" />
+
+        <!-- Registrations -->
+        <header name="call-id" />
+        <header name="profile-name" />
+        <header name="from-user" />
+        <header name="from-host" />
+        <header name="presence-hosts" />
+        <header name="contact" />
+        <header name="rpid" />
+        <header name="status" />
+        <header name="expires" />
+        <header name="to-user" />
+        <header name="to-host" />
+        <header name="network-ip" />
+        <header name="network-port" />
+        <header name="username" />
+        <header name="realm" />
+        <header name="user-agent" />
 
         <!-- CDR Headers -->
         <header name="Hangup-Cause" />
