@@ -62,15 +62,15 @@
 static void ei_x_print_reg_msg(ei_x_buff *buf, char *dest, int send) {
     char *mbuf = NULL;
     int i = 1;
-	
+
     ei_s_print_term(&mbuf, buf->buff, &i);
-	
+
     if (send) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Encoded term %s to '%s'\n", mbuf, dest);
     } else {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Decoded term %s for '%s'\n", mbuf, dest);
     }
-	
+
     free(mbuf);
 }
 
@@ -166,7 +166,7 @@ switch_socket_t *create_socket(switch_memory_pool_t *pool) {
 	//	if (globals.nat_map && switch_nat_get_type()) {
 	//		switch_nat_add_mapping(port, SWITCH_NAT_TCP, NULL, SWITCH_FALSE);
 	//	}
-	
+
 	return socket;
 }
 
@@ -177,7 +177,7 @@ switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei
     char cnodename[EI_MAXALIVELEN + 1];
     //EI_MAX_COOKIE_SIZE+1
     char *atsign;
-		
+
     /* copy the erlang interface nodename into something we can modify */
     strncpy(cnodename, name, EI_MAXALIVELEN);
 
@@ -214,7 +214,7 @@ switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei
 		if ((off = strchr(nodename, '.'))) {
 			*off = '\0';
 		}
-	} 
+	}
 
     /* init the ec stuff */
     if (ei_connect_xinit(ei_cnode, hostname, cnodename, nodename, (Erl_IpAddr) ip_addr, globals.ei_cookie, 0) < 0) {
@@ -226,9 +226,9 @@ switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei
 }
 
 switch_status_t ei_compare_pids(const erlang_pid *pid1, const erlang_pid *pid2) {
-    if ((!strcmp(pid1->node, pid2->node)) 
-		&& pid1->creation == pid2->creation 
-		&& pid1->num == pid2->num 
+    if ((!strcmp(pid1->node, pid2->node))
+		&& pid1->creation == pid2->creation
+		&& pid1->num == pid2->num
 		&& pid1->serial == pid2->serial) {
         return SWITCH_STATUS_SUCCESS;
     } else {
@@ -282,7 +282,7 @@ int ei_decode_atom_safe(char *buf, int *index, char *dst) {
     int type, size;
 
     ei_get_type(buf, index, &type, &size);
-	
+
 	if (type != ERL_ATOM_EXT) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected erlang term type %d (size %d), needed atom\n", type, size);
         return -1;
@@ -497,6 +497,25 @@ switch_event_t *create_default_filter() {
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_caller_id_number", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_callee_id_name", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_callee_id_number", "undefined");
+
+	/* Registration headers */
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "call-id", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "profile-name", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "from-user", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "from-host", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "presence-hosts", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "contact", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "rpid", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "status", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "expires", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "to-user", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "to-host", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "network-ip", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "network-port", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "username", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "realm", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "user-agent", "undefined");
+
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Hangup-Cause", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Unique-ID", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_switch_r_sdp", "undefined");
