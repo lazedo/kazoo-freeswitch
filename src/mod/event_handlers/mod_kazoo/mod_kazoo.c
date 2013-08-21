@@ -72,9 +72,9 @@ static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
 			unsigned int year, day, hour, min, sec, delta;
 
 			delta = (switch_micro_time_now() - ei_node->created_time) / 1000000;
-			sec = delta % 60; 
-			min = delta / 60 % 60; 
-			hour = delta / 3600 % 24; 
+			sec = delta % 60;
+			min = delta / 60 % 60;
+			hour = delta / 3600 % 24;
 			day = delta / 86400 % 7;
 			year = delta / 31556926 % 12;
 			stream->write_function(stream, "  %s (%s:%d) up %d years, %d days, %d hours, %d minutes, %d seconds\n"
@@ -93,13 +93,13 @@ static switch_status_t api_erlang_event_filter(switch_stream_handle_t *stream) {
 
 	for (header = globals.event_filter->headers; header; header = header->next) {
 		stream->write_function(stream, "%-50s", header->name);
-		if (++column > 2) {			
+		if (++column > 2) {
 			stream->write_function(stream, "\n");
 			column = 0;
 		}
 	}
 
-	if (++column > 2) {			
+	if (++column > 2) {
 		stream->write_function(stream, "\n");
 		column = 0;
 	}
@@ -167,7 +167,7 @@ static switch_status_t handle_node_api_event_stream(ei_event_stream_t *event_str
 
 	switch_mutex_lock(event_stream->socket_mutex);
 	if (event_stream->connected == SWITCH_FALSE) {
-		switch_sockaddr_t *sa;		
+		switch_sockaddr_t *sa;
 		uint16_t port;
 		char ipbuf[25];
 		const char *ip_addr;
@@ -196,7 +196,7 @@ static switch_status_t handle_node_api_event_stream(ei_event_stream_t *event_str
 			stream->write_function(stream, "%-50s", switch_event_name(binding->type));
 		}
 
-		if (++column > 2) {			
+		if (++column > 2) {
 			stream->write_function(stream, "\n");
 			column = 0;
 		}
@@ -238,9 +238,9 @@ static switch_status_t handle_node_api_command(ei_node_t *ei_node, switch_stream
 		break;
 	case API_COMMAND_REMOTE_IP:
 		delta = (switch_micro_time_now() - ei_node->created_time) / 1000000;
-		sec = delta % 60; 
-		min = delta / 60 % 60; 
-		hour = delta / 3600 % 24; 
+		sec = delta % 60;
+		min = delta / 60 % 60;
+		hour = delta / 3600 % 24;
 		day = delta / 86400 % 7;
 		year = delta / 31556926 % 12;
 
@@ -278,7 +278,7 @@ static switch_status_t api_erlang_node_command(switch_stream_handle_t *stream, c
 		ei_node = ei_node->next;
 	}
 	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
-	
+
 	return SWITCH_STATUS_NOTFOUND;
 }
 
@@ -477,7 +477,7 @@ static switch_status_t create_acceptor() {
 
 	return SWITCH_STATUS_SUCCESS;
 }
- 
+
 SWITCH_STANDARD_API(exec_api_cmd)
 {
 	char *argv[1024] = { 0 };
@@ -561,6 +561,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_kazoo_load) {
 	memset(&globals, 0, sizeof(globals));
 
 	globals.pool = pool;
+    globals.ei_nodes = NULL;
 
 	if(config() != SWITCH_STATUS_SUCCESS) {
 		// TODO: what would we need to clean up here?
@@ -607,7 +608,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown) {
 
 	/* stop taking new requests and start shuting down the threads */
 	switch_clear_flag(&globals, LFLAG_RUNNING);
-	
+
 	/* give everyone time to cleanly shutdown */
 	while (switch_atomic_read(&globals.threads)) {
 		switch_yield(100000);
@@ -641,14 +642,14 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown) {
 	switch_safe_free(globals.ip);
 	switch_safe_free(globals.ei_cookie);
 	switch_safe_free(globals.ei_nodename);
-	switch_safe_free(globals.kazoo_var_prefix); 
+	switch_safe_free(globals.kazoo_var_prefix);
 
 	return SWITCH_STATUS_SUCCESS;
 }
 
 SWITCH_MODULE_RUNTIME_FUNCTION(mod_kazoo_runtime) {
 	switch_os_socket_t os_socket;
-		
+
 	switch_atomic_inc(&globals.threads);
 
 	switch_os_sock_get(&os_socket, globals.acceptor);

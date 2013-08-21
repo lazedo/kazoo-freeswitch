@@ -17,11 +17,17 @@ typedef enum {
 	LFLAG_RUNNING = (1 << 0)
 } event_flag_t;
 
-struct ei_asynchronous_msg_s {
-	ei_x_buff ebuf;
-	erlang_pid pid;	
+struct ei_send_msg_s {
+	ei_x_buff buf;
+	erlang_pid pid;
 };
-typedef struct ei_asynchronous_msg_s ei_asynchronous_msg_t;
+typedef struct ei_send_msg_s ei_send_msg_t;
+
+struct ei_received_msg_s {
+	ei_x_buff buf;
+	erlang_msg msg;
+};
+typedef struct ei_received_msg_s ei_received_msg_t;
 
 struct ei_event_binding_s {
 	char id[SWITCH_UUID_FORMATTED_LENGTH + 1];
@@ -41,7 +47,7 @@ struct ei_event_stream_s {
 	switch_pollfd_t *pollfd;
 	switch_socket_t *socket;
 	switch_mutex_t *socket_mutex;
-	switch_bool_t connected;	
+	switch_bool_t connected;
     char remote_ip[25];
 	uint16_t remote_port;
     char local_ip[25];
@@ -55,10 +61,12 @@ typedef struct ei_event_stream_s ei_event_stream_t;
 struct ei_node_s {
 	int nodefd;
 	switch_atomic_t pending_bgapi;
+    switch_atomic_t receive_handlers;
 	switch_memory_pool_t *pool;
 	ei_event_stream_t *event_streams;
 	switch_mutex_t *event_streams_mutex;
-	switch_queue_t *asynchronous_msgs;
+	switch_queue_t *send_msgs;
+	switch_queue_t *received_msgs;
 	char *peer_nodename;
 	switch_time_t created_time;
 	switch_socket_t *socket;
