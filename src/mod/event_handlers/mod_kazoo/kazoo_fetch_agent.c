@@ -46,7 +46,7 @@ struct fetch_handler_s {
 typedef struct fetch_handler_s fetch_handler_t;
 
 struct ei_xml_client_s {
-	ei_node_t *ei_node;	
+	ei_node_t *ei_node;
 	fetch_handler_t *fetch_handlers;
 	struct ei_xml_client_s *next;
 };
@@ -84,25 +84,25 @@ static char *expand_vars(char *xml_str) {
 	char *var, *val;
 	char *rp = xml_str; /* read pointer */
 	char *ep, *wp, *buff; /* end pointer, write pointer, write buffer */
-	
+
 	if (!(strstr(xml_str, "$${"))) {
 		return xml_str;
 	}
-	
+
 	switch_zmalloc(buff, strlen(xml_str) * 2);
 	wp = buff;
 	ep = buff + (strlen(xml_str) * 2) - 1;
-	
+
 	while (*rp && wp < ep) {
 		if (*rp == '$' && *(rp + 1) == '$' && *(rp + 2) == '{') {
 			char *e = switch_find_end_paren(rp + 2, '{', '}');
-			
+
 			if (e) {
 				rp += 3;
 				var = rp;
 				*e++ = '\0';
 				rp = e;
-				
+
 				if ((val = switch_core_get_variable_dup(var))) {
 					char *p;
 					for (p = val; p && *p && wp <= ep; p++) {
@@ -113,12 +113,12 @@ static char *expand_vars(char *xml_str) {
 				continue;
 			}
 		}
-		
+
 		*wp++ = *rp++;
 	}
-	
+
 	*wp++ = '\0';
-	
+
 	switch_safe_free(xml_str);
 	return buff;
 }
@@ -181,36 +181,36 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 
 	fetch_handler = client->fetch_handlers;
 	while (fetch_handler != NULL) {
-		ei_asynchronous_msg_t *asynchronous_msg;
+		ei_send_msg_t *send_msg;
 
-		switch_malloc(asynchronous_msg, sizeof(*asynchronous_msg));
-		memcpy(&asynchronous_msg->pid, &fetch_handler->pid, sizeof(erlang_pid));
-		
-		ei_x_new_with_version(&asynchronous_msg->ebuf);
-			
-		ei_x_encode_tuple_header(&asynchronous_msg->ebuf, 7);
-		ei_x_encode_atom(&asynchronous_msg->ebuf, "fetch");
-		ei_x_encode_atom(&asynchronous_msg->ebuf, section);
-		_ei_x_encode_string(&asynchronous_msg->ebuf, tag_name ? tag_name : "undefined");
-		_ei_x_encode_string(&asynchronous_msg->ebuf, key_name ? key_name : "undefined");
-		_ei_x_encode_string(&asynchronous_msg->ebuf, key_value ? key_value : "undefined");
-		_ei_x_encode_string(&asynchronous_msg->ebuf, reply.uuid_str);
-		
+		switch_malloc(send_msg, sizeof(*send_msg));
+		memcpy(&send_msg->pid, &fetch_handler->pid, sizeof(erlang_pid));
+
+		ei_x_new_with_version(&send_msg->buf);
+
+		ei_x_encode_tuple_header(&send_msg->buf, 7);
+		ei_x_encode_atom(&send_msg->buf, "fetch");
+		ei_x_encode_atom(&send_msg->buf, section);
+		_ei_x_encode_string(&send_msg->buf, tag_name ? tag_name : "undefined");
+		_ei_x_encode_string(&send_msg->buf, key_name ? key_name : "undefined");
+		_ei_x_encode_string(&send_msg->buf, key_value ? key_value : "undefined");
+		_ei_x_encode_string(&send_msg->buf, reply.uuid_str);
+
 		if (params) {
-			ei_encode_switch_event_headers(&asynchronous_msg->ebuf, params);
+			ei_encode_switch_event_headers(&send_msg->buf, params);
 		} else {
-			ei_x_encode_empty_list(&asynchronous_msg->ebuf);
+			ei_x_encode_empty_list(&send_msg->buf);
 		}
 
-		if (switch_queue_trypush(client->ei_node->asynchronous_msgs, asynchronous_msg) != SWITCH_STATUS_SUCCESS) {
+		if (switch_queue_trypush(client->ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to send %s XML request to %s <%d.%d.%d>\n"
 							  ,section
 							  ,fetch_handler->pid.node
 							  ,fetch_handler->pid.creation
 							  ,fetch_handler->pid.num
 							  ,fetch_handler->pid.serial);
-			ei_x_free(&asynchronous_msg->ebuf);
-			switch_safe_free(asynchronous_msg);
+			ei_x_free(&send_msg->buf);
+			switch_safe_free(send_msg);
 		} else {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sending %s XML request (%s) to %s <%d.%d.%d>\n"
 							  ,section
@@ -220,7 +220,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 							  ,fetch_handler->pid.num
 							  ,fetch_handler->pid.serial);
 		}
-		
+
 		fetch_handler = fetch_handler->next;
 	}
 
@@ -257,7 +257,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 		prev = pending;
 		pending = pending->next;
 	}
-	
+
 	if (pending) {
 		if (!prev) {
 			agent->replies = reply.next;
@@ -327,7 +327,7 @@ static switch_status_t bind_fetch_agent(switch_xml_section_t section, switch_xml
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Bound to %s XML requests\n"
 					  ,xml_section_to_string(section));
-		
+
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -340,7 +340,7 @@ static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
 
 	/* unbind from the switch */
 	switch_xml_unbind_search_function(binding);
-	
+
 	/* LOCK ALL THE THINGS */
 	switch_thread_rwlock_wrlock(agent->lock);
 	switch_mutex_lock(agent->current_client_mutex);
@@ -351,7 +351,7 @@ static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
 	while(client != NULL) {
 		ei_xml_client_t *tmp_client = client;
 		fetch_handler_t *fetch_handler;
-		
+
 		fetch_handler = client->fetch_handlers;
 		while(fetch_handler != NULL) {
 			fetch_handler_t *tmp_fetch_handler = fetch_handler;
@@ -378,11 +378,11 @@ static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
 	/* release the locks! */
 	switch_thread_rwlock_unlock(agent->lock);
 	switch_mutex_unlock(agent->current_client_mutex);
-	switch_mutex_unlock(agent->replies_mutex);	
+	switch_mutex_unlock(agent->replies_mutex);
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Unbound from %s XML requests\n"
 					  ,xml_section_to_string(agent->section));
-	
+
 	/* cleanly destroy the bindings */
 	switch_thread_rwlock_destroy(agent->lock);
 	switch_mutex_destroy(agent->current_client_mutex);
@@ -394,7 +394,7 @@ static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
 }
 
 static switch_status_t remove_xml_client(ei_node_t *ei_node, switch_xml_binding_t *binding) {
-	ei_xml_agent_t *agent;	
+	ei_xml_agent_t *agent;
 	ei_xml_client_t *client, *prev = NULL;
 	int found = 0;
 
@@ -403,20 +403,20 @@ static switch_status_t remove_xml_client(ei_node_t *ei_node, switch_xml_binding_
 	/* write-lock the agent */
 	switch_thread_rwlock_wrlock(agent->lock);
 
-	client = agent->clients; 
+	client = agent->clients;
 	while (client != NULL) {
 		if (client->ei_node == ei_node) {
 			found = 1;
 			break;
 		}
-		
+
 		prev = client;
 		client = client->next;
 	}
 
 	if (found) {
 		fetch_handler_t *fetch_handler;
-		
+
 		if (!prev) {
 			agent->clients = client->next;
 		} else {
@@ -430,7 +430,7 @@ static switch_status_t remove_xml_client(ei_node_t *ei_node, switch_xml_binding_
 			agent->current_client = agent->clients;
 		}
 		switch_mutex_unlock(agent->current_client_mutex);
-		
+
 		fetch_handler = client->fetch_handlers;
 		while(fetch_handler != NULL) {
 			fetch_handler_t *tmp_fetch_handler = fetch_handler;
@@ -484,7 +484,7 @@ static ei_xml_client_t *find_xml_client(ei_node_t *ei_node, ei_xml_agent_t *agen
 		client = client->next;
 	}
 
-	return NULL;		
+	return NULL;
 }
 
 static switch_status_t remove_fetch_handler(ei_node_t *ei_node, erlang_pid *from, switch_xml_binding_t *binding) {
@@ -494,7 +494,7 @@ static switch_status_t remove_fetch_handler(ei_node_t *ei_node, erlang_pid *from
 	int found = 0;
 
 	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
-	
+
     /* write-lock the agent */
     switch_thread_rwlock_wrlock(agent->lock);
 
@@ -520,19 +520,19 @@ static switch_status_t remove_fetch_handler(ei_node_t *ei_node, erlang_pid *from
 		} else {
 			prev->next = fetch_handler->next;
 		}
-		
+
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Removed %s XML handler %s <%d.%d.%d>\n"
 						  ,xml_section_to_string(agent->section)
 						  ,fetch_handler->pid.node
 						  ,fetch_handler->pid.creation
 						  ,fetch_handler->pid.num
 						  ,fetch_handler->pid.serial);
-		
+
 		switch_safe_free(fetch_handler);
 	}
 
 	switch_thread_rwlock_unlock(agent->lock);
-	return SWITCH_STATUS_SUCCESS;	
+	return SWITCH_STATUS_SUCCESS;
 }
 
 static switch_status_t handle_api_command_stream(ei_node_t *ei_node, switch_stream_handle_t *stream, switch_xml_binding_t *binding) {
@@ -584,7 +584,7 @@ switch_status_t unbind_fetch_agents() {
 	unbind_fetch_agent(&globals.directory_fetch_binding);
 	unbind_fetch_agent(&globals.dialplan_fetch_binding);
 	unbind_fetch_agent(&globals.chatplan_fetch_binding);
-	
+
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -593,7 +593,7 @@ switch_status_t remove_xml_clients(ei_node_t *ei_node) {
 	remove_xml_client(ei_node, globals.directory_fetch_binding);
 	remove_xml_client(ei_node, globals.dialplan_fetch_binding);
 	remove_xml_client(ei_node, globals.chatplan_fetch_binding);
-	
+
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -603,7 +603,7 @@ switch_status_t add_fetch_handler(ei_node_t *ei_node, erlang_pid *from, switch_x
 	fetch_handler_t *fetch_handler;
 
 	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
-	
+
     /* write-lock the agent */
     switch_thread_rwlock_wrlock(agent->lock);
 
@@ -641,7 +641,7 @@ switch_status_t add_fetch_handler(ei_node_t *ei_node, erlang_pid *from, switch_x
 	switch_thread_rwlock_unlock(agent->lock);
 
 	ei_link(ei_node, ei_self(&globals.ei_cnode), from);
-			
+
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -658,7 +658,7 @@ switch_status_t fetch_reply(char *uuid_str, char *xml_str, switch_xml_binding_t 
 	ei_xml_agent_t *agent;
 	xml_fetch_reply_t *reply;
 	switch_status_t status = SWITCH_STATUS_NOTFOUND;
-	
+
 	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
 
     switch_mutex_lock(agent->replies_mutex);
@@ -686,7 +686,7 @@ switch_status_t handle_api_command_streams(ei_node_t *ei_node, switch_stream_han
 	handle_api_command_stream(ei_node, stream, globals.directory_fetch_binding);
 	handle_api_command_stream(ei_node, stream, globals.dialplan_fetch_binding);
 	handle_api_command_stream(ei_node, stream, globals.chatplan_fetch_binding);
-	
+
 	return SWITCH_STATUS_SUCCESS;
 }
 
