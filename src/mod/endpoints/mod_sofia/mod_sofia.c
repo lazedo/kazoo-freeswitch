@@ -1965,7 +1965,7 @@ static switch_status_t sofia_receive_message(switch_core_session_t *session, swi
 				pl = msg->string_arg;
 			}
 
-			nua_info(tech_pvt->nh, SIPTAG_CONTENT_TYPE_STR("application/media_control+xml"), SIPTAG_PAYLOAD_STR(pl), TAG_END());
+/*			nua_info(tech_pvt->nh, SIPTAG_CONTENT_TYPE_STR("application/media_control+xml"), SIPTAG_PAYLOAD_STR(pl), TAG_END());*/
 
 		}
 		break;
