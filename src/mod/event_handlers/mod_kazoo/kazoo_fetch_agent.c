@@ -170,7 +170,6 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 
 	/* add our reply placeholder to the replies list */
 	switch_mutex_lock(agent->replies_mutex);
-
 	if (!agent->replies) {
 		agent->replies = &reply;
 	} else {
@@ -662,7 +661,6 @@ switch_status_t fetch_reply(char *uuid_str, char *xml_str, switch_xml_binding_t 
 	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
 
     switch_mutex_lock(agent->replies_mutex);
-
 	reply = agent->replies;
 	while (reply != NULL) {
 		if (!strncmp(reply->uuid_str, uuid_str, SWITCH_UUID_FORMATTED_LENGTH)) {
