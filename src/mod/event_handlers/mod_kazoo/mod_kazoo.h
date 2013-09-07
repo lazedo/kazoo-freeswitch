@@ -6,7 +6,7 @@
 #define MAX_QUEUE_LEN 25000
 #define MAX_MISSED 500
 #define MAX_PID_CHARS 255
-#define VERSION "mod_kazoo v2.14.0"
+#define VERSION "mod_kazoo v1.2.10-14"
 
 #define API_COMMAND_DISCONNECT 0
 #define API_COMMAND_REMOTE_IP 1

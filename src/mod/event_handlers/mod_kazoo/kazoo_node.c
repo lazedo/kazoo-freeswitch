@@ -711,20 +711,24 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
 
 	if (ei_decode_atom_safe(buf->buff, &buf->index, section_str)
 		|| !(section = switch_xml_parse_section_string(section_str))) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without a configuration section\n");
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (ei_decode_string_or_binary_limited(buf->buff, &buf->index, sizeof(uuid_str), uuid_str)
 		|| zstr_buf(uuid_str)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without request UUID\n");
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (ei_decode_string_or_binary(buf->buff, &buf->index, &xml_str)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without XML\n");
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (zstr(xml_str)) {
 		switch_safe_free(xml_str);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring an empty fetch reply\n");
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -742,12 +746,14 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
 		result = fetch_reply(uuid_str, xml_str, globals.chatplan_fetch_binding);
 		break;
 	default:
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply for an unknown configuration section: %s\n", section_str);
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (result == SWITCH_STATUS_SUCCESS) {
 		return erlang_response_ok(rbuf);
 	} else {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply for an unknown/expired UUID: %s\n", uuid_str);
 		return erlang_response_baduuid(rbuf);
 	}
 }
@@ -1076,6 +1082,11 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 		if (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS) {
 			ei_send_msg_t *send_msg = (ei_send_msg_t *) pop;
 			ei_helper_send(ei_node, &send_msg->pid, &send_msg->buf);
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sent erlang message to %s <%d.%d.%d>\n"
+							  ,send_msg->pid.node
+							  ,send_msg->pid.creation
+							  ,send_msg->pid.num
+							  ,send_msg->pid.serial);
 			ei_x_free(&send_msg->buf);
 			switch_safe_free(send_msg);
 		}
@@ -1088,9 +1099,11 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 			/* erlang nodes send ticks to eachother to validate they are still reachable, we dont have to do anything here */
 			break;
 		case ERL_MSG:
-			if (switch_queue_trypush(ei_node->received_msgs, received_msg) == SWITCH_STATUS_SUCCESS) {
-                received_msg = NULL;
+			if (switch_queue_trypush(ei_node->received_msgs, received_msg) != SWITCH_STATUS_SUCCESS) {
+				ei_x_free(&received_msg->buf);
+				switch_safe_free(received_msg);
 			}
+			received_msg = NULL;
 			break;
 		case ERL_ERROR:
 			switch (erl_errno) {
