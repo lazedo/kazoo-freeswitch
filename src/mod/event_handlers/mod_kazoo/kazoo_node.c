@@ -536,6 +536,9 @@ static switch_status_t handle_request_bind(ei_node_t *ei_node, erlang_pid *pid, 
 	case SWITCH_XML_SECTION_CHATPLAN:
 		add_fetch_handler(ei_node, pid, globals.chatplan_fetch_binding);
 		break;
+	case SWITCH_XML_SECTION_CHANNELS:
+		add_fetch_handler(ei_node, pid, globals.channels_fetch_binding);
+		break;
 	default:
 		return erlang_response_badarg(rbuf);
 	}
@@ -744,6 +747,9 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
 		break;
 	case SWITCH_XML_SECTION_CHATPLAN:
 		result = fetch_reply(uuid_str, xml_str, globals.chatplan_fetch_binding);
+		break;
+	case SWITCH_XML_SECTION_CHANNELS:
+		result = fetch_reply(uuid_str, xml_str, globals.channels_fetch_binding);
 		break;
 	default:
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply for an unknown configuration section: %s\n", section_str);
