@@ -467,10 +467,12 @@ switch_event_t *create_default_filter() {
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_auth_realm", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_host", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_user", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_tag", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_h_X-AUTH-IP", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_received_ip", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_host", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_user", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_tag", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sofia_profile_name", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_transfer_history", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_user_name", "undefined");

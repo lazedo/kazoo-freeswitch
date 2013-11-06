@@ -565,11 +565,13 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_kazoo_load) {
 
 	if(config() != SWITCH_STATUS_SUCCESS) {
 		// TODO: what would we need to clean up here?
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Improper configuration!\n");
 		return SWITCH_STATUS_TERM;
 	}
 
 	if(create_acceptor() != SWITCH_STATUS_SUCCESS) {
 		// TODO: what would we need to clean up here
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to create erlang connection acceptor!\n");
 		close_socket(&globals.acceptor);
 		return SWITCH_STATUS_TERM;
 	}

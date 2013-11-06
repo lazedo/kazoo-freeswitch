@@ -98,6 +98,7 @@ struct globals_s {
 	switch_xml_binding_t *directory_fetch_binding;
 	switch_xml_binding_t *dialplan_fetch_binding;
 	switch_xml_binding_t *chatplan_fetch_binding;
+	switch_xml_binding_t *channels_fetch_binding;
 	switch_event_t *event_filter;
 	int epmdfd;
 	switch_bool_t nat_map;
