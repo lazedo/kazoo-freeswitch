@@ -405,6 +405,11 @@ static switch_status_t config(void) {
 		globals.var_prefix_length = size - 2; //ignore the *
 	}
 
+        if (!globals.num_worker_threads) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Number of worker threads not found in configuration, using default\n");
+                globals.num_worker_threads = 10;
+        }
+
 	if (zstr(globals.ip)) {
 		set_pref_ip("0.0.0.0");
 	}

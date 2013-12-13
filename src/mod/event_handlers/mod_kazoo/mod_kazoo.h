@@ -101,6 +101,7 @@ struct globals_s {
 	switch_xml_binding_t *channels_fetch_binding;
 	switch_event_t *event_filter;
 	int epmdfd;
+	int num_worker_threads;
 	switch_bool_t nat_map;
 	switch_bool_t ei_shortname;
 	int ei_compat_rel;
