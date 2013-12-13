@@ -1212,8 +1212,8 @@ switch_status_t new_kazoo_node(int nodefd, ErlConnect *conn) {
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "New erlang connection from node %s (%s:%d)\n", ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "New erlang connection to node %s (%s:%d)\n", ei_node->peer_nodename, ei_node->local_ip, ei_node->local_port);
-
-	for(i = 0; i < 10; i++) {
+	
+	for(i = 0; i < globals.num_worker_threads; i++) {
 		switch_threadattr_create(&thd_attr, ei_node->pool);
 		switch_threadattr_detach_set(thd_attr, 1);
 		switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
