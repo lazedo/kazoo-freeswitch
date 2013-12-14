@@ -429,6 +429,10 @@ switch_status_t sofia_on_hangup(switch_core_session_t *session)
 		switch_core_session_rwunlock(a_session);
 	}
 
+       if (switch_true(switch_channel_get_variable(channel, "channel_is_moving"))) {
+               goto done;
+       }
+
 	if (sofia_test_pflag(tech_pvt->profile, PFLAG_DESTROY)) {
 		sofia_set_flag(tech_pvt, TFLAG_BYE);
 	} else if (tech_pvt->nh && !sofia_test_flag(tech_pvt, TFLAG_BYE)) {
@@ -444,7 +448,9 @@ switch_status_t sofia_on_hangup(switch_core_session_t *session)
 			if ((val = switch_channel_get_variable(tech_pvt->channel, "sip_reason"))) {
 				switch_snprintf(reason, sizeof(reason), "%s", val);
 			} else {
-				if (switch_channel_test_flag(channel, CF_INTERCEPT) || cause == SWITCH_CAUSE_PICKED_OFF || cause == SWITCH_CAUSE_LOSE_RACE) {
+                val = switch_channel_get_variable(channel, "ignore_completed_elsewhere");
+				if ((switch_channel_test_flag(channel, CF_INTERCEPT) || cause == SWITCH_CAUSE_PICKED_OFF || cause == SWITCH_CAUSE_LOSE_RACE)
+                                     && (!val || switch_false(val))) {
 					switch_snprintf(reason, sizeof(reason), "SIP;cause=200;text=\"Call completed elsewhere\"");
 				} else if (cause > 0 && cause < 128) {
 					switch_snprintf(reason, sizeof(reason), "Q.850;cause=%d;text=\"%s\"", cause, switch_channel_cause2str(cause));
@@ -2684,6 +2690,26 @@ static void xml_gateway_status(sofia_gateway_t *gp, switch_stream_handle_t *stre
 	stream->write_function(stream, "    <failed-calls-in>%u</failed-calls-in>\n", gp->ib_failed_calls);
 	stream->write_function(stream, "    <failed-calls-out>%u</failed-calls-out>\n", gp->ob_failed_calls);
 
+	if (gp->ib_vars) {
+	  switch_event_header_t *hp;
+
+      stream->write_function(stream, "      <inbound-variables>\n");
+	  for (hp = gp->ib_vars->headers; hp; hp = hp->next) {
+		stream->write_function(stream, "        <variable name=\"%s\" value=\"%s\" />\n", hp->name, hp->value);
+	  }
+      stream->write_function(stream, "      </inbound-variables>\n");
+	}
+
+	if (gp->ob_vars) {
+	  switch_event_header_t *hp;
+
+      stream->write_function(stream, "      <outbound-variables>\n");
+	  for (hp = gp->ob_vars->headers; hp; hp = hp->next) {
+		stream->write_function(stream, "        <variable name=\"%s\" value=\"%s\" />\n", hp->name, hp->value);
+	  }
+      stream->write_function(stream, "      </outbound-variables>\n");
+	}
+
 	if (gp->state == REG_STATE_FAILED || gp->state == REG_STATE_TRYING) {
 		time_t now = switch_epoch_time_now(NULL);
 		if (gp->retry > now) {
@@ -4693,8 +4719,15 @@ static void general_event_handler(switch_event_t *event)
 			const char *extra_headers = switch_event_get_header(event, "extra-headers");
 			const char *contact_uri = switch_event_get_header(event, "contact-uri");
 			const char *no_sub_state = switch_event_get_header(event, "no-sub-state");
+			const char *contact = switch_event_get_header(event, "contact");
 
 			sofia_profile_t *profile;
+
+			// Kazoo added contact and did the same process as the recently added
+			//	contact_uri.  For backward compatablity for Kazoo support both...
+			if (contact) {
+				contact_uri = contact;
+			}
 
 			if (contact_uri) {
 				if (!es) {

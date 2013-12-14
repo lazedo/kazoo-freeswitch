@@ -20,7 +20,7 @@ FS_USER=${FS_USER-freeswitch}
 FS_FILE=${FS_FILE-/usr/bin/freeswitch} 
 FS_HOME=${FS_HOME-/var/run/freeswitch}
 LOCK_FILE=/var/lock/subsys/freeswitch
-FREESWITCH_ARGS="-nc"
+FREESWITCH_ARGS="-nc -nonat"
 RETVAL=0
 
 # Source usr/localions file
@@ -41,7 +41,12 @@ start() {
                 return 1
             fi
         fi
-	cd $FS_HOME
+	    cd $FS_HOME
+        \rm -rf /var/lib/freeswitch/db/*
+        \rm -rf /usr/share/freeswitch/http_cache/*
+        chown ${FS_USER}:daemon /var/lib/freeswitch/* -R
+        chown ${FS_USER}:daemon /usr/share/freeswitch/* -R 
+        chown ${FS_USER}:daemon /var/log/freeswitch/* -R
         daemon --user $FS_USER --pidfile $PID_FILE "$FS_FILE $FREESWITCH_ARGS $FREESWITCH_PARAMS >/dev/null 2>&1"
 		RETVAL=$?
 		echo
