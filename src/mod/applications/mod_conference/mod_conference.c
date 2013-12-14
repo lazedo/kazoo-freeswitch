@@ -185,7 +185,8 @@ typedef enum {
 	MFLAG_VIDEO_BRIDGE = (1 << 20),
 	MFLAG_INDICATE_MUTE_DETECT = (1 << 21),
 	MFLAG_PAUSE_RECORDING = (1 << 22),
-	MFLAG_ACK_VIDEO = (1 << 23)
+	MFLAG_ACK_VIDEO = (1 << 23),
+    MFLAG_DEFAULT_NOSPEAK = (1 << 24)
 } member_flag_t;
 
 typedef enum {
@@ -3044,6 +3045,13 @@ static void conference_loop_fn_vid_floor_force(conference_member_t *member, call
 	conf_api_sub_vid_floor(member, NULL, "force");
 }
 
+static void conference_loop_fn_enforce_floor(conference_member_t *member, caller_control_action_t *action)                                                                                                                                                                                         
+{
+	    if (member == NULL) return;
+
+        conf_api_sub_enforce_floor(member, NULL, NULL);
+}
+
 static void conference_loop_fn_mute_toggle(conference_member_t *member, caller_control_action_t *action)
 {
 	if (member == NULL)
@@ -5873,6 +5881,46 @@ static switch_status_t conf_api_sub_vid_floor(conference_member_t *member, switc
 	return SWITCH_STATUS_SUCCESS;
 }
 
+static switch_status_t conf_api_sub_enforce_floor(conference_member_t *member, switch_stream_handle_t *stream, void *data)                                                                                                                                                                         
+{
+    switch_event_t *event;
+
+    if (member == NULL)
+        return SWITCH_STATUS_GENERR;
+
+    switch_mutex_lock(member->conference->mutex);
+
+    if (member->conference->floor_holder != member) {
+        conference_member_t *old_member = member->conference->floor_holder;
+        member->conference->floor_holder = member;
+        if (test_eflag(member->conference, EFLAG_FLOOR_CHANGE)) {
+            switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, CONF_EVENT_MAINT);
+            conference_add_event_data(member->conference, event);
+            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Action", "floor-change");
+            if (old_member == NULL) {
+                switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Old-ID", "none");
+            } else {
+                switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Old-ID", "%d", old_member->id);
+            }
+            switch_event_add_header(event, SWITCH_STACK_BOTTOM, "New-ID", "%d", member->id);
+            switch_event_fire(&event);
+            if (stream != NULL) {
+                stream->write_function(stream, "OK floor %u\n", member->id);
+            }
+        }
+
+        if (switch_core_session_read_lock(member->session) == SWITCH_STATUS_SUCCESS) {
+            /* Tell the channel to request a fresh vid frame */
+            switch_channel_set_flag(switch_core_session_get_channel(member->session), CF_VIDEO_REFRESH_REQ);
+            switch_core_session_rwunlock(member->session);
+        }
+    }
+
+    switch_mutex_unlock(member->conference->mutex);
+
+    return SWITCH_STATUS_SUCCESS;
+}
+
 static switch_xml_t add_x_tag(switch_xml_t x_member, const char *name, const char *value, int off)
 {
 	switch_size_t dlen;
@@ -8435,6 +8483,69 @@ SWITCH_STANDARD_APP(conference_function)
 		goto done;
 	}
 
+	/* Once the caller is added, if there is a relations-based no-speak, handle it */
+	if (switch_true(switch_channel_get_variable(channel, "conference_member_nospeak_relational"))) {
+	        conference_member_t *imember;
+		conference_relationship_t *rel = NULL;
+
+		switch_mutex_lock(conference->mutex);
+
+		/* Cycle through each member in the conference and set this new member to be "nospeak" to the other members */
+		for (imember = conference->members; imember; imember = imember->next) if (member.id != imember->id) {
+			if ((rel = member_get_relationship(&member, imember))) {
+				rel->flags = 0;
+			} else {
+				rel = member_add_relationship(&member, imember->id);
+			}
+
+			/* Assuming we just got an existing relationship or created a new one, let's set this person so they can't speak to the other guy */
+			if (rel) {
+				switch_set_flag(rel, RFLAG_CAN_HEAR);
+				switch_clear_flag(rel, RFLAG_CAN_SPEAK);
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relation set: %u can't speak to %u\n", member.id, imember->id);
+			} else {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relate ERROR: %u can't relate to %u\n", member.id, imember->id);
+			}
+		}
+
+		switch_set_flag_locked((&member), MFLAG_DEFAULT_NOSPEAK);
+
+		switch_mutex_unlock(conference->mutex);
+	}
+
+	/* Once the caller is added, make sure there are no members who have a permanent "no speak" set. If there are, create a relationship for this member too so this new member can't hear the nospeak guy */
+	if (switch_true(switch_channel_get_variable(channel, "conference_member_nospeak_check"))) {
+	        conference_member_t *imember;
+		conference_relationship_t *rel = NULL;
+
+		switch_mutex_lock(conference->mutex);
+
+		/* Cycle through each member in the conference and set this new member to be "nospeak" to the other members */
+		for (imember = conference->members; imember; imember = imember->next) if (member.id != imember->id) {
+			if (switch_test_flag(imember, MFLAG_DEFAULT_NOSPEAK)) {
+				// Found a member we are not supposed to be able to hear.
+				// Make sure there's a relationship to him for not speaking
+
+				if ((rel = member_get_relationship(imember, &member))) {
+					rel->flags = 0;
+				} else {
+					rel = member_add_relationship(imember, member.id);
+				}
+
+				/* Assuming we just got an existing relationship or created a new one, let's set this person so they can't speak to the other guy */
+				if (rel) {
+					switch_set_flag(rel, RFLAG_CAN_HEAR);
+					switch_clear_flag(rel, RFLAG_CAN_SPEAK);
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relation set: %u can't speak to %u\n", imember->id, member.id);
+				} else {
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Conference relate ERROR: %u can't relate to %u\n", imember->id, member.id);
+				}
+			}
+		}
+
+		switch_mutex_unlock(conference->mutex);
+	} 
+
 	msg.from = __FILE__;
 
 	/* Tell the channel we are going to be in a bridge */
@@ -9595,10 +9706,11 @@ static void send_presence(switch_event_types_t id)
 	switch_event_destroy(&params);
 
 	/* Release the config registry handle */
-	if (cxml) {
+/*	if (cxml) {
 		switch_xml_free(cxml);
 		cxml = NULL;
 	}
+*/
 }
 
 typedef void (*conf_key_callback_t) (conference_member_t *, struct caller_control_actions *);
@@ -9680,7 +9792,8 @@ static struct _mapping control_mappings[] = {
     {"execute_application", conference_loop_fn_exec_app},
     {"floor", conference_loop_fn_floor_toggle},
     {"vid-floor", conference_loop_fn_vid_floor_toggle},
-    {"vid-floor-force", conference_loop_fn_vid_floor_force}
+    {"vid-floor-force", conference_loop_fn_vid_floor_force},
+	{"enforce_floor", conference_loop_fn_enforce_floor}
 };
 #define MAPPING_LEN (sizeof(control_mappings)/sizeof(control_mappings[0]))
 
@@ -9694,6 +9807,10 @@ static void member_bind_controls(conference_member_t *member, const char *contro
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "Conf-Name", member->conference->name);
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "Action", "request-controls");
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "Controls", controls);
+
+    if (1) {
+        goto end;
+    }
 
 	if (!(cxml = switch_xml_open_cfg(global_cf_name, &cfg, params))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Open of %s failed\n", global_cf_name);
@@ -9731,11 +9848,11 @@ static void member_bind_controls(conference_member_t *member, const char *contro
  end:
 
 	/* Release the config registry handle */
-	if (cxml) {
+/*	if (cxml) {
 		switch_xml_free(cxml);
 		cxml = NULL;
 	}
-	
+*/	
 	if (params) switch_event_destroy(&params);
 	
 }
