@@ -1,15 +1,22 @@
 #!/bin/bash
 #
-#       /etc/rc.d/init.d/freeswitch
+# freeswitch Starts and stops the freeswitch server daemon
 #
-#       The FreeSwitch Open Source Voice Platform
-#
-#  chkconfig: 345 89 14
-#  description: Starts and stops the freeswitch server daemon
-#  processname: freeswitch
-#  config: /usr/local/freeswitch/conf/freeswitch.conf
-#  pidfile: /usr/local/freeswitch/run/freeswitch.pid
-#
+# chkconfig: 345 30 70
+# description: FreeSWITCH is a scalable open source \
+#               cross-platform telephony platform
+
+### BEGIN INIT INFO
+# Provides: freeswitch
+# Required-Start: epmd
+# Required-Stop:
+# Default-Start: 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Starts and stops the freeswitch server daemon
+# Description: The FreeSwitch Open Source Voice Platform
+# Config: /usr/local/freeswitch/conf/freeswitch.conf
+# PIDfile: /usr/local/freeswitch/run/freeswitch.pid
+### END INIT INFO
 
 # Source function library.
 . /etc/init.d/functions
