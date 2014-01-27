@@ -539,6 +539,16 @@ switch_event_t *create_default_filter() {
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Energy-Level", "undefined");
 	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Mute-Detect", "undefined");
 
+	/* RTMP headers */
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Session-ID", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Profile", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Flash-Version", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-SWF-URL", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-TC-URL", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Page-URL", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "User", "undefined");
+	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Domain", "undefined");
+
 	return filter;
 }
 

@@ -201,5 +201,16 @@
         <header name="Energy-Level" />
         <header name="Current-Energy" />
         <header name="Floor" />
+
+	<!-- RTMP Headers -->
+	<header name="RTMP-Session-ID" />
+	<header name="RTMP-Profile" />
+	<header name="RTMP-Flash-Version" />
+	<header name="RTMP-SWF-URL" />
+	<header name="RTMP-TC-URL" />
+	<header name="RTMP-Page-URL" />
+	<header name="User" />
+	<header name="Domain" />
+
     </event-filter>
 </configuration>
