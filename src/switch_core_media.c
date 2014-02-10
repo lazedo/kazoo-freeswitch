@@ -1020,6 +1020,7 @@ SWITCH_DECLARE(int) switch_core_session_check_incoming_crypto(switch_core_sessio
 		/* Compare all the key. The tag may remain the same even if key changed */
 		if (crypto && !strcmp(crypto, engine->ssec.remote_crypto_key)) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Existing key is still valid.\n");
+			got_crypto++;
 		} else {
 			const char *a = switch_stristr("AES", engine->ssec.remote_crypto_key);
 			const char *b = switch_stristr("AES", crypto);
@@ -3036,7 +3037,9 @@ SWITCH_DECLARE(uint8_t) switch_core_media_negotiate_sdp(switch_core_session_t *s
 				} else if (!strcasecmp(attr->a_name, "maxptime") && attr->a_value) {
 					maxptime = atoi(attr->a_value);
 				} else if (!got_crypto && !strcasecmp(attr->a_name, "crypto") && !zstr(attr->a_value) && 
-						   (!switch_channel_test_flag(session->channel, CF_WEBRTC) || switch_stristr(SWITCH_RTP_CRYPTO_KEY_80, attr->a_value))) {
+					   (!switch_channel_test_flag(session->channel, CF_WEBRTC) 
+                                             || switch_stristr(SWITCH_RTP_CRYPTO_KEY_32, attr->a_value) 
+                                             || switch_stristr(SWITCH_RTP_CRYPTO_KEY_80, attr->a_value))) {
 					int crypto_tag;
 
 					if (!(smh->mparams->ndlb & SM_NDLB_ALLOW_CRYPTO_IN_AVP) && 
