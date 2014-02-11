@@ -4974,6 +4974,7 @@ uint8_t sofia_glue_negotiate_sdp(switch_core_session_t *session, const char *r_s
 						/* Compare all the key. The tag may remain the same even if key changed */
 						if (crypto && !strcmp(crypto, tech_pvt->remote_crypto_key)) {
 							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Existing key is still valid.\n");
+							got_crypto++;
 						} else {
 							const char *a = switch_stristr("AES", tech_pvt->remote_crypto_key);
 							const char *b = switch_stristr("AES", crypto);
