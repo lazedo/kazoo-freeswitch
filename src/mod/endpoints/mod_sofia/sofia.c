@@ -6173,7 +6173,7 @@ static void sofia_handle_sip_i_state(switch_core_session_t *session, int status,
 								&& (bnh = nua_handle_by_replaces(nua, replaces))) {
 								sofia_private_t *b_private;
 
-								switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Processing Replaces Attended Transfer\n");
+								switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "Processing Replaces Attended Transfer\n");
 								while (switch_channel_get_state(channel) < CS_EXECUTE) {
 									switch_yield(10000);
 								}
@@ -6983,7 +6983,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 					if ((p = strchr(rep, ';'))) {
 						*p = '\0';
 					}
-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Replaces: [%s]\n", rep);
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER replaces: [%s]\n", rep);
 				} else {
 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Memory Error!\n");
 					goto done;
@@ -7039,6 +7039,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 							switch_core_session_t *a_session;
 							if ((a_session = switch_core_session_locate(br_a))) {
 								switch_channel_t *a_channel = switch_core_session_get_channel(a_session);
+
 
 								if (a_channel && switch_true(switch_channel_get_variable(a_channel, "deny_refer_requests"))) {
 									deny_refer_requests = 1;
@@ -7132,8 +7133,12 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 								if (moh) {
 									char *xdest;
 									xdest = switch_core_session_sprintf(a_session, "endless_playback:%s,park", moh);
+									switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s (bridged to %s) replaces %s with %s\n"
+													  ,switch_core_session_get_uuid(session), rep, br_a, xdest);
 									switch_ivr_session_transfer(a_session, xdest, "inline", NULL);
 								} else {
+									switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s (bridged to %s) replaces %s with park\n"
+													  ,switch_core_session_get_uuid(session), rep, br_a);
 									switch_ivr_session_transfer(a_session, "park", "inline", NULL);
 								}
 
@@ -7227,7 +7232,10 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
                                 }
 
                                 switch_core_session_rwunlock(tmp);
-                            }							
+                            }
+
+							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s (bridged to %s) replaces %s (bridged to %s)\n"
+											  ,switch_core_session_get_uuid(session), br_a, rep, br_b);
 
 							switch_ivr_uuid_bridge(br_a, br_b);
 							switch_channel_set_variable(channel_b, SWITCH_ENDPOINT_DISPOSITION_VARIABLE, "ATTENDED_TRANSFER");
@@ -7299,8 +7307,12 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 									}
 
 									if (idest) {
+										switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s replaces %s with %s\n"
+														  ,switch_core_session_get_uuid(session), rep, idest);
 										switch_ivr_session_transfer(t_session, idest, "inline", NULL);
 									} else {
+										switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s replaces %s with %s\n"
+														  ,switch_core_session_get_uuid(session), rep, ext);
 										switch_ivr_session_transfer(t_session, ext, NULL, NULL);
 									}
 
@@ -7334,6 +7346,9 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 							const char *rep_h = NULL;
 							switch_xml_t xml_root, xml_channel;
 							switch_event_t *xml_params, *event;
+
+							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s replaces %s (%s@%s) with %s on another server\n"
+											  ,switch_core_session_get_uuid(session), rep, exten, (char *) refer_to->r_url->url_host, br_a);
 
 							switch_event_create(&xml_params, SWITCH_EVENT_REQUEST_PARAMS);
 							switch_assert(xml_params);
@@ -7500,6 +7515,9 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
 			const char *var;
 			switch_channel_t *b_channel = switch_core_session_get_channel(b_session);
             switch_event_t *event = NULL;
+
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "REFER from %s transfers %s to %s@%s\n"
+							  ,switch_core_session_get_uuid(session), br, exten, (char *) refer_to->r_url->url_host);
 
 			switch_channel_set_variable(channel, "transfer_fallback_extension", from->a_user);
 			if (!zstr(full_ref_by)) {
@@ -9075,6 +9093,9 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 						switch_channel_hangup(b_channel, SWITCH_CAUSE_ATTENDED_TRANSFER);
 					}
 				}
+
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "Invite invoked dialplan: %s\n",
+								  tech_pvt->caller_profile->destination_number);
 
 				switch_core_session_rwunlock(b_session);
 			}
