@@ -39,6 +39,9 @@ fi
 
 start() {
         echo -n "Starting $PROG_NAME: "
+
+        echo /tmp/%e-%p-%t.core > /proc/sys/kernel/core_pattern
+
         if [ -e $LOCK_FILE ]; then
             if [ -e $PID_FILE ] && [ -e /proc/`cat $PID_FILE` ]; then
                 echo
