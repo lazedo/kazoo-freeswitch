@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -30,8 +30,8 @@
  * mod_xml_cdr.c -- XML CDR Module to files or curl
  *
  */
-#include <sys/stat.h>
 #include <switch.h>
+#include <sys/stat.h>
 #include <switch_curl.h>
 #define MAX_URLS 20
 
@@ -66,7 +66,7 @@ static struct {
 	int prefix_a;
 	int disable100continue;
 	int rotate;
-	int auth_scheme;
+	long auth_scheme;
 	int timeout;
 	switch_memory_pool_t *pool;
 	switch_event_node_t *node;
@@ -576,7 +576,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_xml_cdr_load)
 				} else if (!strcasecmp(val, "GSS-NEGOTIATE")) {
 					globals.auth_scheme |= CURLAUTH_GSSNEGOTIATE;
 				} else if (!strcasecmp(val, "any")) {
-					globals.auth_scheme = CURLAUTH_ANY;
+					globals.auth_scheme = (long)CURLAUTH_ANY;
 				}
 			}
 		}

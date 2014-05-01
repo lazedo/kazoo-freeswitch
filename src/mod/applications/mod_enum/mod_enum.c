@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -796,6 +796,8 @@ static void do_load(void)
 		switch_core_destroy_memory_pool(&globals.pool);
 	}
 
+	switch_safe_free(globals.root);
+	switch_safe_free(globals.isn_root);
 	memset(&globals, 0, sizeof(globals));
 	switch_core_new_memory_pool(&globals.pool);
 	globals.timeout = 10;

@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -118,8 +118,8 @@ static void switch_loadable_module_runtime(void)
 	switch_loadable_module_t *module;
 
 	switch_mutex_lock(loadable_modules.mutex);
-	for (hi = switch_hash_first(NULL, loadable_modules.module_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(loadable_modules.module_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		module = (switch_loadable_module_t *) val;
 
 		if (module->switch_module_runtime) {
@@ -620,8 +620,8 @@ static switch_status_t do_chat_send(switch_event_t *message_event)
 	
 	if (!switch_true(replying) && !switch_stristr("global", proto) && !switch_true(switch_event_get_header(message_event, "skip_global_process"))) {
 		switch_mutex_lock(loadable_modules.mutex);
-		for (hi = switch_hash_first(NULL, loadable_modules.chat_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(loadable_modules.chat_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			
 			if ((ci = (switch_chat_interface_t *) val)) {
 				if (ci->chat_send && !strncasecmp(ci->interface_name, "GLOBAL_", 7)) {
@@ -647,6 +647,7 @@ static switch_status_t do_chat_send(switch_event_t *message_event)
 				}
 			}
 		}
+		switch_safe_free(hi);
 		switch_mutex_unlock(loadable_modules.mutex);
 	}
 	
@@ -1639,8 +1640,8 @@ SWITCH_DECLARE(switch_status_t) switch_loadable_module_enumerate_loaded(switch_m
 	switch_loadable_module_t *module;
 
 	switch_mutex_lock(loadable_modules.mutex);
-	for (hi = switch_hash_first(NULL, loadable_modules.module_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(loadable_modules.module_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		module = (switch_loadable_module_t *) val;
 
 		callback(user_data, module->module_interface->module_name);
@@ -1777,30 +1778,31 @@ SWITCH_DECLARE(switch_status_t) switch_loadable_module_init(switch_bool_t autolo
 	switch_loadable_module_path_init();
 #endif
 
-	switch_core_hash_init(&loadable_modules.module_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.endpoint_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.codec_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.timer_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.application_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.chat_application_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.api_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.json_api_hash, loadable_modules.pool);
-	switch_core_hash_init(&loadable_modules.file_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.speech_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.asr_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.directory_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.chat_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.say_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.management_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.limit_hash, loadable_modules.pool);
-	switch_core_hash_init_nocase(&loadable_modules.dialplan_hash, loadable_modules.pool);
-	switch_core_hash_init(&loadable_modules.secondary_recover_hash, loadable_modules.pool);
+	switch_core_hash_init(&loadable_modules.module_hash);
+	switch_core_hash_init_nocase(&loadable_modules.endpoint_hash);
+	switch_core_hash_init_nocase(&loadable_modules.codec_hash);
+	switch_core_hash_init_nocase(&loadable_modules.timer_hash);
+	switch_core_hash_init_nocase(&loadable_modules.application_hash);
+	switch_core_hash_init_nocase(&loadable_modules.chat_application_hash);
+	switch_core_hash_init_nocase(&loadable_modules.api_hash);
+	switch_core_hash_init_nocase(&loadable_modules.json_api_hash);
+	switch_core_hash_init(&loadable_modules.file_hash);
+	switch_core_hash_init_nocase(&loadable_modules.speech_hash);
+	switch_core_hash_init_nocase(&loadable_modules.asr_hash);
+	switch_core_hash_init_nocase(&loadable_modules.directory_hash);
+	switch_core_hash_init_nocase(&loadable_modules.chat_hash);
+	switch_core_hash_init_nocase(&loadable_modules.say_hash);
+	switch_core_hash_init_nocase(&loadable_modules.management_hash);
+	switch_core_hash_init_nocase(&loadable_modules.limit_hash);
+	switch_core_hash_init_nocase(&loadable_modules.dialplan_hash);
+	switch_core_hash_init(&loadable_modules.secondary_recover_hash);
 	switch_mutex_init(&loadable_modules.mutex, SWITCH_MUTEX_NESTED, loadable_modules.pool);
 
 	if (!autoload) return SWITCH_STATUS_SUCCESS;
 
 	switch_loadable_module_load_module("", "CORE_SOFTTIMER_MODULE", SWITCH_FALSE, &err);
 	switch_loadable_module_load_module("", "CORE_PCM_MODULE", SWITCH_FALSE, &err);
+	switch_loadable_module_load_module("", "CORE_SPEEX_MODULE", SWITCH_FALSE, &err);
 
 
 	if ((xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
@@ -1985,8 +1987,8 @@ SWITCH_DECLARE(void) switch_loadable_module_shutdown(void)
 	}
 
 
-	for (hi = switch_hash_first(NULL, loadable_modules.module_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(loadable_modules.module_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		module = (switch_loadable_module_t *) val;
 		if (!module->perm) {
 			do_shutdown(module, SWITCH_TRUE, SWITCH_FALSE, SWITCH_FALSE, NULL);
@@ -1995,8 +1997,8 @@ SWITCH_DECLARE(void) switch_loadable_module_shutdown(void)
 
 	switch_yield(1000000);
 
-	for (hi = switch_hash_first(NULL, loadable_modules.module_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(loadable_modules.module_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		module = (switch_loadable_module_t *) val;
 		if (!module->perm) {
 			do_shutdown(module, SWITCH_FALSE, SWITCH_TRUE, SWITCH_FALSE, NULL);
@@ -2195,8 +2197,8 @@ SWITCH_DECLARE(int) switch_loadable_module_get_codecs(const switch_codec_impleme
 	const switch_codec_implementation_t *imp;
 
 	switch_mutex_lock(loadable_modules.mutex);
-	for (hi = switch_hash_first(NULL, loadable_modules.codec_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(loadable_modules.codec_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		codec_interface = (switch_codec_interface_t *) val;
 		
 		/* Look for the default ptime of the codec because it's the safest choice */
@@ -2217,6 +2219,7 @@ SWITCH_DECLARE(int) switch_loadable_module_get_codecs(const switch_codec_impleme
 			break;
 		}
 	}
+	switch_safe_free(hi);
 
 	switch_mutex_unlock(loadable_modules.mutex);
 

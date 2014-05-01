@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -425,6 +425,8 @@ struct cc_queue {
 
 	char *strategy;
 	char *moh;
+	char *announce;
+	uint32_t announce_freq;
 	char *record_template;
 	char *time_base_score;
 
@@ -536,6 +538,8 @@ cc_queue_t *queue_set_config(cc_queue_t *queue)
 	 */
 	SWITCH_CONFIG_SET_ITEM(queue->config[i++], "strategy", SWITCH_CONFIG_STRING, 0, &queue->strategy, "longest-idle-agent", &queue->config_str_pool, NULL, NULL);
 	SWITCH_CONFIG_SET_ITEM(queue->config[i++], "moh-sound", SWITCH_CONFIG_STRING, 0, &queue->moh, NULL, &queue->config_str_pool, NULL, NULL);
+	SWITCH_CONFIG_SET_ITEM(queue->config[i++], "announce-sound", SWITCH_CONFIG_STRING, 0, &queue->announce, NULL, &queue->config_str_pool, NULL, NULL);
+	SWITCH_CONFIG_SET_ITEM(queue->config[i++], "announce-frequency", SWITCH_CONFIG_INT, 0, &queue->announce_freq, 0, &config_int_0_86400, NULL, NULL);
 	SWITCH_CONFIG_SET_ITEM(queue->config[i++], "record-template", SWITCH_CONFIG_STRING, 0, &queue->record_template, NULL, &queue->config_str_pool, NULL, NULL);
 	SWITCH_CONFIG_SET_ITEM(queue->config[i++], "time-base-score", SWITCH_CONFIG_STRING, 0, &queue->time_base_score, "queue", &queue->config_str_pool, NULL, NULL);
 
@@ -661,11 +665,17 @@ static cc_queue_t *load_queue(const char *queue_name)
 	cc_queue_t *queue = NULL;
 	switch_xml_t x_queues, x_queue, cfg, xml;
 	switch_event_t *event = NULL;
+	switch_event_t *params = NULL;
 
-	if (!(xml = switch_xml_open_cfg(global_cf, &cfg, NULL))) {
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "CC-Queue", queue_name);
+
+	if (!(xml = switch_xml_open_cfg(global_cf, &cfg, params))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Open of %s failed\n", global_cf);
-		return queue;
+		goto end;
 	}
+
 	if (!(x_queues = switch_xml_child(cfg, "queues"))) {
 		goto end;
 	}
@@ -689,7 +699,7 @@ static cc_queue_t *load_queue(const char *queue_name)
 		queue_set_config(queue);
 
 		/* Add the params to the event structure */
-		count = switch_event_import_xml(switch_xml_child(x_queue, "param"), "name", "value", &event);
+		count = (int)switch_event_import_xml(switch_xml_child(x_queue, "param"), "name", "value", &event);
 
 		if (switch_xml_config_parse_event(event, count, SWITCH_FALSE, queue->config) != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to process configuration\n");
@@ -716,6 +726,9 @@ end:
 	}
 	if (event) {
 		switch_event_destroy(&event);
+	}
+	if (params) {
+		switch_event_destroy(&params);
 	}
 	return queue;
 }
@@ -1483,13 +1496,24 @@ static void *SWITCH_THREAD_FUNC outbound_agent_thread_run(switch_thread_t *threa
 	/* CallBack Mode */
 	if (!strcasecmp(h->agent_type, CC_AGENT_TYPE_CALLBACK)) {
 		switch_channel_t *member_channel = switch_core_session_get_channel(member_session);
-		char *cid_name = NULL;
+		const char *cid_name = NULL;
+		char *cid_name_freeable = NULL;
+		const char *cid_number = NULL;
 		const char *cid_name_prefix = NULL;
-		if ((cid_name_prefix = switch_channel_get_variable(member_channel, "cc_outbound_cid_name_prefix"))) {
-			cid_name = switch_mprintf("%s%s", cid_name_prefix, h->member_cid_name);
-			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(member_session), SWITCH_LOG_DEBUG, "Setting outbound caller_id_name to: %s\n", cid_name);
-		}
 
+		if ((cid_name_prefix = switch_channel_get_variable(member_channel, "cc_outbound_cid_name_prefix"))) {
+			cid_name_freeable = switch_mprintf("%s%s", cid_name_prefix, h->member_cid_name);
+			cid_name = cid_name_freeable;
+			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(member_session), SWITCH_LOG_DEBUG, "Setting outbound caller_id_name to: %s\n", cid_name);
+		} else {
+			if (!(cid_name = switch_channel_get_variable(member_channel, "effective_caller_id_name"))) {
+				cid_name = h->member_cid_name;
+			}
+
+			if (!(cid_number = switch_channel_get_variable(member_channel, "effective_caller_id_number"))) {
+				cid_number = h->member_cid_number;
+			}
+		}
 		switch_event_create(&ovars, SWITCH_EVENT_REQUEST_PARAMS);
 		switch_event_add_header(ovars, SWITCH_STACK_BOTTOM, "cc_queue", "%s", h->queue_name);
 		switch_event_add_header(ovars, SWITCH_STACK_BOTTOM, "cc_member_uuid", "%s", h->member_uuid);
@@ -1507,11 +1531,11 @@ static void *SWITCH_THREAD_FUNC outbound_agent_thread_run(switch_thread_t *threa
 		t_agent_called = local_epoch_time_now(NULL);
 
 		dialstr = switch_channel_expand_variables(member_channel, h->originate_string);
-		status = switch_ivr_originate(NULL, &agent_session, &cause, dialstr, 60, NULL, cid_name ? cid_name : h->member_cid_name, h->member_cid_number, NULL, ovars, SOF_NONE, NULL);
+		status = switch_ivr_originate(NULL, &agent_session, &cause, dialstr, 60, NULL, cid_name ? cid_name : h->member_cid_name, cid_number ? cid_number : h->member_cid_number, NULL, ovars, SOF_NONE, NULL);
 		if (dialstr != h->originate_string) {
 			switch_safe_free(dialstr);
 		}
-		switch_safe_free(cid_name);
+		switch_safe_free(cid_name_freeable);
 
 		switch_event_destroy(&ovars);
 	/* UUID Standby Mode */
@@ -1929,11 +1953,11 @@ static int agents_callback(void *pArg, int argc, char **argv, char **columnNames
 		if (cbt->tier_rule_no_agent_no_wait == SWITCH_TRUE && cbt->tier_agent_available == 0) {
 			cbt->tier = atoi(agent_tier_level);
 			/* Multiple the tier level by the tier wait time */
-		} else if (cbt->tier_rule_wait_multiply_level == SWITCH_TRUE && (long) local_epoch_time_now(NULL) - atol(cbt->member_joined_epoch) >= atoi(agent_tier_level) * cbt->tier_rule_wait_second) {
+		} else if (cbt->tier_rule_wait_multiply_level == SWITCH_TRUE && (long) local_epoch_time_now(NULL) - atol(cbt->member_joined_epoch) >= atoi(agent_tier_level) * (int)cbt->tier_rule_wait_second) {
 			cbt->tier = atoi(agent_tier_level);
 			cbt->tier_agent_available = 0;
 			/* Just check if joined is bigger than next tier wait time */
-		} else if (cbt->tier_rule_wait_multiply_level == SWITCH_FALSE && (long) local_epoch_time_now(NULL) - atol(cbt->member_joined_epoch) >= cbt->tier_rule_wait_second) {
+		} else if (cbt->tier_rule_wait_multiply_level == SWITCH_FALSE && (long) local_epoch_time_now(NULL) - atol(cbt->member_joined_epoch) >= (int)cbt->tier_rule_wait_second) {
 			cbt->tier = atoi(agent_tier_level);
 			cbt->tier_agent_available = 0;
 		} else {
@@ -2060,8 +2084,6 @@ static int agents_callback(void *pArg, int argc, char **argv, char **columnNames
 				return 1;
 			}
 	}
-
-	return 0;
 }
 
 static int members_callback(void *pArg, int argc, char **argv, char **columnNames)
@@ -2344,6 +2366,8 @@ void *SWITCH_THREAD_FUNC cc_member_thread_run(switch_thread_t *thread, void *obj
 	struct member_thread_helper *m = (struct member_thread_helper *) obj;
 	switch_core_session_t *member_session = switch_core_session_locate(m->member_session_uuid);
 	switch_channel_t *member_channel = NULL;
+	switch_time_t last_announce = local_epoch_time_now(NULL);
+	switch_bool_t announce_valid = SWITCH_TRUE;
 
 	if (member_session) {
 		member_channel = switch_core_session_get_channel(member_session);
@@ -2358,22 +2382,27 @@ void *SWITCH_THREAD_FUNC cc_member_thread_run(switch_thread_t *thread, void *obj
 
 	while(switch_channel_ready(member_channel) && m->running && globals.running) {
 		cc_queue_t *queue = NULL;
+		switch_time_t time_now = local_epoch_time_now(NULL);
 
 		if (!m->queue_name || !(queue = get_queue(m->queue_name))) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(member_session), SWITCH_LOG_WARNING, "Queue %s not found\n", m->queue_name);
 			break;
 		}
 		/* Make the Caller Leave if he went over his max wait time */
-		if (queue->max_wait_time > 0 && queue->max_wait_time <= local_epoch_time_now(NULL) - m->t_member_called) {
+		if (queue->max_wait_time > 0 && queue->max_wait_time <=  time_now - m->t_member_called) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(member_session), SWITCH_LOG_DEBUG, "Member %s <%s> in queue '%s' reached max wait time\n", m->member_cid_name, m->member_cid_number, m->queue_name);
 			m->member_cancel_reason = CC_MEMBER_CANCEL_REASON_TIMEOUT;
 			switch_channel_set_flag_value(member_channel, CF_BREAK, 2);
 		}
 
-		if (queue->max_wait_time_with_no_agent > 0 && queue->last_agent_exist_check > queue->last_agent_exist) {
+		/* Check if max wait time no agent is Active AND if there is no Agent AND if the last agent check was after the member join */
+		if (queue->max_wait_time_with_no_agent > 0 && queue->last_agent_exist_check > queue->last_agent_exist && m->t_member_called <= queue->last_agent_exist_check) {
+			/* Check if the time without agent is bigger or equal than out threshold */
 			if (queue->last_agent_exist_check - queue->last_agent_exist >= queue->max_wait_time_with_no_agent) {
+				/* Check for grace period with no agent when member join */
 				if (queue->max_wait_time_with_no_agent_time_reached > 0) {
-					if (queue->last_agent_exist_check - m->t_member_called >= queue->max_wait_time_with_no_agent + queue->max_wait_time_with_no_agent_time_reached) {
+					/* Check if the last agent check was after the member join, and we waited atless the extra time  */
+					if (queue->last_agent_exist_check - m->t_member_called >= queue->max_wait_time_with_no_agent_time_reached + queue->max_wait_time_with_no_agent) {
 						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(member_session), SWITCH_LOG_DEBUG, "Member %s <%s> in queue '%s' reached max wait of %d sec. with no agent plus join grace period of %d sec.\n", m->member_cid_name, m->member_cid_number, m->queue_name, queue->max_wait_time_with_no_agent, queue->max_wait_time_with_no_agent_time_reached);
 						m->member_cancel_reason = CC_MEMBER_CANCEL_REASON_NO_AGENT_TIMEOUT;
 						switch_channel_set_flag_value(member_channel, CF_BREAK, 2);
@@ -2401,7 +2430,24 @@ void *SWITCH_THREAD_FUNC cc_member_thread_run(switch_thread_t *thread, void *obj
 		 */
 
 		/* If Agent Logoff, we might need to recalculare score based on skill */
-		/* Play Announcement in order */
+		/* Play the periodic announcement if it is time to do so */
+		if (announce_valid == SWITCH_TRUE && queue->announce && queue->announce_freq > 0 &&
+			queue->announce_freq <= time_now - last_announce) {
+			switch_status_t status = SWITCH_STATUS_FALSE;
+			/* Stop previous announcement in case it's still running */
+			switch_ivr_stop_displace_session(member_session, queue->announce);
+			/* Play the announcement */
+			status = switch_ivr_displace_session(member_session, queue->announce, 0, NULL);
+
+			if (status != SWITCH_STATUS_SUCCESS) {
+				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(member_session), SWITCH_LOG_WARNING,
+								  "Couldn't play announcement '%s'\n", queue->announce);
+				announce_valid = SWITCH_FALSE;
+			}
+			else {
+				last_announce = time_now;
+			}
+		}
 
 		queue_rwunlock(queue);
 
@@ -3152,12 +3198,12 @@ SWITCH_STANDARD_API(cc_config_api_function)
 				switch_hash_index_t *hi;
 				stream->write_function(stream, "%s", "name|strategy|moh_sound|time_base_score|tier_rules_apply|tier_rule_wait_second|tier_rule_wait_multiply_level|tier_rule_no_agent_no_wait|discard_abandoned_after|abandoned_resume_allowed|max_wait_time|max_wait_time_with_no_agent|max_wait_time_with_no_agent_time_reached|record_template\n");
 				switch_mutex_lock(globals.mutex);
-				for (hi = switch_hash_first(NULL, globals.queue_hash); hi; hi = switch_hash_next(hi)) {
+				for (hi = switch_core_hash_first(globals.queue_hash); hi; hi = switch_core_hash_next(&hi)) {
 					void *val = NULL;
 					const void *key;
 					switch_ssize_t keylen;
 					cc_queue_t *queue;
-					switch_hash_this(hi, &key, &keylen, &val);
+					switch_core_hash_this(hi, &key, &keylen, &val);
 					queue = (cc_queue_t *) val;
 					stream->write_function(stream, "%s|%s|%s|%s|%s|%d|%s|%s|%d|%s|%d|%d|%d|%s\n", queue->name, queue->strategy, queue->moh, queue->time_base_score, (queue->tier_rules_apply?"true":"false"), queue->tier_rule_wait_second, (queue->tier_rule_wait_multiply_level?"true":"false"), (queue->tier_rule_no_agent_no_wait?"true":"false"), queue->discard_abandoned_after, (queue->abandoned_resume_allowed?"true":"false"), queue->max_wait_time, queue->max_wait_time_with_no_agent, queue->max_wait_time_with_no_agent_time_reached, queue->record_template);
 					queue = NULL;
@@ -3205,7 +3251,7 @@ SWITCH_STANDARD_API(cc_config_api_function)
 				switch_hash_index_t *hi;
 				int queue_count = 0;
 				switch_mutex_lock(globals.mutex);
-				for (hi = switch_hash_first(NULL, globals.queue_hash); hi; hi = switch_hash_next(hi)) {
+				for (hi = switch_core_hash_first(globals.queue_hash); hi; hi = switch_core_hash_next(&hi)) {
 					queue_count++;
 				}
 				switch_mutex_unlock(globals.mutex);
@@ -3263,7 +3309,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_callcenter_load)
 	memset(&globals, 0, sizeof(globals));
 	globals.pool = pool;
 
-	switch_core_hash_init(&globals.queue_hash, globals.pool);
+	switch_core_hash_init(&globals.queue_hash);
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, globals.pool);
 
 	if ((status = load_config()) != SWITCH_STATUS_SUCCESS) {
@@ -3327,7 +3373,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_callcenter_load)
    Macro expands to: switch_status_t mod_callcenter_shutdown() */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_callcenter_shutdown)
 {
-	switch_hash_index_t *hi;
+	switch_hash_index_t *hi = NULL;
 	cc_queue_t *queue;
 	void *val = NULL;
 	const void *key;
@@ -3348,8 +3394,8 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_callcenter_shutdown)
 	}
 
 	switch_mutex_lock(globals.mutex);
-	while ((hi = switch_hash_first(NULL, globals.queue_hash))) {
-		switch_hash_this(hi, &key, &keylen, &val);
+	while ((hi = switch_core_hash_first_iter( globals.queue_hash, hi))) {
+		switch_core_hash_this(hi, &key, &keylen, &val);
 		queue = (cc_queue_t *) val;
 
 		switch_core_hash_delete(globals.queue_hash, queue->name);

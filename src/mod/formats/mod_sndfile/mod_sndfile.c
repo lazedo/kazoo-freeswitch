@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -434,7 +434,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_sndfile_load)
 {
 	switch_file_interface_t *file_interface;
 
-	switch_core_hash_init(&globals.format_hash, pool);
+	switch_core_hash_init(&globals.format_hash);
 
 	if (setup_formats() != SWITCH_STATUS_SUCCESS) {
 		return SWITCH_STATUS_FALSE;

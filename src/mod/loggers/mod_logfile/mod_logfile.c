@@ -264,11 +264,11 @@ static switch_status_t process_node(const switch_log_node_t *node, switch_log_le
 	const void *var;
 	logfile_profile_t *profile;
 
-	for (hi = switch_hash_first(NULL, profile_hash); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(profile_hash); hi; hi = switch_core_hash_next(&hi)) {
 		size_t mask = 0;
 		size_t ok = 0;
 
-		switch_hash_this(hi, &var, NULL, &val);
+		switch_core_hash_this(hi, &var, NULL, &val);
 		profile = val;
 
 		ok = switch_log_check_mask(profile->all_level, level);
@@ -313,6 +313,17 @@ static switch_status_t mod_logfile_logger(const switch_log_node_t *node, switch_
 	return process_node(node, level);
 }
 
+static void cleanup_profile(void *ptr)
+{
+	logfile_profile_t *profile = (logfile_profile_t *) ptr;
+
+	switch_core_hash_destroy(&profile->log_hash);
+	switch_file_close(profile->log_afd);
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Closing %s\n", profile->logfile);
+	switch_safe_free(profile->logfile);
+
+}
+
 static switch_status_t load_profile(switch_xml_t xml)
 {
 	switch_xml_t param, settings;
@@ -321,10 +332,11 @@ static switch_status_t load_profile(switch_xml_t xml)
 
 	new_profile = switch_core_alloc(module_pool, sizeof(*new_profile));
 	memset(new_profile, 0, sizeof(*new_profile));
-	switch_core_hash_init(&(new_profile->log_hash), module_pool);
+	switch_core_hash_init(&(new_profile->log_hash));
 	new_profile->name = switch_core_strdup(module_pool, switch_str_nil(name));
 
 	new_profile->suffix = 1;
+	new_profile->log_uuid = SWITCH_TRUE;
 
 	if ((settings = switch_xml_child(xml, "settings"))) {
 		for (param = switch_xml_child(settings, "param"); param; param = param->next) {
@@ -339,8 +351,8 @@ static switch_status_t load_profile(switch_xml_t xml)
 				if (new_profile->max_rot == 0) {
 					new_profile->max_rot = MAX_ROT;
 				}
-			} else if (!strcmp(var, "uuid") && switch_true(val)) {
-				new_profile->log_uuid = SWITCH_TRUE;
+			} else if (!strcmp(var, "uuid")) {
+				new_profile->log_uuid = switch_true(val);
 			}
 		}
 	}
@@ -364,7 +376,7 @@ static switch_status_t load_profile(switch_xml_t xml)
 		return SWITCH_STATUS_GENERR;
 	}
 
-	switch_core_hash_insert(profile_hash, new_profile->name, (void *) new_profile);
+	switch_core_hash_insert_destructor(profile_hash, new_profile->name, (void *) new_profile, cleanup_profile);
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -379,15 +391,15 @@ static void event_handler(switch_event_t *event)
 
 	if (sig && !strcmp(sig, "HUP")) {
 		if (globals.rotate) {
-			for (hi = switch_hash_first(NULL, profile_hash); hi; hi = switch_hash_next(hi)) {
-				switch_hash_this(hi, &var, NULL, &val);
+			for (hi = switch_core_hash_first(profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+				switch_core_hash_this(hi, &var, NULL, &val);
 				profile = val;
 				mod_logfile_rotate(profile);
 			}
 		} else {
 			switch_mutex_lock(globals.mutex);
-			for (hi = switch_hash_first(NULL, profile_hash); hi; hi = switch_hash_next(hi)) {
-				switch_hash_this(hi, &var, NULL, &val);
+			for (hi = switch_core_hash_first(profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+				switch_core_hash_this(hi, &var, NULL, &val);
 				profile = val;
 				switch_file_close(profile->log_afd);
 				if (mod_logfile_openlogfile(profile, SWITCH_TRUE) != SWITCH_STATUS_SUCCESS) {
@@ -412,7 +424,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_load)
 	if (profile_hash) {
 		switch_core_hash_destroy(&profile_hash);
 	}
-	switch_core_hash_init(&profile_hash, module_pool);
+	switch_core_hash_init(&profile_hash);
 
 	if (switch_event_bind_removable(modname, SWITCH_EVENT_TRAP, SWITCH_EVENT_SUBCLASS_ANY, event_handler, NULL, &globals.node) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't bind!\n");
@@ -453,26 +465,9 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_logfile_load)
 
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_logfile_shutdown)
 {
-	switch_hash_index_t *hi;
-	const void *var;
-	void *val;
-
 	switch_log_unbind_logger(mod_logfile_logger);
 	switch_event_unbind(&globals.node);
-
-	for (hi = switch_hash_first(NULL, profile_hash); hi; hi = switch_hash_next(hi)) {
-		logfile_profile_t *profile;
-		switch_hash_this(hi, &var, NULL, &val);
-		if ((profile = (logfile_profile_t *) val)) {
-			switch_file_close(profile->log_afd);
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Closing %s\n", profile->logfile);
-			switch_safe_free(profile->logfile);
-		}
-	}
-
 	switch_core_hash_destroy(&profile_hash);
-
-
 	return SWITCH_STATUS_SUCCESS;
 }
 

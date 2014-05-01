@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -288,9 +288,9 @@ enum tport_tls_verify_policy sofia_glue_str2tls_verify_policy(const char * str){
 
 	while (ptr_cur) {
 		if ((ptr_next = strchr(ptr_cur, '|'))) {
-			len = ptr_next++ - ptr_cur;
+			len = (int)(ptr_next++ - ptr_cur);
 		} else {
-			len = strlen(ptr_cur);
+			len = (int)strlen(ptr_cur);
 		}
 		if (!strncasecmp(ptr_cur, "in",len)) {
 			ret |= TPTLS_VERIFY_IN;
@@ -487,7 +487,7 @@ void sofia_glue_get_addr(msg_t *msg, char *buf, size_t buflen, int *port)
 	su_addrinfo_t *addrinfo = msg_addrinfo(msg);
 
 	if (buf) {
-		get_addr(buf, buflen, addrinfo->ai_addr, addrinfo->ai_addrlen);
+		get_addr(buf, buflen, addrinfo->ai_addr, (socklen_t)addrinfo->ai_addrlen);
 	}
 
 	if (port) {
@@ -695,6 +695,7 @@ switch_status_t sofia_glue_do_invite(switch_core_session_t *session)
 	const char *handle_full_to = switch_channel_get_variable(tech_pvt->channel, "sip_handle_full_to");
 	const char *force_full_from = switch_channel_get_variable(tech_pvt->channel, "sip_force_full_from");
 	const char *force_full_to = switch_channel_get_variable(tech_pvt->channel, "sip_force_full_to");
+	const char *content_encoding = switch_channel_get_variable(tech_pvt->channel, "sip_content_encoding");
 	char *mp = NULL, *mp_type = NULL;
 	char *record_route = NULL;
 	const char *recover_via = NULL;
@@ -1225,10 +1226,10 @@ switch_status_t sofia_glue_do_invite(switch_core_session_t *session)
 		tech_pvt->session_refresher = nua_no_refresher;
 	}
 
-	if (tech_pvt->mparams.local_sdp_str) {
-		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(tech_pvt->session), SWITCH_LOG_DEBUG,
-						  "Local SDP:\n%s\n", tech_pvt->mparams.local_sdp_str);
-	}
+
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(tech_pvt->session), SWITCH_LOG_DEBUG, "%s sending invite version: %s\nLocal SDP:\n%s\n",
+					  switch_channel_get_name(tech_pvt->channel), switch_version_full_human(), 
+					  tech_pvt->mparams.local_sdp_str ? tech_pvt->mparams.local_sdp_str : "NO SDP PRESENT\n");
 
 
 	if (sofia_use_soa(tech_pvt)) {
@@ -1259,6 +1260,7 @@ switch_status_t sofia_glue_do_invite(switch_core_session_t *session)
 				   TAG_IF(!zstr(route), SIPTAG_ROUTE_STR(route)),
 				   TAG_IF(tech_pvt->profile->minimum_session_expires, NUTAG_MIN_SE(tech_pvt->profile->minimum_session_expires)),
 				   TAG_IF(cseq, SIPTAG_CSEQ(cseq)),
+				   TAG_IF(content_encoding, SIPTAG_CONTENT_ENCODING_STR(content_encoding)),
 				   TAG_IF(zstr(tech_pvt->mparams.local_sdp_str), SIPTAG_PAYLOAD_STR("")),
 				   TAG_IF(!zstr(tech_pvt->mparams.local_sdp_str), SOATAG_ADDRESS(tech_pvt->mparams.adv_sdp_audio_ip)),
 				   TAG_IF(!zstr(tech_pvt->mparams.local_sdp_str), SOATAG_USER_SDP_STR(tech_pvt->mparams.local_sdp_str)),
@@ -1295,6 +1297,7 @@ switch_status_t sofia_glue_do_invite(switch_core_session_t *session)
 				   TAG_IF(tech_pvt->profile->minimum_session_expires, NUTAG_MIN_SE(tech_pvt->profile->minimum_session_expires)),
 				   TAG_IF(!require_timer, NUTAG_TIMER_AUTOREQUIRE(0)),
 				   TAG_IF(cseq, SIPTAG_CSEQ(cseq)),
+				   TAG_IF(content_encoding, SIPTAG_CONTENT_ENCODING_STR(content_encoding)),
 				   NUTAG_MEDIA_ENABLE(0),
 				   SIPTAG_CONTENT_TYPE_STR(mp_type ? mp_type : "application/sdp"),
 				   SIPTAG_PAYLOAD_STR(mp ? mp : tech_pvt->mparams.local_sdp_str), TAG_IF(rep, SIPTAG_REPLACES_STR(rep)), SOATAG_HOLD(holdstr), TAG_END());
@@ -1459,7 +1462,10 @@ char *sofia_glue_get_path_from_contact(char *buf)
 		}
 	}
 
-	if (!path) return NULL;
+	if (!path) {
+		free(contact);
+		return NULL;
+	}
 
 	if ((e = strrchr(path, ';'))) {
 		*e = '\0';
@@ -1651,8 +1657,8 @@ void sofia_glue_restart_all_profiles(void)
 
 	switch_mutex_lock(mod_sofia_globals.hash_mutex);
 	if (mod_sofia_globals.profile_hash) {
-		for (hi = switch_hash_first(NULL, mod_sofia_globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(mod_sofia_globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			if ((pptr = (sofia_profile_t *) val)) {
 				int rsec = 10;
 				int diff = (int) (switch_epoch_time_now(NULL) - pptr->started);
@@ -1686,8 +1692,8 @@ void sofia_glue_global_siptrace(switch_bool_t on)
 
 	switch_mutex_lock(mod_sofia_globals.hash_mutex);
 	if (mod_sofia_globals.profile_hash) {
-		for (hi = switch_hash_first(NULL, mod_sofia_globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(mod_sofia_globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			if ((pptr = (sofia_profile_t *) val)) {
 				nua_set_params(pptr->nua, TPTAG_LOG(on), TAG_END());				
 			}
@@ -1706,8 +1712,8 @@ void sofia_glue_global_standby(switch_bool_t on)
 
 	switch_mutex_lock(mod_sofia_globals.hash_mutex);
 	if (mod_sofia_globals.profile_hash) {
-		for (hi = switch_hash_first(NULL, mod_sofia_globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(mod_sofia_globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			if ((pptr = (sofia_profile_t *) val)) {
 				if (on) {
 					sofia_set_pflag_locked(pptr, PFLAG_STANDBY);
@@ -1730,8 +1736,8 @@ void sofia_glue_global_capture(switch_bool_t on)
 
        switch_mutex_lock(mod_sofia_globals.hash_mutex);
        if (mod_sofia_globals.profile_hash) {
-               for (hi = switch_hash_first(NULL, mod_sofia_globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-                       switch_hash_this(hi, &var, NULL, &val);
+               for (hi = switch_core_hash_first(mod_sofia_globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+                       switch_core_hash_this(hi, &var, NULL, &val);
                        if ((pptr = (sofia_profile_t *) val)) {
                                nua_set_params(pptr->nua, TPTAG_CAPT(on ? mod_sofia_globals.capture_server : NULL), TAG_END());
                        }
@@ -1751,8 +1757,8 @@ void sofia_glue_global_watchdog(switch_bool_t on)
 
 	switch_mutex_lock(mod_sofia_globals.hash_mutex);
 	if (mod_sofia_globals.profile_hash) {
-		for (hi = switch_hash_first(NULL, mod_sofia_globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(mod_sofia_globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			if ((pptr = (sofia_profile_t *) val)) {
 				pptr->watchdog_enabled = (on ? 1 : 0);
 			}
@@ -1774,8 +1780,8 @@ void sofia_glue_del_profile(sofia_profile_t *profile)
 
 	switch_mutex_lock(mod_sofia_globals.hash_mutex);
 	if (mod_sofia_globals.profile_hash) {
-		for (hi = switch_hash_first(NULL, mod_sofia_globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(mod_sofia_globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			if ((pptr = (sofia_profile_t *) val) && pptr == profile) {
 				aliases[i++] = strdup((char *) var);
 				if (i == 512) {
@@ -1838,14 +1844,14 @@ int sofia_recover_callback(switch_core_session_t *session)
 	if ((tmp = switch_channel_get_variable(tech_pvt->channel, "rtp_2833_send_payload"))) {
 		int te = atoi(tmp);
 		if (te > 64) {
-			tech_pvt->te = te;
+			tech_pvt->te = (switch_payload_t)te;
 		} 
 	}
 
 	if ((tmp = switch_channel_get_variable(tech_pvt->channel, "rtp_2833_recv_payload"))) {
 		int te = atoi(tmp);
 		if (te > 64) {
-			tech_pvt->recv_te = te;
+			tech_pvt->recv_te = (switch_payload_t)te;
 		} 
 	}
 
@@ -2178,8 +2184,8 @@ int sofia_glue_init_sql(sofia_profile_t *profile)
 	}
 		
 
-	test_sql = switch_mprintf("delete from sip_registrations where (sub_host is null or contact like '%%TCP%%' "
-							  "or status like '%%TCP%%' or status like '%%TLS%%') and hostname='%q' "
+	test_sql = switch_mprintf("delete from sip_registrations where sub_host is null "
+							  "and hostname='%q' "
 							  "and network_ip like '%%' and network_port like '%%' and sip_username "
 							  "like '%%' and mwi_user  like '%%' and mwi_host like '%%' "
 							  "and orig_server_host like '%%' and orig_hostname like '%%'", mod_sofia_globals.hostname);
@@ -2628,6 +2634,7 @@ switch_status_t sofia_glue_send_notify(sofia_profile_t *profile, const char *use
 	sofia_destination_t *dst = NULL;
 	char *contact_str, *contact, *user_via = NULL;
 	char *route_uri = NULL, *p;
+	char *ptr;
 
 	contact = sofia_glue_get_url_from_contact((char *) o_contact, 1);
 
@@ -2636,16 +2643,12 @@ switch_status_t sofia_glue_send_notify(sofia_profile_t *profile, const char *use
 	}
 
 	if (!zstr(network_ip) && sofia_glue_check_nat(profile, network_ip)) {
-		char *ptr = NULL;
-		//const char *transport_str = NULL;
-
-
 		id = switch_mprintf("sip:%s@%s", user, profile->extsipip);
 		switch_assert(id);
 
 		if ((ptr = sofia_glue_find_parameter(o_contact, "transport="))) {
-			sofia_transport_t transport = sofia_glue_str2transport(ptr);
-			//transport_str = sofia_glue_transport2str(transport);
+			sofia_transport_t transport = sofia_glue_str2transport( ptr + 10 );
+
 			switch (transport) {
 			case SOFIA_TRANSPORT_TCP:
 				contact_str = profile->tcp_public_contact;
@@ -2660,12 +2663,30 @@ switch_status_t sofia_glue_send_notify(sofia_profile_t *profile, const char *use
 			user_via = sofia_glue_create_external_via(NULL, profile, transport);
 		} else {
 			user_via = sofia_glue_create_external_via(NULL, profile, SOFIA_TRANSPORT_UDP);
-			contact_str = profile->public_url;
+			contact_str = profile->public_url;		
 		}
-
 	} else {
-		contact_str = profile->url;
 		id = switch_mprintf("sip:%s@%s", user, host);
+		switch_assert(id);
+		
+		if ((ptr = sofia_glue_find_parameter(o_contact, "transport="))) {
+			sofia_transport_t transport = sofia_glue_str2transport( ptr + 10 );
+
+			switch (transport) {
+			case SOFIA_TRANSPORT_TCP:
+				contact_str = profile->tcp_contact;
+				break;
+			case SOFIA_TRANSPORT_TCP_TLS:
+				contact_str = profile->tls_contact;
+				break;
+			default:
+				contact_str = profile->url;
+				break;
+			}
+		} else {
+			user_via = sofia_glue_create_external_via(NULL, profile, SOFIA_TRANSPORT_UDP);
+			contact_str = profile->url;
+		}
 	}
 
 	dst = sofia_glue_get_destination((char *) o_contact);

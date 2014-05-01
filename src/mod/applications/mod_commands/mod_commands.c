@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -42,7 +42,6 @@
  */
 #include <switch.h>
 #include <switch_stun.h>
-#include <switch_version.h>
 
 SWITCH_MODULE_LOAD_FUNCTION(mod_commands_load);
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_commands_shutdown);
@@ -286,7 +285,7 @@ static void dump_user(struct user_struct *us)
 	if(zstr(dname)) {
 		apip = switch_mprintf("*/%s",switch_xml_attr_soft(x_user_tag, "id"));
 	} else {
-		apip = switch_mprintf("%s@%s",switch_xml_attr_soft(x_user_tag, "id"), dname);
+		apip = switch_mprintf("*/%s@%s",switch_xml_attr_soft(x_user_tag, "id"), dname);
 	}
 
 	SWITCH_STANDARD_STREAM(apistream);
@@ -518,6 +517,29 @@ SWITCH_STANDARD_API(switchname_api_function)
 	return SWITCH_STATUS_SUCCESS;
 }
 
+SWITCH_STANDARD_API(gethost_api_function)
+{
+	struct sockaddr_in sa;
+	struct hostent *he;
+	const char *ip;
+	char buf[50] = "";
+
+	if (!zstr(cmd)) {
+		he = gethostbyname(cmd);
+
+		if (he) {
+			memcpy(&sa.sin_addr, he->h_addr, sizeof(struct in_addr));
+			ip = switch_inet_ntop(AF_INET, &sa.sin_addr, buf, sizeof(buf));
+			stream->write_function(stream, "%s", ip);
+			return SWITCH_STATUS_SUCCESS;
+		}
+	}
+
+	stream->write_function(stream, "-ERR");
+
+	return SWITCH_STATUS_SUCCESS;
+}
+
 
 SWITCH_STANDARD_API(shutdown_function)
 {
@@ -536,7 +558,7 @@ SWITCH_STANDARD_API(version_function)
 	char *mydata = NULL, *argv[2];
 
 	if (zstr(cmd)) {
-		stream->write_function(stream, "FreeSWITCH Version %s (%s)\n", SWITCH_VERSION_FULL, SWITCH_VERSION_REVISION_HUMAN);
+		stream->write_function(stream, "FreeSWITCH Version %s (%s)\n", switch_version_full(), switch_version_revision_human());
 		goto end;
 	}
 
@@ -546,9 +568,9 @@ SWITCH_STANDARD_API(version_function)
 	argc = switch_separate_string(mydata, ' ', argv, (sizeof(argv) / sizeof(argv[0])));
 
 	if (argc > 0 && switch_stristr("short", argv[0])) {
-		stream->write_function(stream, "%s.%s.%s\n", SWITCH_VERSION_MAJOR,SWITCH_VERSION_MINOR,SWITCH_VERSION_MICRO);
+		stream->write_function(stream, "%s.%s.%s\n", switch_version_major(),switch_version_minor(),switch_version_micro());
 	} else {
-		stream->write_function(stream, "FreeSWITCH Version %s (%s)\n", SWITCH_VERSION_FULL, SWITCH_VERSION_FULL_HUMAN);
+		stream->write_function(stream, "FreeSWITCH Version %s (%s)\n", switch_version_full(), switch_version_full_human());
 	}
 
 	switch_safe_free(mydata);
@@ -1374,7 +1396,7 @@ SWITCH_STANDARD_API(expand_function)
 {
 	char *expanded;
 	char *dup;
-	char *arg;
+	char *arg = NULL;
 	char *mycmd;
 	switch_status_t status;
 	const char *p;
@@ -1408,7 +1430,7 @@ SWITCH_STANDARD_API(expand_function)
 		}
 	}
 
-	if ((arg = strchr(mycmd, ' '))) {
+	if (mycmd && (arg = strchr(mycmd, ' '))) {
 		*arg++ = '\0';
 	}
 
@@ -2106,7 +2128,7 @@ SWITCH_STANDARD_API(status_function)
 						duration.sec, duration.sec == 1 ? "" : "s", duration.ms , duration.ms  == 1 ? "" : "s", duration.mms,
 						duration.mms == 1 ? "" : "s", nl);
 
-	stream->write_function(stream, "FreeSWITCH (Version %s) is %s%s", SWITCH_VERSION_FULL_HUMAN,
+	stream->write_function(stream, "FreeSWITCH (Version %s) is %s%s", switch_version_full_human(),
 						   switch_core_ready() ? "ready" : "not ready", nl);
 
 	stream->write_function(stream, "%" SWITCH_SIZE_T_FMT " session(s) since startup%s", switch_core_session_id() - 1, nl);
@@ -2929,6 +2951,130 @@ SWITCH_STANDARD_API(uuid_deflect)
 	return SWITCH_STATUS_SUCCESS;
 }
 
+
+#define UUID_MEDIA_STATS_SYNTAX "<uuid>"
+SWITCH_STANDARD_API(uuid_set_media_stats)
+{
+	switch_core_session_t *tsession = NULL;
+	const char *uuid = cmd;
+
+	if (zstr(uuid)) {
+		stream->write_function(stream, "-USAGE: %s\n", UUID_MEDIA_STATS_SYNTAX);
+	} else {
+		if ((tsession = switch_core_session_locate(uuid))) {
+			switch_core_media_set_stats(tsession);
+			stream->write_function(stream, "+OK:\n");
+			switch_core_session_rwunlock(tsession);
+		} else {
+			stream->write_function(stream, "-ERR No such channel %s!\n", uuid);
+		}
+	}
+
+	return SWITCH_STATUS_SUCCESS;
+}
+
+#define add_stat(_i, _s) cJSON_AddItemToObject(jstats, _s, cJSON_CreateNumber(((double)_i)))
+
+static void jsonify_stats(cJSON *json, const char *name, switch_rtp_stats_t *stats)
+{
+	cJSON *jstats = cJSON_CreateObject();
+	cJSON_AddItemToObject(json, name, jstats);	
+
+	stats->inbound.std_deviation = sqrt(stats->inbound.variance);
+
+	add_stat(stats->inbound.raw_bytes, "in_raw_bytes");
+	add_stat(stats->inbound.media_bytes, "in_media_bytes");
+	add_stat(stats->inbound.packet_count, "in_packet_count");
+	add_stat(stats->inbound.media_packet_count, "in_media_packet_count");
+	add_stat(stats->inbound.skip_packet_count, "in_skip_packet_count");
+	add_stat(stats->inbound.jb_packet_count, "in_jitter_packet_count");
+	add_stat(stats->inbound.dtmf_packet_count, "in_dtmf_packet_count");
+	add_stat(stats->inbound.cng_packet_count, "in_cng_packet_count");
+	add_stat(stats->inbound.flush_packet_count, "in_flush_packet_count");
+	add_stat(stats->inbound.largest_jb_size, "in_largest_jb_size");
+
+	add_stat (stats->inbound.min_variance, "in_jitter_min_variance");
+	add_stat (stats->inbound.max_variance, "in_jitter_max_variance");
+	add_stat (stats->inbound.lossrate, "in_jitter_loss_rate");
+	add_stat (stats->inbound.burstrate, "in_jitter_burst_rate");
+	add_stat (stats->inbound.mean_interval, "in_mean_interval");
+
+	add_stat(stats->inbound.flaws, "in_flaw_total");
+
+	add_stat (stats->inbound.R, "in_quality_percentage");
+	add_stat (stats->inbound.mos, "in_mos");
+
+
+	add_stat(stats->outbound.raw_bytes, "out_raw_bytes");
+	add_stat(stats->outbound.media_bytes, "out_media_bytes");
+	add_stat(stats->outbound.packet_count, "out_packet_count");
+	add_stat(stats->outbound.media_packet_count, "out_media_packet_count");
+	add_stat(stats->outbound.skip_packet_count, "out_skip_packet_count");
+	add_stat(stats->outbound.dtmf_packet_count, "out_dtmf_packet_count");
+	add_stat(stats->outbound.cng_packet_count, "out_cng_packet_count");
+
+	add_stat(stats->rtcp.packet_count, "rtcp_packet_count");
+	add_stat(stats->rtcp.octet_count, "rtcp_octet_count");
+	
+}
+
+static switch_bool_t true_enough(cJSON *json)
+{
+	if (json && (json->type == cJSON_True || json->valueint || json->valuedouble || json->valuestring)) {
+		return SWITCH_TRUE;
+	}
+
+	return SWITCH_FALSE;
+}
+
+SWITCH_STANDARD_JSON_API(json_stats_function)
+{
+	cJSON *reply, *data = cJSON_GetObjectItem(json, "data");
+	switch_status_t status = SWITCH_STATUS_FALSE;
+	const char *uuid = cJSON_GetObjectCstr(data, "uuid");
+	cJSON *cdata = cJSON_GetObjectItem(data, "channelData");
+
+	switch_core_session_t *tsession;
+
+	reply = cJSON_CreateObject();
+	*json_reply = reply;	
+
+	if (zstr(uuid)) {
+		cJSON_AddItemToObject(reply, "response", cJSON_CreateString("INVALID INPUT"));
+		goto end;
+	}
+
+	
+	if ((tsession = switch_core_session_locate(uuid))) {
+		cJSON *jevent;
+		switch_rtp_stats_t *audio_stats = NULL, *video_stats = NULL;
+
+		switch_core_media_set_stats(tsession);
+		
+		audio_stats = switch_core_media_get_stats(tsession, SWITCH_MEDIA_TYPE_AUDIO, switch_core_session_get_pool(tsession));
+		video_stats = switch_core_media_get_stats(tsession, SWITCH_MEDIA_TYPE_VIDEO, switch_core_session_get_pool(tsession));
+		
+		jsonify_stats(reply, "audio", audio_stats);
+		jsonify_stats(reply, "video", video_stats);
+		
+		if (true_enough(cdata) && switch_ivr_generate_json_cdr(tsession, &jevent, SWITCH_FALSE) == SWITCH_STATUS_SUCCESS) {
+			cJSON_AddItemToObject(reply, "channelData", jevent);
+		}
+
+		switch_core_session_rwunlock(tsession);
+		
+		status = SWITCH_STATUS_SUCCESS;
+	} else {
+		cJSON_AddItemToObject(reply, "response", cJSON_CreateString("Session does not exist"));
+		goto end;
+	}
+
+ end:
+
+	return status;
+}
+
+
 #define UUID_RECOVERY_REFRESH_SYNTAX "<uuid> <uri>"
 SWITCH_STANDARD_API(uuid_recovery_refresh)
 {
@@ -3138,6 +3284,43 @@ SWITCH_STANDARD_API(uuid_early_ok_function)
 		stream->write_function(stream, "-ERROR\n");
 	}
 
+	return SWITCH_STATUS_SUCCESS;
+}
+
+#define RING_READY_SYNTAX "<uuid> [queued]"
+SWITCH_STANDARD_API(uuid_ring_ready_function)
+{
+	char *uuid = NULL, *mycmd = NULL, *argv[2] = { 0 };
+	switch_core_session_t *xsession;
+	int argc = 0, queued = 0;
+
+	if (!zstr(cmd) && (mycmd = strdup(cmd))) {
+		argc = switch_separate_string(mycmd, ' ', argv,
+									  (sizeof(argv) / sizeof(argv[0])));
+	}
+	if (zstr(cmd) || argc < 1) goto usage;
+	uuid = argv[0];
+	if (argc > 1) {
+		if (!strcasecmp(argv[1], "queued")) {
+			queued = 1;
+		} else goto usage;
+	}
+	if (!uuid || !(xsession = switch_core_session_locate(uuid)))
+		goto error;
+	switch_channel_ring_ready_value(switch_core_session_get_channel(xsession),
+									queued ? SWITCH_RING_READY_QUEUED
+									: SWITCH_RING_READY_RINGING);
+	switch_core_session_rwunlock(xsession);
+	stream->write_function(stream, "+OK\n");
+	goto done;
+ usage:
+	stream->write_function(stream, "-USAGE: %s\n", RING_READY_SYNTAX);
+	goto done;
+ error:
+	stream->write_function(stream, "-ERROR\n");
+	goto done;
+ done:
+	switch_safe_free(mycmd);
 	return SWITCH_STATUS_SUCCESS;
 }
 
@@ -6281,7 +6464,7 @@ SWITCH_STANDARD_JSON_API(json_api_function)
 
 }
 
-#include <switch_version.h>
+
 SWITCH_STANDARD_JSON_API(json_status_function)
 {
 	cJSON *o, *oo, *reply = cJSON_CreateObject();
@@ -6311,7 +6494,7 @@ SWITCH_STANDARD_JSON_API(json_status_function)
 	cJSON_AddItemToObject(o, "microseconds", cJSON_CreateNumber(duration.mms));
 	
 	cJSON_AddItemToObject(reply, "uptime", o);
-	cJSON_AddItemToObject(reply, "version", cJSON_CreateString(SWITCH_VERSION_FULL_HUMAN));
+	cJSON_AddItemToObject(reply, "version", cJSON_CreateString(switch_version_full_human()));
 	
 	o = cJSON_CreateObject();
 	cJSON_AddItemToObject(reply, "sessions", o);
@@ -6319,7 +6502,7 @@ SWITCH_STANDARD_JSON_API(json_status_function)
 	oo = cJSON_CreateObject();
 	cJSON_AddItemToObject(o, "count", oo);
 
-	cJSON_AddItemToObject(oo, "total", cJSON_CreateNumber(switch_core_session_id() - 1));
+	cJSON_AddItemToObject(oo, "total", cJSON_CreateNumber((double)(switch_core_session_id() - 1)));
 	cJSON_AddItemToObject(oo, "active", cJSON_CreateNumber(switch_core_session_count()));
 	cJSON_AddItemToObject(oo, "peak", cJSON_CreateNumber(sessions_peak));
 	cJSON_AddItemToObject(oo, "peak5Min", cJSON_CreateNumber(sessions_peak_fivemin));
@@ -6346,8 +6529,8 @@ SWITCH_STANDARD_JSON_API(json_status_function)
 		o = cJSON_CreateObject();
 		cJSON_AddItemToObject(reply, "stackSizeKB", o);
 
-		cJSON_AddItemToObject(o, "current", cJSON_CreateNumber(cur / 1024));
-		cJSON_AddItemToObject(o, "max", cJSON_CreateNumber(max / 1024));
+		cJSON_AddItemToObject(o, "current", cJSON_CreateNumber((double)(cur / 1024)));
+		cJSON_AddItemToObject(o, "max", cJSON_CreateNumber((double)(max / 1024)));
 	}
 	
 
@@ -6442,6 +6625,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_commands_load)
 	SWITCH_ADD_API(commands_api_interface, "hostname", "Return the system hostname", hostname_api_function, "");
 	SWITCH_ADD_API(commands_api_interface, "interface_ip", "Return the primary IP of an interface", interface_ip_function, INTERFACE_IP_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "switchname", "Return the switch name", switchname_api_function, "");
+	SWITCH_ADD_API(commands_api_interface, "gethost", "gethostbyname", gethost_api_function, "");
 	SWITCH_ADD_API(commands_api_interface, "hupall", "hupall", hupall_api_function, "<cause> [<var> <value>]");
 	SWITCH_ADD_API(commands_api_interface, "in_group", "Determine if a user is in a group", in_group_function, "<user>[@<domain>] <group_name>");
 	SWITCH_ADD_API(commands_api_interface, "is_lan_addr", "See if an ip is a lan addr", lan_addr_function, "<ip>");
@@ -6508,6 +6692,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_commands_load)
 	SWITCH_ADD_API(commands_api_interface, "uuid_kill", "Kill channel", kill_function, KILL_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_send_message", "Send MESSAGE to the endpoint", uuid_send_message_function, SEND_MESSAGE_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_send_info", "Send info to the endpoint", uuid_send_info_function, INFO_SYNTAX);
+	SWITCH_ADD_API(commands_api_interface, "uuid_set_media_stats", "Set media stats", uuid_set_media_stats, UUID_MEDIA_STATS_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_video_refresh", "Send video refresh.", uuid_video_refresh_function, VIDEO_REFRESH_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_outgoing_answer", "Answer outgoing channel", outgoing_answer_function, OUTGOING_ANSWER_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_limit", "Increase limit resource", uuid_limit_function, LIMIT_SYNTAX);
@@ -6519,6 +6704,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_commands_load)
 	SWITCH_ADD_API(commands_api_interface, "uuid_park", "Park channel", park_function, PARK_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_pause", "Pause media on a channel", pause_function, PAUSE_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_phone_event", "Send an event to the phone", uuid_phone_event_function, PHONE_EVENT_SYNTAX);
+	SWITCH_ADD_API(commands_api_interface, "uuid_ring_ready", "Sending ringing to a channel", uuid_ring_ready_function, RING_READY_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_pre_answer", "pre_answer", uuid_pre_answer_function, "<uuid>");
 	SWITCH_ADD_API(commands_api_interface, "uuid_preprocess", "Pre-process Channel", preprocess_function, PREPROCESS_SYNTAX);
 	SWITCH_ADD_API(commands_api_interface, "uuid_record", "Record session audio", session_record_function, SESS_REC_SYNTAX);
@@ -6539,6 +6725,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_commands_load)
 	SWITCH_ADD_API(commands_api_interface, "file_exists", "Check if a file exists on server", file_exists_function, "<file>");
 	SWITCH_ADD_API(commands_api_interface, "json", "JSON API", json_function, "JSON");
 
+	SWITCH_ADD_JSON_API(json_api_interface, "mediaStats", "JSON Media Stats", json_stats_function, "");
 
 	SWITCH_ADD_JSON_API(json_api_interface, "status", "JSON status API", json_status_function, "");
 	SWITCH_ADD_JSON_API(json_api_interface, "fsapi", "JSON FSAPI Gateway", json_api_function, "");
@@ -6658,6 +6845,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_commands_load)
 	switch_console_set_complete("add uuid_display ::console::list_uuid");
 	switch_console_set_complete("add uuid_dump ::console::list_uuid");
 	switch_console_set_complete("add uuid_answer ::console::list_uuid");
+	switch_console_set_complete("add uuid_ring_ready ::console::list_uuid queued");
 	switch_console_set_complete("add uuid_pre_answer ::console::list_uuid");
 	switch_console_set_complete("add uuid_early_ok ::console::list_uuid");
 	switch_console_set_complete("add uuid_exists ::console::list_uuid");

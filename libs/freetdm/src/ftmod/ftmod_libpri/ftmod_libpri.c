@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2012, Anthony Minessale II
+ * Copyright (c) 2007-2014, Anthony Minessale II
  * Copyright (c) 2010, Stefan Knoblich <s.knoblich@axsentis.de>
  * Copyright (c) 2012-2013, Stefan Knoblich <stkn@openisdn.net>
  * All rights reserved.
@@ -1166,7 +1166,7 @@ static ftdm_status_t state_advance(ftdm_channel_t *chan)
 				return FTDM_SUCCESS;
 			}
 
-			caller_ton = caller_data->ani.type;
+			caller_ton = caller_data->cid_num.type;
 			switch (caller_ton) {
 			case FTDM_TON_NATIONAL:
 				caller_ton = PRI_NATIONAL_ISDN;

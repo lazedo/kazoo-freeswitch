@@ -338,6 +338,7 @@ static int tport_ws_init_primary_secure(tport_primary_t *pri,
   tport_ws_primary_t *wspri = (tport_ws_primary_t *)pri;
   const char *cert = "/ssl.pem";
   const char *key = "/ssl.pem";
+  const char *chain = NULL;
   char *homedir;
   char *tbf = NULL;
   su_home_t autohome[SU_HOME_AUTO_SIZE(1024)];
@@ -361,11 +362,13 @@ static int tport_ws_init_primary_secure(tport_primary_t *pri,
     key  = su_sprintf(autohome, "%s/%s", path, "wss.key");
 	if (access(key, R_OK) != 0) key = NULL;
 	cert = su_sprintf(autohome, "%s/%s", path, "wss.crt");
+	chain = su_sprintf(autohome, "%s/%s", path, "ca-bundle.crt");
 	if (access(cert, R_OK) != 0) cert = NULL;
 	if ( !key )  key  = su_sprintf(autohome, "%s/%s", path, "wss.pem");
 	if ( !cert ) cert = su_sprintf(autohome, "%s/%s", path, "wss.pem");
 	if (access(key, R_OK) != 0) key = NULL;
 	if (access(cert, R_OK) != 0) cert = NULL;
+	if (access(chain, R_OK) != 0) chain = NULL;
   }
 
   init_ssl();
@@ -379,6 +382,10 @@ static int tport_ws_init_primary_secure(tport_primary_t *pri,
 
   if ( !wspri->ssl_ctx ) goto done;
 
+  if (chain) {
+	  SSL_CTX_use_certificate_chain_file(wspri->ssl_ctx, chain);
+  }
+
   /* set the local certificate from CertFile */
   SSL_CTX_use_certificate_file(wspri->ssl_ctx, cert, SSL_FILETYPE_PEM);
   /* set the private key from KeyFile */
@@ -388,7 +395,7 @@ static int tport_ws_init_primary_secure(tport_primary_t *pri,
 	  goto done;
   }
 
-  SSL_CTX_set_cipher_list(wspri->ssl_ctx, "HIGH:!DSS:!aNULL@STRENGTH");
+  SSL_CTX_set_cipher_list(wspri->ssl_ctx, "!eNULL:!aNULL:!DSS:HIGH:@STRENGTH");
 
   ret = tport_ws_init_primary(pri, tpn, ai, tags, return_culprit);
 
@@ -460,7 +467,7 @@ int tport_ws_init_secondary(tport_t *self, int socket, int accepted,
 
   memset(&wstp->ws, 0, sizeof(wstp->ws));
 
-  if (ws_init(&wstp->ws, socket, wstp->ws_secure ? wspri->ssl_ctx : NULL, 0) < 0) {
+  if (ws_init(&wstp->ws, socket, wstp->ws_secure ? wspri->ssl_ctx : NULL, 0, 0) < 0) {
 	  ws_destroy(&wstp->ws);
 	  wstp->ws_initialized = -1;
 	  return *return_reason = "WS_INIT", -1;

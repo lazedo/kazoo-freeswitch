@@ -114,14 +114,14 @@ struct rayo_actor {
 struct rayo_component {
 	/** base actor class */
 	struct rayo_actor base;
-	/** component type (input/output/prompt/etc) */
-	const char *type;
 	/** parent to this component */
 	struct rayo_actor *parent;
 	/** owning client JID */
 	const char *client_jid;
 	/** external ref */
 	const char *ref;
+	/** true if component has completed */
+	int complete;
 	/** optional cleanup */
 	rayo_actor_cleanup_fn cleanup_fn;
 };

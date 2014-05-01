@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -51,7 +51,6 @@
 #include <apr_thread_rwlock.h>
 #include <apr_file_io.h>
 #include <apr_poll.h>
-#include <apr_dso.h>
 #include <apr_strings.h>
 #define APR_WANT_STDIO
 #define APR_WANT_STRFUNC
@@ -121,28 +120,6 @@ SWITCH_DECLARE(unsigned int) switch_ci_hashfunc_default(const char *char_key, sw
 SWITCH_DECLARE(unsigned int) switch_hashfunc_default(const char *key, switch_ssize_t *klen)
 {
 	return apr_hashfunc_default(key, klen);
-}
-
-/* DSO functions */
-
-SWITCH_DECLARE(switch_status_t) switch_dso_load(switch_dso_handle_t ** res_handle, const char *path, switch_memory_pool_t *ctx)
-{
-	return apr_dso_load(res_handle, path, ctx);
-}
-
-SWITCH_DECLARE(switch_status_t) switch_dso_unload(switch_dso_handle_t *handle)
-{
-	return apr_dso_unload(handle);
-}
-
-SWITCH_DECLARE(switch_status_t) switch_dso_sym(switch_dso_handle_sym_t *ressym, switch_dso_handle_t *handle, const char *symname)
-{
-	return apr_dso_sym(ressym, handle, symname);
-}
-
-SWITCH_DECLARE(const char *) switch_dso_error(switch_dso_handle_t *dso, char *buf, size_t bufsize)
-{
-	return apr_dso_error(dso, buf, bufsize);
 }
 
 /* string functions */
@@ -624,6 +601,7 @@ struct apr_threadattr_t {
     apr_pool_t *pool;
     apr_int32_t detach;
     apr_size_t stacksize;
+	int priority;
 };
 #endif
 
@@ -633,9 +611,9 @@ SWITCH_DECLARE(switch_status_t) switch_threadattr_create(switch_threadattr_t ** 
 	switch_status_t status;
 
 	if ((status = apr_threadattr_create(new_attr, pool)) == SWITCH_STATUS_SUCCESS) {
-#ifndef WIN32
+
 		(*new_attr)->priority = SWITCH_PRI_LOW;
-#endif
+
 	}
 
 	return status;
@@ -653,9 +631,9 @@ SWITCH_DECLARE(switch_status_t) switch_threadattr_stacksize_set(switch_threadatt
 
 SWITCH_DECLARE(switch_status_t) switch_threadattr_priority_set(switch_threadattr_t *attr, switch_thread_priority_t priority)
 {
-#ifndef WIN32
+
 	attr->priority = priority;
-#endif
+
 	return SWITCH_STATUS_SUCCESS;
 }
 

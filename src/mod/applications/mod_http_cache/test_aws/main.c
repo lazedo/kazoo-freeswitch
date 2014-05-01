@@ -41,6 +41,9 @@ static void test_signature(void)
  */
 static void test_check_url(void)
 {
+	ASSERT_TRUE(aws_s3_is_s3_url("http://bucket.s3-us-west-1.amazonaws.com/object.ext"));
+	ASSERT_TRUE(aws_s3_is_s3_url("https://bucket.s3-us-west-1.amazonaws.com/object.ext"));
+	ASSERT_TRUE(aws_s3_is_s3_url("http://bucket.s3.amazonaws.com/object.ext"));
 	ASSERT_TRUE(aws_s3_is_s3_url("http://bucket.s3.amazonaws.com/object.ext"));
 	ASSERT_TRUE(aws_s3_is_s3_url("http://bucket.s3.amazonaws.com/object"));
 	ASSERT_TRUE(aws_s3_is_s3_url("http://red.bucket.s3.amazonaws.com/object.ext"));
@@ -104,6 +107,10 @@ static void test_parse_url(void)
 	aws_s3_parse_url(strdup("http://bucket.s3.amazonaws.com/voicemails/recording.wav"), &bucket, &object);
 	ASSERT_STRING_EQUALS("bucket", bucket);
 	ASSERT_STRING_EQUALS("voicemails/recording.wav", object);
+
+	aws_s3_parse_url(strdup("https://my-bucket-with-dash.s3-us-west-2.amazonaws.com/greeting/file/1002/Lumino.mp3"), &bucket, &object);
+	ASSERT_STRING_EQUALS("my-bucket-with-dash", bucket);
+	ASSERT_STRING_EQUALS("greeting/file/1002/Lumino.mp3", object);
 }
 
 /**

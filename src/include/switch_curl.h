@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -30,8 +30,9 @@
 
 #ifndef __SWITCH_CURL_H
 #define __SWITCH_CURL_H
-#include "curl/curl.h"
+#include <curl/curl.h>
 
+SWITCH_BEGIN_EXTERN_C
 
 typedef void switch_CURL;
 typedef struct curl_slist switch_curl_slist_t;
@@ -50,6 +51,9 @@ SWITCH_DECLARE(const char *) switch_curl_easy_strerror(switch_CURLcode errornum 
 SWITCH_DECLARE(void) switch_curl_init(void);
 SWITCH_DECLARE(void) switch_curl_destroy(void);
 SWITCH_DECLARE(switch_status_t) switch_curl_process_form_post_params(switch_event_t *event, switch_CURL *curl_handle, struct curl_httppost **formpostp);
+#define switch_curl_easy_setopt curl_easy_setopt
+
+SWITCH_END_EXTERN_C
 																
 #endif
 

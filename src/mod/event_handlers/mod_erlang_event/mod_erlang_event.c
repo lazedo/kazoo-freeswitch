@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -27,6 +27,7 @@
  * Andrew Thompson <andrew@hijacked.us>
  * Rob Charlton <rob.charlton@savageminds.com>
  * Tamas Cseke <tamas.cseke@virtual-call-center.eu>
+ * Seven Du <dujinfang@gmail.com>
  *
  *
  * mod_erlang_event.c -- Erlang Event Handler derived from mod_event_socket
@@ -363,8 +364,8 @@ session_elem_t *find_session_elem_by_pid(listener_t *listener, erlang_pid *pid)
 	session_elem_t *session = NULL;
 
 	switch_thread_rwlock_rdlock(listener->session_rwlock);
-	for (iter = switch_hash_first(NULL, listener->sessions); iter; iter = switch_hash_next(iter)) {
-		switch_hash_this(iter, &key, NULL, &val);
+	for (iter = switch_core_hash_first(listener->sessions); iter; iter = switch_core_hash_next(&iter)) {
+		switch_core_hash_this(iter, &key, NULL, &val);
 		
 		if (((session_elem_t*)val)->process.type == ERLANG_PID && !ei_compare_pids(pid, &((session_elem_t*)val)->process.pid)) {
 			session = (session_elem_t*)val;
@@ -372,11 +373,66 @@ session_elem_t *find_session_elem_by_pid(listener_t *listener, erlang_pid *pid)
 			break;
 		}
 	}
+	switch_safe_free(iter);
 	switch_thread_rwlock_unlock(listener->session_rwlock);
 
 	return session;
 }
 
+static fetch_reply_t *new_fetch_reply(const char *uuid_str) 
+{
+	fetch_reply_t *reply = NULL;
+	switch_memory_pool_t *pool = NULL;
+
+	if (switch_core_new_memory_pool(&pool) != SWITCH_STATUS_SUCCESS) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "OH OH no pool\n");
+		abort();
+	}
+	switch_assert(pool != NULL);
+	reply = switch_core_alloc(pool, sizeof(*reply));
+	switch_assert(reply != NULL);
+	memset(reply, 0, sizeof(*reply));
+	
+	reply->uuid_str = switch_core_strdup(pool, uuid_str);
+	reply->pool = pool;
+	switch_thread_cond_create(&reply->ready_or_found, pool);
+	switch_mutex_init(&reply->mutex, SWITCH_MUTEX_UNNESTED, pool);
+	reply->state = reply_not_ready;
+	reply->reply = NULL;
+
+	switch_mutex_lock(reply->mutex);
+	switch_core_hash_insert_locked(globals.fetch_reply_hash, uuid_str, reply, globals.fetch_reply_mutex);
+	reply->state = reply_waiting;
+
+	return reply;
+}
+
+static void destroy_fetch_reply(fetch_reply_t *reply) 
+{
+	switch_core_hash_delete_locked(globals.fetch_reply_hash, reply->uuid_str, globals.fetch_reply_mutex);
+	/* lock so nothing can have it while we delete it */
+	switch_mutex_lock(reply->mutex);
+	switch_mutex_unlock(reply->mutex);
+
+	switch_mutex_destroy(reply->mutex);
+	switch_thread_cond_destroy(reply->ready_or_found);
+	switch_safe_free(reply->reply);
+	switch_core_destroy_memory_pool(&(reply->pool));
+}
+
+fetch_reply_t *find_fetch_reply(const char *uuid) 
+{
+	fetch_reply_t *reply = NULL;
+
+	switch_mutex_lock(globals.fetch_reply_mutex);
+	if ((reply = switch_core_hash_find(globals.fetch_reply_hash, uuid))) {
+		if (switch_mutex_lock(reply->mutex) != SWITCH_STATUS_SUCCESS) {
+			reply = NULL;
+		}
+	}
+	switch_mutex_unlock(globals.fetch_reply_mutex);
+	return reply;
+}
 
 static switch_xml_t erlang_fetch(const char *sectionstr, const char *tag_name, const char *key_name, const char *key_value,
 								 switch_event_t *params, void *user_data)
@@ -437,15 +493,7 @@ static switch_xml_t erlang_fetch(const char *sectionstr, const char *tag_name, c
 		}
 
 		if (!p) {
-			/* Create a new fetch object. */
-			p = malloc(sizeof(*p));
-			switch_thread_cond_create(&p->ready_or_found, module_pool);
-			/* TODO module pool */
-			switch_mutex_init(&p->mutex, SWITCH_MUTEX_UNNESTED, module_pool);
-			p->state = reply_not_ready;
-			p->reply = NULL;
-			switch_core_hash_insert_locked(globals.fetch_reply_hash, uuid_str, p, globals.fetch_reply_mutex);
-			p->state = reply_waiting;
+			p = new_fetch_reply(uuid_str);
 			now = switch_micro_time_now();
 		}
 		/* We don't need to lock here because everybody is waiting
@@ -468,9 +516,7 @@ static switch_xml_t erlang_fetch(const char *sectionstr, const char *tag_name, c
 		goto cleanup;
 	}
 
-	/* Tell the threads to be ready, and wait five seconds for a reply. */
-	switch_mutex_lock(p->mutex);
-	//p->state = reply_waiting;
+	/* Wait five seconds for a reply. */
 	switch_thread_cond_timedwait(p->ready_or_found, p->mutex, 5000000);
 	if (!p->reply) {
 		p->state = reply_timeout;
@@ -517,14 +563,7 @@ static switch_xml_t erlang_fetch(const char *sectionstr, const char *tag_name, c
 	/* cleanup */
  cleanup:
 	if (p) {
-		/* lock so nothing can have it while we delete it */
-		switch_mutex_lock(p->mutex);
-		switch_core_hash_delete_locked(globals.fetch_reply_hash, uuid_str, globals.fetch_reply_mutex);
-		switch_mutex_unlock(p->mutex);
-		switch_mutex_destroy(p->mutex);
-		switch_thread_cond_destroy(p->ready_or_found);
-		switch_safe_free(p->reply);
-		switch_safe_free(p);
+		destroy_fetch_reply(p);
 	}
 
 	return xml;
@@ -584,7 +623,7 @@ static switch_status_t notify_new_session(listener_t *listener, session_elem_t *
 	return SWITCH_STATUS_SUCCESS;
 }
 
-static switch_status_t check_attached_sessions(listener_t *listener)
+static switch_status_t check_attached_sessions(listener_t *listener, int *msgs_sent)
 {
 	session_elem_t *sp;
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
@@ -606,8 +645,8 @@ static switch_status_t check_attached_sessions(listener_t *listener)
 
 	/* TODO try to minimize critical section */
 	switch_thread_rwlock_rdlock(listener->session_rwlock);
-	for (iter = switch_hash_first(NULL, listener->sessions); iter; iter = switch_hash_next(iter)) {
-		switch_hash_this(iter, &key, NULL, &value);
+	for (iter = switch_core_hash_first(listener->sessions); iter; iter = switch_core_hash_next(&iter)) {
+		switch_core_hash_this(iter, &key, NULL, &value);
 		sp = (session_elem_t*)value;
 		if (switch_test_flag(sp, LFLAG_WAITING_FOR_PID)) {
 			continue;
@@ -645,6 +684,7 @@ static switch_status_t check_attached_sessions(listener_t *listener)
 				switch_mutex_lock(listener->sock_mutex);
 				ei_sendto(listener->ec, listener->sockfd, &sp->process, &ebuf);
 				switch_mutex_unlock(listener->sock_mutex);
+				(*msgs_sent)++;
 				ei_x_free(&ebuf);
 				switch_event_destroy(&pevent);
 			}
@@ -656,6 +696,7 @@ static switch_status_t check_attached_sessions(listener_t *listener)
 			ei_x_encode_atom(&ebuf, "call_hangup");
 			switch_mutex_lock(listener->sock_mutex);
 			ei_sendto(listener->ec, listener->sockfd, &sp->process, &ebuf);
+			(*msgs_sent)++;
 			switch_mutex_unlock(listener->sock_mutex);
 			ei_x_free(&ebuf);
 
@@ -681,6 +722,7 @@ static switch_status_t check_attached_sessions(listener_t *listener)
 			switch_mutex_lock(listener->sock_mutex);
 			ei_sendto(listener->ec, listener->sockfd, &sp->process, &ebuf);
 			switch_mutex_unlock(listener->sock_mutex);
+			(*msgs_sent)++;
 			ei_x_free(&ebuf);
 
 			switch_event_destroy(&pevent);
@@ -707,13 +749,14 @@ static switch_status_t check_attached_sessions(listener_t *listener)
 	}
 }
 
-static void check_log_queue(listener_t *listener)
+static int check_log_queue(listener_t *listener)
 {
 	void *pop;
+	int msgs_sent = 0;
 
 	/* send out any pending crap in the log queue */
 	if (switch_test_flag(listener, LFLAG_LOG)) {
-		if (switch_queue_trypop(listener->log_queue, &pop) == SWITCH_STATUS_SUCCESS) {
+		while (msgs_sent < prefs.max_log_bulk && switch_queue_trypop(listener->log_queue, &pop) == SWITCH_STATUS_SUCCESS) {
 			switch_log_node_t *dnode = (switch_log_node_t *) pop;
 
 			if (dnode->data) {
@@ -756,21 +799,26 @@ static void check_log_queue(listener_t *listener)
 				switch_mutex_lock(listener->sock_mutex);
 				ei_sendto(listener->ec, listener->sockfd, &listener->log_process, &lbuf);
 				switch_mutex_unlock(listener->sock_mutex);
+				msgs_sent ++;
 
 				ei_x_free(&lbuf);
 				switch_log_node_free(&dnode);
 			}
 		}
 	}
+
+	listener->total_logs += msgs_sent;
+	return msgs_sent;
 }
 
-static void check_event_queue(listener_t *listener)
+static int check_event_queue(listener_t *listener)
 {
 	void *pop;
+	int msgs_sent = 0;
 
 	/* send out any pending crap in the event queue */
 	if (switch_test_flag(listener, LFLAG_EVENTS)) {
-		if (switch_queue_trypop(listener->event_queue, &pop) == SWITCH_STATUS_SUCCESS) {
+		while (msgs_sent < prefs.max_event_bulk && switch_queue_trypop(listener->event_queue, &pop) == SWITCH_STATUS_SUCCESS) {
 
 			switch_event_t *pevent = (switch_event_t *) pop;
 
@@ -783,10 +831,22 @@ static void check_event_queue(listener_t *listener)
 			ei_sendto(listener->ec, listener->sockfd, &listener->event_process, &ebuf);
 			switch_mutex_unlock(listener->sock_mutex);
 
+			msgs_sent++;
+
 			ei_x_free(&ebuf);
+
+			if (pevent->event_id == SWITCH_EVENT_CHANNEL_CREATE) {
+				listener->create++;
+			} else if (pevent->event_id == SWITCH_EVENT_CHANNEL_HANGUP_COMPLETE) {
+				listener->hangup++;
+			}
+
 			switch_event_destroy(&pevent);
 		}
 	}
+
+	listener->total_events += msgs_sent;
+	return msgs_sent;
 }
 
 static void handle_exit(listener_t *listener, erlang_pid * pid)
@@ -844,6 +904,7 @@ static void handle_exit(listener_t *listener, erlang_pid * pid)
 static void listener_main_loop(listener_t *listener)
 {
 	int status = 1;
+	int msgs_sent = 0; /* how many messages we sent in a loop */
 
 	while ((status >= 0 || erl_errno == ETIMEDOUT || erl_errno == EAGAIN) && !prefs.done) {
 		erlang_msg msg;
@@ -853,9 +914,11 @@ static void listener_main_loop(listener_t *listener)
 		ei_x_new(&buf);
 		ei_x_new_with_version(&rbuf);
 
+		msgs_sent = 0;
+
 		/* do we need the mutex when reading? */
 		/*switch_mutex_lock(listener->sock_mutex); */
-		status = ei_xreceive_msg_tmo(listener->sockfd, &msg, &buf, 10);
+		status = ei_xreceive_msg_tmo(listener->sockfd, &msg, &buf, 1);
 		/*switch_mutex_unlock(listener->sock_mutex); */
 
 		switch (status) {
@@ -922,11 +985,21 @@ static void listener_main_loop(listener_t *listener)
 		ei_x_free(&buf);
 		ei_x_free(&rbuf);
 
-		check_log_queue(listener);
-		check_event_queue(listener);
-		if (check_attached_sessions(listener) != SWITCH_STATUS_SUCCESS) {
+		msgs_sent += check_log_queue(listener);
+		msgs_sent += check_event_queue(listener);
+		if (check_attached_sessions(listener, &msgs_sent) != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "check_attached_sessions requested exit\n");
 			return;
+		}
+
+		if (msgs_sent > SWITCH_CORE_QUEUE_LEN / 2) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "%d messages sent in a loop\n", msgs_sent);
+		} else if (msgs_sent > 0) {
+#ifdef EI_DEBUG
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "%d messages sent in a loop\n", msgs_sent);
+#endif
+		} else { /* no more messages right now, relax */
+			switch_yield(10000);
 		}
 	}
 	if (prefs.done) {
@@ -1085,6 +1158,9 @@ static int config(void)
 	prefs.shortname = SWITCH_TRUE;
 	prefs.encoding = ERLANG_STRING;
 	prefs.compat_rel = 0;
+	prefs.max_event_bulk = 1;
+	prefs.max_log_bulk = 1;
+	
 
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Open of %s failed\n", cf);
@@ -1127,6 +1203,10 @@ static int config(void)
 					} else {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Max acl records of %d reached\n", MAX_ACL);
 					}
+				} else if (!strcasecmp(var, "max-event-bulk") && !zstr(val)) {
+					prefs.max_event_bulk = atoi(val);
+				} else if (!strcasecmp(var, "max-log-bulk") && !zstr(val)) {
+					prefs.max_log_bulk = atoi(val);
 				}
 			}
 		}
@@ -1198,8 +1278,8 @@ static listener_t *new_listener(struct ei_cnode_s *ec, int clientfd)
 	switch_thread_rwlock_create(&listener->event_rwlock, pool);
 	switch_thread_rwlock_create(&listener->session_rwlock, listener->pool);
 
-	switch_core_hash_init(&listener->event_hash, listener->pool);
-	switch_core_hash_init(&listener->sessions, listener->pool);
+	switch_core_hash_init(&listener->event_hash);
+	switch_core_hash_init(&listener->sessions);
 
 	return listener;
 }
@@ -1254,8 +1334,8 @@ void destroy_listener(listener_t * listener)
 
 	/* clean up all the attached sessions */
 	switch_thread_rwlock_wrlock(listener->session_rwlock);
-	for (iter = switch_hash_first(NULL, listener->sessions); iter; iter = switch_hash_next(iter)) {
-		switch_hash_this(iter, &key, NULL, &value);
+	for (iter = switch_core_hash_first(listener->sessions); iter; iter = switch_core_hash_next(&iter)) {
+		switch_core_hash_this(iter, &key, NULL, &value);
 		s = (session_elem_t*)value;
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Orphaning call %s\n", s->uuid_str);
 		destroy_session_elem(s);
@@ -1311,7 +1391,7 @@ session_elem_t *session_elem_create(listener_t *listener, switch_core_session_t 
 
 	switch_queue_create(&session_element->event_queue, SWITCH_CORE_QUEUE_LEN, session_element->pool);
 	switch_mutex_init(&session_element->flag_mutex, SWITCH_MUTEX_NESTED, session_element->pool);
-	switch_core_hash_init(&session_element->event_hash, session_element->pool);
+	switch_core_hash_init(&session_element->event_hash);
 	session_element->spawn_reply = NULL;
 
 	for (x = 0; x <= SWITCH_EVENT_ALL; x++) {
@@ -1450,7 +1530,7 @@ int count_listener_sessions(listener_t *listener)
 	switch_hash_index_t *iter;
 
 	switch_thread_rwlock_rdlock(listener->session_rwlock);
-	for (iter = switch_hash_first(NULL, listener->sessions); iter; iter = switch_hash_next(iter)) {
+	for (iter = switch_core_hash_first(listener->sessions); iter; iter = switch_core_hash_next(&iter)) {
 		count++;
 	}
 	switch_thread_rwlock_unlock(listener->session_rwlock);
@@ -1645,7 +1725,11 @@ SWITCH_STANDARD_API(erlang_cmd)
 
 		if (listen_list.listeners) {
 			for (l = listen_list.listeners; l; l = l->next) {
-				stream->write_function(stream, "Listener to %s with %d outbound sessions\n", l->peer_nodename, count_listener_sessions(l));
+				stream->write_function(stream, "Listener to %s with outbound sessions: %d events: %" SWITCH_UINT64_T_FMT
+					" (lost:%d) logs: %" SWITCH_UINT64_T_FMT " (lost:%d) %d/%d\n",
+					l->peer_nodename, count_listener_sessions(l),
+					l->total_events, l->lost_events,
+					l->total_logs, l->lost_logs, l->create, l->hangup);
 			}
 		} else {
 			stream->write_function(stream, "No active listeners\n");
@@ -1667,9 +1751,9 @@ SWITCH_STANDARD_API(erlang_cmd)
 
 				found = 1;
 				switch_thread_rwlock_rdlock(l->session_rwlock);
-				for (iter = switch_hash_first(NULL, l->sessions); iter; iter = switch_hash_next(iter)) {
+				for (iter = switch_core_hash_first(l->sessions); iter; iter = switch_core_hash_next(&iter)) {
 					empty = 0;
-					switch_hash_this(iter, &key, NULL, &value);
+					switch_core_hash_this(iter, &key, NULL, &value);
 					sp = (session_elem_t*)value;
 					stream->write_function(stream, "Outbound session for %s in state %s\n", sp->uuid_str,
 							switch_channel_state_name(sp->channel_state));
@@ -1708,8 +1792,8 @@ SWITCH_STANDARD_API(erlang_cmd)
 					}
 					stream->write_function(stream, "CUSTOM:\n", switch_event_name(x));
 
-					for (iter = switch_hash_first(NULL, l->event_hash); iter; iter = switch_hash_next(iter)) {
-						switch_hash_this(iter, &key, NULL, &val);
+					for (iter = switch_core_hash_first(l->event_hash); iter; iter = switch_core_hash_next(&iter)) {
+						switch_core_hash_this(iter, &key, NULL, &val);
 						stream->write_function(stream, "\t%s\n", (char *)key);
 					}
 					stream->write_function(stream, "\n", (char *)key);
@@ -1787,7 +1871,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_erlang_event_load)
 	switch_thread_rwlock_create(&globals.bindings_rwlock, pool);
 	switch_mutex_init(&globals.fetch_reply_mutex, SWITCH_MUTEX_DEFAULT, pool);
 	switch_mutex_init(&globals.listener_count_mutex, SWITCH_MUTEX_UNNESTED, pool);
-	switch_core_hash_init(&globals.fetch_reply_hash, pool);
+	switch_core_hash_init(&globals.fetch_reply_hash);
 
 	/* intialize the unique reference stuff */
 	switch_mutex_init(&globals.ref_mutex, SWITCH_MUTEX_NESTED, pool);
@@ -1831,7 +1915,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_erlang_event_load)
 SWITCH_MODULE_RUNTIME_FUNCTION(mod_erlang_event_runtime)
 {
 	switch_memory_pool_t *pool = NULL, *listener_pool = NULL;
-	switch_status_t rv;
+	int rv;
 	listener_t *listener;
 	uint32_t x = 0;
 	struct ei_cnode_s ec;

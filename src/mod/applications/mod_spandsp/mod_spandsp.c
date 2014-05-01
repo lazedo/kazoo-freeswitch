@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -62,6 +62,11 @@ SWITCH_STANDARD_APP(spanfax_tx_function)
 SWITCH_STANDARD_APP(spanfax_rx_function)
 {
 	mod_spandsp_fax_process_fax(session, data, FUNCTION_RX);
+}
+
+SWITCH_STANDARD_APP(spanfax_stop_function)
+{
+	mod_spandsp_fax_stop_fax(session);
 }
 
 SWITCH_STANDARD_APP(dtmf_session_function)
@@ -471,6 +476,12 @@ void mod_spandsp_indicate_data(switch_core_session_t *session, switch_bool_t sel
 /* **************************************************************************
    CONFIGURATION
    ************************************************************************* */
+static void destroy_descriptor(void *ptr)
+{
+    tone_descriptor_t *d = (tone_descriptor_t *) ptr;
+
+    super_tone_rx_free_descriptor(d->spandsp_tone_descriptor);
+}
 
 switch_status_t load_configuration(switch_bool_t reload)
 {
@@ -488,7 +499,7 @@ switch_status_t load_configuration(switch_bool_t reload)
 	}
 
 	switch_core_new_memory_pool(&spandsp_globals.config_pool);
-	switch_core_hash_init(&spandsp_globals.tones, spandsp_globals.config_pool);
+	switch_core_hash_init(&spandsp_globals.tones);
 
 	spandsp_globals.modem_dialplan = "XML";
 	spandsp_globals.modem_context = "default";
@@ -652,7 +663,8 @@ switch_status_t load_configuration(switch_bool_t reload)
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CRIT, "Unable to allocate tone_descriptor: %s\n", name);
 					switch_goto_status(SWITCH_STATUS_FALSE, done);
 				}
-				switch_core_hash_insert(spandsp_globals.tones, name, descriptor);
+
+				switch_core_hash_insert_destructor(spandsp_globals.tones, name, descriptor, destroy_descriptor);
 
 				/* add tones to descriptor */
 				for (tone = switch_xml_child(xdescriptor, "tone"); tone; tone = switch_xml_next(tone)) {
@@ -740,6 +752,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_spandsp_init)
 				   SAF_SUPPORT_NOMEDIA | SAF_NO_LOOPBACK);
 	SWITCH_ADD_APP(app_interface, "txfax", "FAX Transmit Application", "FAX Transmit Application", spanfax_tx_function, SPANFAX_TX_USAGE,
 				   SAF_SUPPORT_NOMEDIA | SAF_NO_LOOPBACK);
+	SWITCH_ADD_APP(app_interface, "stopfax", "Stop FAX Application", "Stop FAX Application", spanfax_stop_function, "", SAF_NONE);
 
 	SWITCH_ADD_APP(app_interface, "spandsp_stop_dtmf", "stop inband dtmf", "Stop detecting inband dtmf.", stop_dtmf_session_function, "", SAF_NONE);
 	SWITCH_ADD_APP(app_interface, "spandsp_start_dtmf", "Detect dtmf", "Detect inband dtmf on the session", dtmf_session_function, "", SAF_MEDIA_TAP);
@@ -795,8 +808,9 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_spandsp_init)
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't bind!\n");
 	}
 
-
+#if defined(MODEM_SUPPORT)
 	modem_global_init(module_interface, pool);
+#endif
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "mod_spandsp loaded, using spandsp library version [%s]\n", SPANDSP_RELEASE_DATETIME_STRING);
 
@@ -811,7 +825,9 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_spandsp_shutdown)
 
 	mod_spandsp_fax_shutdown();
 	mod_spandsp_dsp_shutdown();
+#if defined(MODEM_SUPPORT)
 	modem_global_shutdown();
+#endif
 
 	if (spandsp_globals.tones) {
 		switch_core_hash_destroy(&spandsp_globals.tones);
@@ -820,6 +836,8 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_spandsp_shutdown)
 	if (spandsp_globals.config_pool) {
 		switch_core_destroy_memory_pool(&spandsp_globals.config_pool);
 	}
+
+	memset(&spandsp_globals, 0, sizeof(spandsp_globals));
 
 	return SWITCH_STATUS_UNLOAD;
 }

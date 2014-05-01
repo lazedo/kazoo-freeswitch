@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -57,7 +57,7 @@ struct xml_binding {
 	char *cookie_file;
 	switch_hash_t *vars_map;
 	int use_dynamic_url;
-	int auth_scheme;
+	long auth_scheme;
 	int timeout;
 };
 
@@ -142,6 +142,7 @@ static switch_xml_t xml_url_fetch(const char *section, const char *tag_name, con
 {
 	char filename[512] = "";
 	switch_CURL *curl_handle = NULL;
+	switch_CURLcode cc;
 	struct config_data config_data;
 	switch_xml_t xml = NULL;
 	char *data = NULL;
@@ -288,7 +289,11 @@ static switch_xml_t xml_url_fetch(const char *section, const char *tag_name, con
 			curl_easy_setopt(curl_handle, CURLOPT_INTERFACE, binding->bind_local);
 		}
 
-		switch_curl_easy_perform(curl_handle);
+		cc = switch_curl_easy_perform(curl_handle);
+		if (cc && cc != CURLE_WRITE_ERROR) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "CURL returned error:[%d] %s\n", cc, switch_curl_easy_strerror(cc));
+		}
+
 		switch_curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &httpRes);
 		switch_curl_easy_cleanup(curl_handle);
 		switch_curl_slist_free_all(headers);
@@ -368,7 +373,7 @@ static switch_status_t do_config(void)
 		uint32_t enable_ssl_verifyhost = 0;
 		char *cookie_file = NULL;
 		hash_node_t *hash_node;
-		int auth_scheme = CURLAUTH_BASIC;
+		long auth_scheme = CURLAUTH_BASIC;
 		need_vars_map = 0;
 		vars_map = NULL;
 
@@ -399,7 +404,7 @@ static switch_status_t do_config(void)
 				} else if (!strcasecmp(val, "GSS-NEGOTIATE")) {
 					auth_scheme |= CURLAUTH_GSSNEGOTIATE;
 				} else if (!strcasecmp(val, "any")) {
-					auth_scheme = CURLAUTH_ANY;
+					auth_scheme = (long)CURLAUTH_ANY;
 				}
 			} else if (!strcasecmp(var, "disable-100-continue") && !switch_true(val)) {
 				disable100continue = 0;
@@ -432,7 +437,7 @@ static switch_status_t do_config(void)
 				use_dynamic_url = 1;
 			} else if (!strcasecmp(var, "enable-post-var")) {
 				if (!vars_map && need_vars_map == 0) {
-					if (switch_core_hash_init(&vars_map, globals.pool) != SWITCH_STATUS_SUCCESS) {
+					if (switch_core_hash_init(&vars_map) != SWITCH_STATUS_SUCCESS) {
 						need_vars_map = -1;
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Can't init params hash!\n");
 						continue;
@@ -457,7 +462,7 @@ static switch_status_t do_config(void)
 			continue;
 		}
 
-		if (!(binding = malloc(sizeof(*binding)))) {
+		if (!(binding = switch_core_alloc(globals.pool, sizeof(*binding)))) {
 			if (vars_map)
 				switch_core_hash_destroy(&vars_map);
 			goto done;
@@ -466,23 +471,23 @@ static switch_status_t do_config(void)
 
 		binding->auth_scheme = auth_scheme;
 		binding->timeout = timeout;
-		binding->url = strdup(url);
+		binding->url = switch_core_strdup(globals.pool, url);
 		switch_assert(binding->url);
 
 		if (bind_local != NULL) {
-			binding->bind_local = strdup(bind_local);
+			binding->bind_local = switch_core_strdup(globals.pool, bind_local);
 		}
 		if (method != NULL) {
-			binding->method = strdup(method);
+			binding->method = switch_core_strdup(globals.pool, method);
 		} else {
 			binding->method = NULL;
 		}
 		if (bind_mask) {
-			binding->bindings = strdup(bind_mask);
+			binding->bindings = switch_core_strdup(globals.pool, bind_mask);
 		}
 
 		if (bind_cred) {
-			binding->cred = strdup(bind_cred);
+			binding->cred = switch_core_strdup(globals.pool, bind_cred);
 		}
 
 		binding->disable100continue = disable100continue;
@@ -491,29 +496,29 @@ static switch_status_t do_config(void)
 		binding->enable_cacert_check = enable_cacert_check;
 
 		if (ssl_cert_file) {
-			binding->ssl_cert_file = strdup(ssl_cert_file);
+			binding->ssl_cert_file = switch_core_strdup(globals.pool, ssl_cert_file);
 		}
 
 		if (ssl_key_file) {
-			binding->ssl_key_file = strdup(ssl_key_file);
+			binding->ssl_key_file = switch_core_strdup(globals.pool, ssl_key_file);
 		}
 
 		if (ssl_key_password) {
-			binding->ssl_key_password = strdup(ssl_key_password);
+			binding->ssl_key_password = switch_core_strdup(globals.pool, ssl_key_password);
 		}
 
 		if (ssl_version) {
-			binding->ssl_version = strdup(ssl_version);
+			binding->ssl_version = switch_core_strdup(globals.pool, ssl_version);
 		}
 
 		if (ssl_cacert_file) {
-			binding->ssl_cacert_file = strdup(ssl_cacert_file);
+			binding->ssl_cacert_file = switch_core_strdup(globals.pool, ssl_cacert_file);
 		}
 
 		binding->enable_ssl_verifyhost = enable_ssl_verifyhost;
 
 		if (cookie_file) {
-			binding->cookie_file = strdup(cookie_file);
+			binding->cookie_file = switch_core_strdup(globals.pool, cookie_file);
 		}
 
 		binding->vars_map = vars_map;

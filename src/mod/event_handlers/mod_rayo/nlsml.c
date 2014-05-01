@@ -51,14 +51,15 @@ struct tag_def {
 /**
  * library configuration
  */
-static struct {
+typedef struct {
 	/** true if initialized */
 	switch_bool_t init;
 	/** Mapping of tag name to definition */
 	switch_hash_t *tag_defs;
 	/** library memory pool */
 	switch_memory_pool_t *pool;
-} globals;
+} nlsml_globals;
+static nlsml_globals globals = { 0 };
 
 /**
  * The node in the XML tree
@@ -89,6 +90,17 @@ struct nlsml_parser {
 };
 
 /**
+ * Tag def destructor
+ */
+static void destroy_tag_def(void *ptr)
+{
+    struct tag_def *tag = (struct tag_def *) ptr;
+	if (tag->children_tags) {
+		switch_core_hash_destroy(&tag->children_tags);
+	}
+}
+
+/**
  * Add a definition for a tag
  * @param tag the name
  * @param attribs_fn the function to handle the tag attributes
@@ -99,7 +111,7 @@ struct nlsml_parser {
 static struct tag_def *add_tag_def(const char *tag, tag_attribs_fn attribs_fn, tag_cdata_fn cdata_fn, const char *children_tags)
 {
 	struct tag_def *def = switch_core_alloc(globals.pool, sizeof(*def));
-	switch_core_hash_init(&def->children_tags, globals.pool);
+	switch_core_hash_init(&def->children_tags);
 	if (!zstr(children_tags)) {
 		char *children_tags_dup = switch_core_strdup(globals.pool, children_tags);
 		char *tags[32] = { 0 };
@@ -114,7 +126,7 @@ static struct tag_def *add_tag_def(const char *tag, tag_attribs_fn attribs_fn, t
 	def->attribs_fn = attribs_fn;
 	def->cdata_fn = cdata_fn;
 	def->is_root = SWITCH_FALSE;
-	switch_core_hash_insert(globals.tag_defs, tag, def);
+	switch_core_hash_insert_destructor(globals.tag_defs, tag, def, destroy_tag_def);
 	return def;
 }
 
@@ -451,7 +463,7 @@ int nlsml_init(void)
 
 	globals.init = SWITCH_TRUE;
 	switch_core_new_memory_pool(&globals.pool);
-	switch_core_hash_init(&globals.tag_defs, globals.pool);
+	switch_core_hash_init(&globals.tag_defs);
 
 	add_root_tag_def("result", process_attribs_ignore, process_cdata_ignore, "interpretation");
 	add_tag_def("interpretation", process_attribs_ignore, process_cdata_ignore, "input,model,xf:model,instance,xf:instance");
@@ -465,6 +477,24 @@ int nlsml_init(void)
 	add_tag_def("ANY", process_attribs_ignore, process_cdata_ignore, "ANY");
 
 	return 1;
+}
+
+/**
+ * Destruction of NLSML parser environment
+ */
+void nlsml_destroy(void)
+{
+	if (globals.init) {
+		if (globals.tag_defs) {
+			switch_core_hash_destroy(&globals.tag_defs);
+			globals.tag_defs = NULL;
+		}
+		if (globals.pool) {
+			switch_core_destroy_memory_pool(&globals.pool);
+			globals.pool = NULL;
+		}
+		globals.init = SWITCH_FALSE;
+	}
 }
 
 /* For Emacs:

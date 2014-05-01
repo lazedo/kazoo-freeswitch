@@ -21,16 +21,14 @@ avoid_mods=(
   codecs/mod_sangoma_codec
   codecs/mod_siren
   codecs/mod_skel_codec
-  codecs/mod_voipcodecs
   endpoints/mod_gsmopen
   endpoints/mod_h323
   endpoints/mod_khomp
   endpoints/mod_opal
   endpoints/mod_reference
   endpoints/mod_unicall
-  formats/mod_shout
   languages/mod_managed
-  languages/mod_spidermonkey
+  languages/mod_perl
   sdk/autotools
   xml_int/mod_xml_ldap
   xml_int/mod_xml_radius
@@ -146,20 +144,20 @@ mod_filter_show () {
 map_fs_modules () {
   local filterfn="$1" percatfns="$2" permodfns="$3"
   for x in $mod_dir/*; do
-    if test -d $x; then
-      category=${x##*/} category_path=$x
-      for f in $percatfns; do $f; done
-      for y in $x/*; do
-        module_name=${y##*/} module_path=$y
-        module=$category/$module_name
-        if $filterfn $category/$module; then
-          [ -f ${y}/module ] && . ${y}/module
-          for f in $permodfns; do $f; done
-        fi
-        unset module_name module_path module
-      done
-      unset category category_path
-    fi
+    test -d $x || continue
+    test ! ${x##*/} = legacy || continue
+    category=${x##*/} category_path=$x
+    for f in $percatfns; do $f; done
+    for y in $x/*; do
+      module_name=${y##*/} module_path=$y
+      module=$category/$module_name
+      if $filterfn $category/$module; then
+        [ -f ${y}/module ] && . ${y}/module
+        for f in $permodfns; do $f; done
+      fi
+      unset module_name module_path module
+    done
+    unset category category_path
   done
 }
 
@@ -284,7 +282,12 @@ Build-Depends:
 # core build
  dpkg-dev (>= 1.15.8.12), gcc (>= 4:4.4.5), g++ (>= 4:4.4.5),
  libc6-dev (>= 2.11.3), make (>= 3.81),
+ libpcre3-dev,
+ libedit-dev (>= 2.11),
+ libsqlite3-dev,
  wget, pkg-config,
+# core codecs
+ libogg-dev, libspeex-dev, libspeexdsp-dev,
 # configure options
  libssl-dev, unixodbc-dev, libpq-dev,
  libncurses5-dev, libjpeg62-dev | libjpeg8-dev,
@@ -294,6 +297,7 @@ Build-Depends:
 # for APR (not essential for build)
  uuid-dev, libexpat1-dev, libgdbm-dev, libdb-dev,
 # used by many modules
+ libcurl4-openssl-dev | libcurl4-gnutls-dev | libcurl-dev,
  bison, zlib1g-dev,
 # module build-depends
  $(debian_wrap "${mod_build_depends}")
@@ -432,7 +436,6 @@ Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
  freeswitch-mod-g723-1 (= \${binary:Version}),
  freeswitch-mod-g729 (= \${binary:Version}),
  freeswitch-mod-amr (= \${binary:Version}),
- freeswitch-mod-speex (= \${binary:Version}),
  freeswitch-mod-h26x (= \${binary:Version}),
  freeswitch-mod-sndfile (= \${binary:Version}),
  freeswitch-mod-native-file (= \${binary:Version}),
@@ -446,8 +449,6 @@ Recommends:
  freeswitch-music,
  freeswitch-sounds,
  freeswitch-conf-vanilla (= \${binary:Version}),
-Suggests:
- freeswitch-mod-spidermonkey (= \${binary:Version}),
 Description: Cross-Platform Scalable Multi-Protocol Soft Switch
  $(debian_wrap "${fs_description}")
  .
@@ -670,7 +671,6 @@ Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
  freeswitch-mod-opus (= \${binary:Version}),
  freeswitch-mod-silk (= \${binary:Version}),
  freeswitch-mod-spandsp (= \${binary:Version}),
- freeswitch-mod-speex (= \${binary:Version}),
  freeswitch-mod-theora (= \${binary:Version}),
  freeswitch-mod-vp8 (= \${binary:Version})
 Suggests:

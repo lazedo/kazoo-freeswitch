@@ -1178,6 +1178,14 @@ int nua_base_client_check_restart(nua_client_request_t *cr,
     }
   }
 
+  if (status == 403) {
+	  if (nh->nh_auth) {
+		  /* Bad username/password */
+		  SU_DEBUG_7(("nua(%p): bad credentials, clearing them\n", (void *)nh));
+		  auc_clear_credentials(&nh->nh_auth, NULL, NULL);
+	  }
+  }
+
   if ((status == 401 && sip->sip_www_authenticate) ||
       (status == 407 && sip->sip_proxy_authenticate)) {
     int server = 0, proxy = 0;
@@ -1198,12 +1206,12 @@ int nua_base_client_check_restart(nua_client_request_t *cr,
       cr->cr_challenged = 1;
 
       if (invalid) {
-	/* Bad username/password */
-	SU_DEBUG_7(("nua(%p): bad credentials, clearing them\n", (void *)nh));
-	auc_clear_credentials(&nh->nh_auth, NULL, NULL);
-      }
-      else if (auc_has_authorization(&nh->nh_auth))
-	return nua_client_restart(cr, 100, "Request Authorized by Cache");
+		  /* Bad username/password */
+		  SU_DEBUG_7(("nua(%p): bad credentials, clearing them\n", (void *)nh));
+		  auc_clear_credentials(&nh->nh_auth, NULL, NULL);
+      } else if (auc_has_authorization(&nh->nh_auth)) {
+		  return nua_client_restart(cr, 100, "Request Authorized by Cache");
+	  }
 
       orq = cr->cr_orq, cr->cr_orq = NULL;
 

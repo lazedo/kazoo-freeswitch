@@ -2,11 +2,11 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([openzap],[pre-alpha],[bugs@freeswitch.org])
+AC_INIT([openzap],[0.1],[bugs@freeswitch.org])
 AC_CONFIG_SRCDIR([src/zap_io.c])
 
 AC_CONFIG_AUX_DIR(build)
-AM_INIT_AUTOMAKE(libopenzap,0.1)
+AM_INIT_AUTOMAKE
 
 # Checks for programs.
 AC_PROG_CC
@@ -86,7 +86,7 @@ elif test "x${ax_cv_c_compiler_vendor}" = "xclang" ; then
             SOLINK="-dynamic -bundle -force-flat-namespace"
         ;;
         *)
-            AC_ERROR([Please update configure.in with SOLINK values for your compiler])
+            SOLINK="-shared -Xlinker -x"
         ;;
     esac
 elif test "x${ax_cv_c_compiler_vendor}" = "xgnu" ; then
@@ -101,26 +101,21 @@ elif test "x${ax_cv_c_compiler_vendor}" = "xgnu" ; then
             SOLINK="-shared -Xlinker -x"
         ;;
     esac
+elif test "x${ax_cv_c_compiler_vendor}" = "xintel" ; then
+    case "$host" in
+        *)
+	    SOLINK="-shared -Xlinker -x"
+        ;;
+    esac
 else
     AC_ERROR([Please update configure.in with SOLINK values for your compiler])
 fi
 
-# set DYNAMIC_LIB_EXTEN
-# we should really be using libtool so we don't need to do this
-case "$host" in
-    *cygwin* | *mingw*)
-        DYNAMIC_LIB_EXTEN="dll"
-    ;;
-    *)
-        DYNAMIC_LIB_EXTEN="so"
-    ;;
-esac
 
 DEFAULT_INCLUDES="-I. -I./src/include -I$(srcdir)"
 
 AC_SUBST(SOLINK)
 AC_SUBST(DEFAULT_INCLUDES)
-AC_SUBST(DYNAMIC_LIB_EXTEN)
 
 AC_CHECK_LIB([dl], [dlopen])
 AC_CHECK_LIB([pthread], [pthread_create])

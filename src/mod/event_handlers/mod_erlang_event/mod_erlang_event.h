@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -59,6 +59,8 @@ enum reply_state { reply_not_ready, reply_waiting, reply_found, reply_timeout };
 
 struct fetch_reply_struct
 {
+	const char *uuid_str;
+	switch_memory_pool_t *pool;
 	switch_thread_cond_t *ready_or_found;
 	switch_mutex_t *mutex;
 	enum reply_state state;
@@ -134,8 +136,12 @@ struct listener {
 	switch_thread_rwlock_t *session_rwlock;
 	//session_elem_t *session_list;
 	switch_hash_t *sessions;
+	uint64_t total_events;
+	uint64_t total_logs;
 	int lost_events;
 	int lost_logs;
+	int create;
+	int hangup;
 	uint32_t id;
 	char remote_ip[50];
 	/*switch_port_t remote_port; */
@@ -210,6 +216,8 @@ struct prefs_struct {
 	uint32_t id;
 	erlang_encoding_t encoding;
 	int compat_rel;
+	int max_event_bulk;
+	int max_log_bulk;
 };
 typedef struct prefs_struct prefs_t;
 
@@ -266,6 +274,8 @@ session_elem_t *attach_call_to_pid(listener_t *listener, erlang_pid * pid, switc
 session_elem_t *attach_call_to_spawned_process(listener_t *listener, char *module, char *function, switch_core_session_t *session);
 session_elem_t *find_session_elem_by_pid(listener_t *listener, erlang_pid *pid);
 void put_reply_unlock(fetch_reply_t *p, char *uuid_str);
+
+fetch_reply_t *find_fetch_reply(const char *uuid);
 
 /* For Emacs:
  * Local Variables:

@@ -47,7 +47,9 @@
  */
 
 #include "config.h"
-
+#ifdef HAVE_ZLIB_COMPRESS
+#include <zlib.h>
+#endif
 #include <sofia-sip/su_string.h>
 
 /** @internal SU message argument structure type */
@@ -379,6 +381,7 @@ struct nta_leg_s
 				 * Request missing @To tag matches
 				 * a tagged leg even after tagging.
 				 */
+  unsigned leg_compressed:1;
   unsigned:0;
   nta_request_f    *leg_callback;
   nta_leg_magic_t  *leg_magic;
@@ -450,6 +453,7 @@ struct nta_incoming_s
   unsigned irq_must_100rel:1;	/**< 100rel is required */
   unsigned irq_extra_100:1;	/**< 100 Trying should be sent */
   unsigned irq_tag_set:1;	/**< Tag is not from request */
+  unsigned irq_compressed:1;
   unsigned :0;
 
   tp_name_t             irq_tpn[1];
@@ -1276,17 +1280,15 @@ void agent_timer(su_root_magic_t *rm, su_timer_t *timer, nta_agent_t *agent)
 
   if (next == latest) {
     /* Do not set timer? */
-    SU_DEBUG_9(("nta: timer not set\n" VA_NONE));
-    assert(!agent->sa_out.completed->q_head);
-    assert(!agent->sa_out.trying->q_head);
-    assert(!agent->sa_out.inv_calling->q_head);
-    assert(!agent->sa_out.re_list);
-    assert(!agent->sa_in.inv_confirmed->q_head);
-    assert(!agent->sa_in.preliminary->q_head);
-    assert(!agent->sa_in.completed->q_head);
-    assert(!agent->sa_in.inv_completed->q_head);
-    assert(!agent->sa_in.re_list);
-    return;
+	/* check it there are still things queued, if there are, that means everything scheduled is > 15 days in the future */
+    /* in this case, we had a large time shift, we should schedule for 15 days in the future (which is probably still before now) */
+	/* and this should sort itself out on the next run through */
+    if ( !agent->sa_out.completed->q_head && !agent->sa_out.trying->q_head && !agent->sa_out.inv_calling->q_head &&
+		 !agent->sa_out.re_list && !agent->sa_in.inv_confirmed->q_head && !agent->sa_in.preliminary->q_head &&
+		 !agent->sa_in.completed->q_head && !agent->sa_in.inv_completed->q_head && !agent->sa_in.re_list ) {
+		SU_DEBUG_9(("nta: timer not set\n" VA_NONE));
+		return;
+	}
   }
 
   if (next == now) if (++next == 0) ++next;
@@ -2142,6 +2144,7 @@ int nta_agent_add_tport(nta_agent_t *self,
   char const * const * tports = tports_sip;
   int error;
   ta_list ta;
+  char *tps[9] = {0};
 
   if (self == NULL) {
     su_seterrno(EINVAL);
@@ -2187,7 +2190,7 @@ int nta_agent_add_tport(nta_agent_t *self,
   if (url->url_params) {
     if (url_param(url->url_params, "transport", tp, sizeof(tp)) > 0) {
       if (strchr(tp, ',')) {
-		  int i; char *t, *tps[9] = {0};
+		  int i; char *t;
 
 	/* Split tp into transports */
 	for (i = 0, t = tp; t && i < 8; i++) {
@@ -2787,6 +2790,71 @@ void agent_recv_message(nta_agent_t *agent,
   }
 }
 
+#ifdef HAVE_ZLIB_COMPRESS
+int sip_content_encoding_Xflate(msg_t *msg, sip_t *sip, int inflate, int check)
+{
+	char const *method_name;
+	unsigned cseq = sip->sip_cseq ? sip->sip_cseq->cs_seq : 0;
+	int ok = !check;
+
+	if (!sip->sip_payload) {
+		return 0;
+	}
+
+	if (sip->sip_request) {
+		method_name = sip->sip_request->rq_method_name;
+	} else if (sip->sip_cseq) {
+		method_name = sip->sip_cseq->cs_method_name;
+	} else {
+		method_name = "Unknown";
+	}
+
+	if (!ok) {
+		if (sip->sip_content_encoding && sip->sip_content_encoding->k_items) {
+			const char *val = sip->sip_content_encoding->k_items[0];
+			if (val && (!strcasecmp(val, "gzip") || !strcasecmp(val, "deflate"))) {
+				ok = 1;
+			}
+		}
+	}
+
+	if (ok) {
+		unsigned long n = 0;
+		void *decoded = NULL;
+		const char *id = "N/A";
+		const char *orig_payload = sip->sip_payload->pl_data;
+
+		n = sip->sip_payload->pl_len * 10;
+		  
+		decoded = su_alloc(msg_home(msg), n);
+		assert(decoded);
+
+		if (inflate) {
+			uncompress(decoded, &n, (void *)sip->sip_payload->pl_data, (unsigned long)sip->sip_payload->pl_len);
+		} else {
+			compress(decoded, &n, (void *)sip->sip_payload->pl_data, (unsigned long)sip->sip_payload->pl_len);
+		}
+		  
+		sip->sip_payload = sip_payload_create(msg_home(msg), decoded, n);
+		sip->sip_content_encoding = sip_content_encoding_make(msg_home(msg), "deflate");
+
+		if (sip->sip_call_id) {
+			id = sip->sip_call_id->i_id;
+		}
+
+		if (inflate) {
+			SU_DEBUG_1(("nta: %s (%u) (%s) Inflating compressed body:\n%s\n", method_name, cseq, id, (char *)decoded));
+		} else {
+			SU_DEBUG_1(("nta: %s (%u) (%s) Deflating compressed body:\n%s\n", method_name, cseq, id, orig_payload));
+		}
+
+		return 1;
+	}
+ 
+  return 0;
+}
+#endif
+
 /** @internal Handle incoming requests. */
 static
 void agent_recv_request(nta_agent_t *agent,
@@ -2801,6 +2869,7 @@ void agent_recv_request(nta_agent_t *agent,
   url_t url[1];
   unsigned cseq = sip->sip_cseq ? sip->sip_cseq->cs_seq : 0;
   int insane, errors, stream;
+  unsigned compressed = 0;
 
   agent->sa_stats->as_recv_msg++;
   agent->sa_stats->as_recv_request++;
@@ -2923,6 +2992,10 @@ void agent_recv_request(nta_agent_t *agent,
     return;
   }
 
+#ifdef HAVE_ZLIB_COMPRESS
+  compressed = sip_content_encoding_Xflate(msg, sip, 1, 1);
+#endif
+
   /* First, try existing incoming requests */
   irq = incoming_find(agent, sip, sip->sip_via,
 		      agent->sa_merge_482 &&
@@ -2985,6 +3058,7 @@ void agent_recv_request(nta_agent_t *agent,
     /* Try existing dialog */
     SU_DEBUG_5(("nta: %s (%u) %s\n",
 		method_name, cseq, "going to existing leg"));
+	leg->leg_compressed = compressed;
     leg_recv(leg, msg, sip, tport);
     return;
   }
@@ -2993,6 +3067,7 @@ void agent_recv_request(nta_agent_t *agent,
     /* Dialogless legs - let application process transactions statefully */
     SU_DEBUG_5(("nta: %s (%u) %s\n",
 		method_name, cseq, "going to a dialogless leg"));
+	leg->leg_compressed = compressed;
     leg_recv(leg, msg, sip, tport);
   }
   else if (!agent->sa_is_stateless && (leg = agent->sa_default_leg)) {
@@ -3008,6 +3083,7 @@ void agent_recv_request(nta_agent_t *agent,
     else {
       SU_DEBUG_5(("nta: %s (%u) %s\n",
 		  method_name, cseq, "going to a default leg"));
+	  leg->leg_compressed = compressed;
       leg_recv(leg, msg, sip, tport);
     }
   }
@@ -3278,6 +3354,10 @@ void agent_recv_response(nta_agent_t *agent,
   }
 
   /* XXX - should check if msg should be discarded based on via? */
+
+#ifdef HAVE_ZLIB_COMPRESS
+  sip_content_encoding_Xflate(msg, sip, 1, 1);
+#endif
 
   if ((orq = outgoing_find(agent, msg, sip, sip->sip_via))) {
     SU_DEBUG_5(("nta: %03d %s %s\n",
@@ -4766,6 +4846,7 @@ void leg_recv(nta_leg_t *leg, msg_t *msg, sip_t *sip, tport_t *tport)
     return;
   }
 
+  irq->irq_compressed = leg->leg_compressed;
   irq->irq_in_callback = 1;
   status = incoming_callback(leg, irq, sip);
   irq->irq_in_callback = 0;
@@ -6565,6 +6646,12 @@ int nta_incoming_mreply(nta_incoming_t *irq, msg_t *msg)
     return -1;
   }
 
+#ifdef HAVE_ZLIB_COMPRESS
+  if (irq->irq_compressed) {
+	  sip_content_encoding_Xflate(msg, sip, 0, 0);
+  }
+#endif
+
   if (irq->irq_must_100rel && !sip->sip_rseq && status > 100 && status < 200) {
     /* This nta_reliable_t object will be destroyed by PRACK or timeout */
     if (nta_reliable_mreply(irq, NULL, NULL, msg))
@@ -7736,6 +7823,10 @@ nta_outgoing_t *outgoing_create(nta_agent_t *agent,
 
   sip = sip_object(msg);
   home = msg_home(msg);
+
+#ifdef HAVE_ZLIB_COMPRESS
+  sip_content_encoding_Xflate(msg, sip_object(msg), 0, 1);
+#endif
 
   if (!sip->sip_request || sip_complete_message(msg) < 0) {
     SU_DEBUG_3(("nta: outgoing_create: incomplete request\n" VA_NONE));
@@ -11083,7 +11174,6 @@ nta_reliable_t *reliable_find(nta_agent_t const *agent,
 	if (rel->rel_rseq == rack->ra_response)
 	  return (nta_reliable_t  *)rel;
 
-      return NULL;
     }
   }
 

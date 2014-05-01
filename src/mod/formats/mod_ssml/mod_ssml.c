@@ -1,6 +1,6 @@
 /*
  * mod_ssml for FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2013, Grasshopper
+ * Copyright (C) 2013-2014, Grasshopper
  *
  * Version: MPL 1.1
  *
@@ -64,8 +64,12 @@ static struct {
 	switch_hash_t *voice_cache;
 	/** Mapping of voice names */
 	switch_hash_t *say_voice_map;
+	/** Synchronizes access to say_voice_map */
+	switch_mutex_t *say_voice_map_mutex;
 	/** Mapping of voice names */
 	switch_hash_t *tts_voice_map;
+	/** Synchronizes access to tts_voice_map */
+	switch_mutex_t *tts_voice_map_mutex;
 	/** Mapping of interpret-as value to macro */
 	switch_hash_t *interpret_as_map;
 	/** Mapping of ISO language code to say-module */
@@ -198,7 +202,7 @@ struct ssml_context {
 static struct tag_def *add_tag_def(const char *tag, tag_attribs_fn attribs_fn, tag_cdata_fn cdata_fn, const char *children_tags)
 {
 	struct tag_def *def = switch_core_alloc(globals.pool, sizeof(*def));
-	switch_core_hash_init(&def->children_tags, globals.pool);
+	switch_core_hash_init(&def->children_tags);
 	if (!zstr(children_tags)) {
 		char *children_tags_dup = switch_core_strdup(globals.pool, children_tags);
 		char *tags[32] = { 0 };
@@ -339,12 +343,12 @@ static struct voice *find_voice(struct ssml_node *cur_node, switch_hash_t *map, 
 	}
 
 	/* find best language, name, gender match */
-	for (hi = switch_hash_first(NULL, map); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(map); hi; hi = switch_core_hash_next(&hi)) {
 		const void *key;
 		void *val;
 		struct voice *candidate;
 		int candidate_score = 0;
-		switch_hash_this(hi, &key, NULL, &val);
+		switch_core_hash_this(hi, &key, NULL, &val);
 		candidate = (struct voice *)val;
 		candidate_score = score_voice(candidate, cur_node, lang_required);
 		if (candidate_score > 0 && candidate_score > best_score) {
@@ -371,7 +375,11 @@ done:
  */
 static struct voice *find_tts_voice(struct ssml_node *cur_node)
 {
-	return find_voice(cur_node, globals.tts_voice_map, "tts", 0);
+	struct voice *v;
+	switch_mutex_lock(globals.tts_voice_map_mutex);
+	v = find_voice(cur_node, globals.tts_voice_map, "tts", 0);
+	switch_mutex_unlock(globals.tts_voice_map_mutex);
+	return v;
 }
 
 /**
@@ -381,7 +389,11 @@ static struct voice *find_tts_voice(struct ssml_node *cur_node)
  */
 static struct voice *find_say_voice(struct ssml_node *cur_node)
 {
-	return find_voice(cur_node, globals.say_voice_map, "say", 1);
+	struct voice *v;
+	switch_mutex_lock(globals.say_voice_map_mutex);
+	v = find_voice(cur_node, globals.say_voice_map, "say", 1);
+	switch_mutex_unlock(globals.say_voice_map_mutex);
+	return v;
 }
 
 /**
@@ -1110,12 +1122,14 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_ssml_load)
 	 */
 
 	globals.pool = pool;
-	switch_core_hash_init(&globals.voice_cache, pool);
-	switch_core_hash_init(&globals.tts_voice_map, pool);
-	switch_core_hash_init(&globals.say_voice_map, pool);
-	switch_core_hash_init(&globals.interpret_as_map, pool);
-	switch_core_hash_init(&globals.language_map, pool);
-	switch_core_hash_init(&globals.tag_defs, pool);
+	switch_core_hash_init(&globals.voice_cache);
+	switch_core_hash_init(&globals.tts_voice_map);
+	switch_mutex_init(&globals.tts_voice_map_mutex, SWITCH_MUTEX_NESTED, pool);
+	switch_core_hash_init(&globals.say_voice_map);
+	switch_mutex_init(&globals.say_voice_map_mutex, SWITCH_MUTEX_NESTED, pool);
+	switch_core_hash_init(&globals.interpret_as_map);
+	switch_core_hash_init(&globals.language_map);
+	switch_core_hash_init(&globals.tag_defs);
 
 	add_root_tag_def("speak", process_xml_lang, process_cdata_tts, "audio,break,emphasis,mark,phoneme,prosody,say-as,voice,sub,p,s,lexicon,metadata,meta");
 	add_tag_def("p", process_xml_lang, process_cdata_tts, "audio,break,emphasis,mark,phoneme,prosody,say-as,voice,sub,s");
@@ -1146,7 +1160,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_ssml_shutdown)
 	switch_core_hash_destroy(&globals.language_map);
 	{
 		switch_hash_index_t *hi = NULL;
-		for (hi = switch_core_hash_first(globals.tag_defs); hi; hi = switch_core_hash_next(hi)) {
+		for (hi = switch_core_hash_first(globals.tag_defs); hi; hi = switch_core_hash_next(&hi)) {
 			const void *key;
 			struct tag_def *def;
 			switch_core_hash_this(hi, &key, NULL, (void *)&def);

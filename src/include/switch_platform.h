@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -275,7 +275,11 @@ typedef intptr_t switch_ssize_t;
 
 #endif
 
+#if defined(__sun__) && defined(__x86_64)
+#define SWITCH_TIME_T_FMT SWITCH_SIZE_T_FMT
+#else
 #define SWITCH_TIME_T_FMT SWITCH_INT64_T_FMT
+#endif
 
 SWITCH_END_EXTERN_C
 /* these includes must be outside the extern "C" block on windows or it will break compatibility with c++ modules*/

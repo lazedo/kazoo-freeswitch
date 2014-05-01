@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -86,7 +86,7 @@ typedef struct client_profile_s {
 	uint32_t enable_ssl_verifyhost;
 	char *cookie_file;
 	switch_hash_t *vars_map;
-	int auth_scheme;
+	long auth_scheme;
 	int timeout;
 	profile_perms_t perms;
 	char *ua;
@@ -1283,16 +1283,18 @@ static size_t file_callback(void *ptr, size_t size, size_t nmemb, void *data)
 {
 	register unsigned int realsize = (unsigned int) (size * nmemb);
 	client_t *client = data;
+	char *zero = "\0";
 
 	client->bytes += realsize;
 
-	if (client->bytes > client->max_bytes) {
+	if (client->bytes > client->max_bytes - 1) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Oversized file detected [%d bytes]\n", (int) client->bytes);
 		client->err = 1;
 		return 0;
 	}
 
 	switch_buffer_write(client->buffer, ptr, realsize);
+	switch_buffer_write(client->buffer, zero, 1);
 	
 	return realsize;
 }
@@ -1747,7 +1749,7 @@ static switch_status_t do_config(void)
 		char *cookie_file = NULL;
 		char *ua = "mod_httapi/1.0";
 		hash_node_t *hash_node;
-		int auth_scheme = CURLAUTH_BASIC;
+		long auth_scheme = CURLAUTH_BASIC;
 		need_vars_map = 0;
 		vars_map = NULL;
 
@@ -1789,7 +1791,7 @@ static switch_status_t do_config(void)
 					} else if (!strcasecmp(val, "GSS-NEGOTIATE")) {
 						auth_scheme |= CURLAUTH_GSSNEGOTIATE;
 					} else if (!strcasecmp(val, "any")) {
-						auth_scheme = CURLAUTH_ANY;
+						auth_scheme = (long)CURLAUTH_ANY;
 					}
 				} else if (!strcasecmp(var, "disable-100-continue") && !switch_true(val)) {
 					disable100continue = 0;
@@ -1820,7 +1822,7 @@ static switch_status_t do_config(void)
 					cookie_file = val;
 				} else if (!strcasecmp(var, "enable-post-var")) {
 					if (!vars_map && need_vars_map == 0) {
-						if (switch_core_hash_init(&vars_map, globals.pool) != SWITCH_STATUS_SUCCESS) {
+						if (switch_core_hash_init(&vars_map) != SWITCH_STATUS_SUCCESS) {
 							need_vars_map = -1;
 							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Can't init params hash!\n");
 							continue;
@@ -1892,15 +1894,15 @@ static switch_status_t do_config(void)
 				char *val = (char *) switch_xml_attr_soft(param, "value");
 
 				if (!strcasecmp(var, "all")) {
-					switch_byte_t all = switch_true(val);
+					switch_byte_t all = switch_true_byte(val);
 					memset(&profile->perms, all, sizeof(profile->perms));
 				} else if (!strcasecmp(var, "none")) {
-					switch_byte_t none = switch_true(val);
+					switch_byte_t none = switch_true_byte(val);
 					memset(&profile->perms, none, sizeof(profile->perms));
 				} else if (!strcasecmp(var, "set-params")) {
-					profile->perms.set_params = switch_true(val);
+					profile->perms.set_params = switch_true_byte(val);
 				} else if (!strcasecmp(var, "set-vars")) {
-					profile->perms.set_vars = switch_true(val);
+					profile->perms.set_vars = switch_true_byte(val);
 
 					if (profile->perms.set_vars) {
 						switch_xml_t x_list, x_var;
@@ -1928,7 +1930,7 @@ static switch_status_t do_config(void)
 						}
 					}
 				} else if (!strcasecmp(var, "get-vars")) {
-					profile->perms.get_vars = switch_true(val);
+					profile->perms.get_vars = switch_true_byte(val);
 
 					if (profile->perms.get_vars) {
 						switch_xml_t x_list, x_var;
@@ -1956,9 +1958,9 @@ static switch_status_t do_config(void)
 						}
 					}
 				} else if (!strcasecmp(var, "extended-data")) {
-					profile->perms.extended_data = switch_true(val);
+					profile->perms.extended_data = switch_true_byte(val);
 				} else if (!strcasecmp(var, "execute-apps")) {
-					profile->perms.execute_apps = switch_true(val);
+					profile->perms.execute_apps = switch_true_byte(val);
 					
 					if (profile->perms.execute_apps) {
 						switch_xml_t x_list, x_app;
@@ -1987,7 +1989,7 @@ static switch_status_t do_config(void)
 					}
 					
 				} else if (!strcasecmp(var, "expand-vars")) {
-					profile->perms.expand_vars = switch_true(val);
+					profile->perms.expand_vars = switch_true_byte(val);
 
 					if (profile->perms.expand_vars) {
 						switch_xml_t x_list, x_var, x_api;
@@ -2039,27 +2041,27 @@ static switch_status_t do_config(void)
 					}
 
 				} else if (!strcasecmp(var, "dial")) {
-					profile->perms.dial.enabled = switch_true(val);
+					profile->perms.dial.enabled = switch_true_byte(val);
 				} else if (!strcasecmp(var, "dial-set-context")) {
 					if (switch_true(val)) profile->perms.dial.enabled = SWITCH_TRUE;
-					profile->perms.dial.set_context = switch_true(val);
+					profile->perms.dial.set_context = switch_true_byte(val);
 				} else if (!strcasecmp(var, "dial-set-dialplan")) {
 					if (switch_true(val)) profile->perms.dial.enabled = SWITCH_TRUE;
-					profile->perms.dial.set_dp = switch_true(val);
+					profile->perms.dial.set_dp = switch_true_byte(val);
 				} else if (!strcasecmp(var, "dial-set-cid-name")) {
 					if (switch_true(val)) profile->perms.dial.enabled = SWITCH_TRUE;
-					profile->perms.dial.set_cid_name = switch_true(val);
+					profile->perms.dial.set_cid_name = switch_true_byte(val);
 				} else if (!strcasecmp(var, "dial-set-cid-number")) {
 					if (switch_true(val)) profile->perms.dial.enabled = SWITCH_TRUE;
-					profile->perms.dial.set_cid_number = switch_true(val);
+					profile->perms.dial.set_cid_number = switch_true_byte(val);
 				} else if (!strcasecmp(var, "dial-full-originate")) {
 					if (switch_true(val)) profile->perms.dial.enabled = SWITCH_TRUE;
-					profile->perms.dial.full_originate = switch_true(val);
+					profile->perms.dial.full_originate = switch_true_byte(val);
 				} else if (!strcasecmp(var, "conference")) {
-					profile->perms.conference.enabled = switch_true(val);
+					profile->perms.conference.enabled = switch_true_byte(val);
 				} else if (!strcasecmp(var, "conference-set-profile")) {
 					if (switch_true(val)) profile->perms.conference.enabled = SWITCH_TRUE;
-					profile->perms.conference.set_profile = switch_true(val);
+					profile->perms.conference.set_profile = switch_true_byte(val);
 				}
 
 			}
@@ -2069,49 +2071,49 @@ static switch_status_t do_config(void)
 
 		profile->auth_scheme = auth_scheme;
 		profile->timeout = timeout;
-		profile->url = strdup(url);
+		profile->url = switch_core_strdup(globals.pool, url);
 		switch_assert(profile->url);
 
 		if (bind_local != NULL) {
-			profile->bind_local = strdup(bind_local);
+			profile->bind_local = switch_core_strdup(globals.pool, bind_local);
 		}
 		if (method != NULL) {
-			profile->method = strdup(method);
+			profile->method = switch_core_strdup(globals.pool, method);
 		} else {
 			profile->method = NULL;
 		}
 
 		if (bind_cred) {
-			profile->cred = strdup(bind_cred);
+			profile->cred = switch_core_strdup(globals.pool, bind_cred);
 		}
 
 		profile->disable100continue = disable100continue;
 		profile->enable_cacert_check = enable_cacert_check;
 
 		if (ssl_cert_file) {
-			profile->ssl_cert_file = strdup(ssl_cert_file);
+			profile->ssl_cert_file = switch_core_strdup(globals.pool, ssl_cert_file);
 		}
 
 		if (ssl_key_file) {
-			profile->ssl_key_file = strdup(ssl_key_file);
+			profile->ssl_key_file = switch_core_strdup(globals.pool, ssl_key_file);
 		}
 
 		if (ssl_key_password) {
-			profile->ssl_key_password = strdup(ssl_key_password);
+			profile->ssl_key_password = switch_core_strdup(globals.pool, ssl_key_password);
 		}
 
 		if (ssl_version) {
-			profile->ssl_version = strdup(ssl_version);
+			profile->ssl_version = switch_core_strdup(globals.pool, ssl_version);
 		}
 
 		if (ssl_cacert_file) {
-			profile->ssl_cacert_file = strdup(ssl_cacert_file);
+			profile->ssl_cacert_file = switch_core_strdup(globals.pool, ssl_cacert_file);
 		}
 
 		profile->enable_ssl_verifyhost = enable_ssl_verifyhost;
 
 		if (cookie_file) {
-			profile->cookie_file = strdup(cookie_file);
+			profile->cookie_file = switch_core_strdup(globals.pool, cookie_file);
 		}
 
 		profile->vars_map = vars_map;
@@ -2136,7 +2138,7 @@ static switch_status_t do_config(void)
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Profile [%s] JSON Function [%s]\n",
 						  zstr(bname) ? "N/A" : bname, profile->url);
 
-		profile->name = strdup(bname);
+		profile->name = switch_core_strdup(globals.pool, bname);
 
 		switch_core_hash_insert(globals.profile_hash, bname, profile);
 
@@ -2315,9 +2317,23 @@ SWITCH_STANDARD_APP(httapi_function)
 
 /* HTTP FILE INTERFACE */
 
+static const char *find_ext(const char *in)
+{
+	const char *p = in + (strlen(in) - 1);
+	
+	while(p >= in && *p) {
+		if (*p == '/') return NULL;
+		if (*p == '.') return (p+1);
+		p--;
+	}
+
+	return NULL;
+}
+
 static char *load_cache_data(http_file_context_t *context, const char *url)
 {
-	char *ext = NULL, *dext = NULL, *p;
+	const char *ext = NULL;
+	char *dext = NULL, *p;
 	char digest[SWITCH_MD5_DIGEST_STRING_SIZE] = { 0 };
 	char meta_buffer[1024] = "";
 	int fd;
@@ -2330,11 +2346,7 @@ static char *load_cache_data(http_file_context_t *context, const char *url)
 	}
 	
 	if (zstr(ext)) {
-		if ((ext = strrchr(url, '.'))) {
-			ext++;
-		} else {
-			ext = "wav";
-		}
+		ext = find_ext(url);
 	}
 	
 	if (ext && (p = strchr(ext, '?'))) {
@@ -2346,9 +2358,8 @@ static char *load_cache_data(http_file_context_t *context, const char *url)
 	}
 
 	context->cache_file_base = switch_core_sprintf(context->pool, "%s%s%s", globals.cache_path, SWITCH_PATH_SEPARATOR, digest);
-	context->cache_file = switch_core_sprintf(context->pool, "%s%s%s.%s", globals.cache_path, SWITCH_PATH_SEPARATOR, digest, ext);
-	context->meta_file = switch_core_sprintf(context->pool, "%s.meta", context->cache_file);
-	context->lock_file = switch_core_sprintf(context->pool, "%s.lock", context->cache_file);
+	context->meta_file = switch_core_sprintf(context->pool, "%s%s%s.meta", globals.cache_path, SWITCH_PATH_SEPARATOR, digest);
+	context->lock_file = switch_core_sprintf(context->pool, "%s%s%s.lock", globals.cache_path, SWITCH_PATH_SEPARATOR, digest);
 
 	if (switch_file_exists(context->meta_file, context->pool) == SWITCH_STATUS_SUCCESS && ((fd = open(context->meta_file, O_RDONLY, 0)) > -1)) {
 		if ((bytes = read(fd, meta_buffer, sizeof(meta_buffer))) > 0) {
@@ -2361,10 +2372,19 @@ static char *load_cache_data(http_file_context_t *context, const char *url)
 				}
 				context->metadata = switch_core_strdup(context->pool, p);
 			}
+
+			if ((p = strrchr(context->metadata, ':'))) {
+				p++;
+				if (!zstr(p)) {
+					ext = p;
+				}
+			}
+
 		}
 		close(fd);
 	}
 
+	context->cache_file = switch_core_sprintf(context->pool, "%s%s%s%s%s", globals.cache_path, SWITCH_PATH_SEPARATOR, digest, ext ? "." : "", ext ? ext : "");
 	switch_safe_free(dext);
 
 	return context->cache_file;
@@ -2577,7 +2597,7 @@ static switch_status_t write_meta_file(http_file_context_t *context, const char 
 						data);
 		
 
-		status = write(fd, write_data, strlen(write_data) + 1) > 0 ? SWITCH_STATUS_SUCCESS : SWITCH_STATUS_FALSE;
+		status = write(fd, write_data, (int)strlen(write_data) + 1) > 0 ? SWITCH_STATUS_SUCCESS : SWITCH_STATUS_FALSE;
 	}
 
 	close(fd);
@@ -2624,6 +2644,7 @@ static switch_status_t locate_url_file(http_file_context_t *context, const char 
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	time_t now = switch_epoch_time_now(NULL);
 	char *metadata;
+	const char *ext = NULL;
 
 	load_cache_data(context, url);
 
@@ -2632,6 +2653,14 @@ static switch_status_t locate_url_file(http_file_context_t *context, const char 
 	}
 
 	lock_file(context, SWITCH_TRUE);
+
+	if (context->url_params) {
+		ext = switch_event_get_header(context->url_params, "ext");
+	}
+	
+	if (zstr(ext)) {
+		ext = find_ext(context->cache_file);
+	}
 
 	if (!context->url_params || !switch_true(switch_event_get_header(context->url_params, "nohead"))) {
 		const char *ct = NULL;
@@ -2648,8 +2677,7 @@ static switch_status_t locate_url_file(http_file_context_t *context, const char 
 			}
 		}
 		
-		if ((!context->url_params || !switch_event_get_header(context->url_params, "ext")) 
-			&& headers && (ct = switch_event_get_header(headers, "content-type"))) {
+		if (zstr(ext) && headers && (ct = switch_event_get_header(headers, "content-type"))) {
 			if (switch_strcasecmp_any(ct, "audio/mpeg", "audio/x-mpeg", "audio/mp3", "audio/x-mp3", "audio/mpeg3", 
 									  "audio/x-mpeg3", "audio/mpg", "audio/x-mpg", "audio/x-mpegaudio", NULL)) {
 				newext = "mp3";
@@ -2658,14 +2686,8 @@ static switch_status_t locate_url_file(http_file_context_t *context, const char 
 			}
 		}
 
-
 		if (newext) {
-			char *p;
-
-			if ((p = strrchr(context->cache_file, '.'))) {
-				*p = '\0';
-			}
-			
+			ext = newext;
 			context->cache_file = switch_core_sprintf(context->pool, "%s.%s", context->cache_file, newext);
 		}
 
@@ -2676,11 +2698,12 @@ static switch_status_t locate_url_file(http_file_context_t *context, const char 
 		}
 		
 		if (!unreachable && !zstr(context->metadata)) {
-			metadata = switch_core_sprintf(context->pool, "%s:%s:%s:%s",
+			metadata = switch_core_sprintf(context->pool, "%s:%s:%s:%s:%s",
 										   url,
 										   switch_event_get_header_nil(headers, "last-modified"),
 										   switch_event_get_header_nil(headers, "etag"),
-										   switch_event_get_header_nil(headers, "content-length")
+										   switch_event_get_header_nil(headers, "content-length"),
+										   ext
 										   );
 
 			if (!strcmp(metadata, context->metadata)) {
@@ -2699,11 +2722,12 @@ static switch_status_t locate_url_file(http_file_context_t *context, const char 
 	}
 
 
-	metadata = switch_core_sprintf(context->pool, "%s:%s:%s:%s",
+	metadata = switch_core_sprintf(context->pool, "%s:%s:%s:%s:%s",
 								   url,
 								   switch_event_get_header_nil(headers, "last-modified"),
 								   switch_event_get_header_nil(headers, "etag"),
-								   switch_event_get_header_nil(headers, "content-length")
+								   switch_event_get_header_nil(headers, "content-length"),
+								   ext
 								   );
 	
 	write_meta_file(context, metadata, headers);
@@ -2947,7 +2971,7 @@ static switch_status_t http_file_file_read(switch_file_handle_t *handle, void *d
 			*len = context->samples;
 		}
 
-		context->samples -= *len;
+		context->samples -= (int)*len;
 		memset(data, 255, *len *2);
 		status = SWITCH_STATUS_SUCCESS;
 	} else {
@@ -3009,8 +3033,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_httapi_load)
 	switch_dir_make_recursive(globals.cache_path, SWITCH_DEFAULT_DIR_PERMS, pool);
 
 	
-	switch_core_hash_init(&globals.profile_hash, globals.pool);
-	switch_core_hash_init_case(&globals.parse_hash, globals.pool, SWITCH_FALSE);
+	switch_core_hash_init(&globals.profile_hash);
+	switch_core_hash_init_case(&globals.parse_hash, SWITCH_FALSE);
 
 	bind_parser("execute", parse_execute);
 	bind_parser("sms", parse_sms);
@@ -3061,8 +3085,8 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_httapi_shutdown)
 	void *val;
 	const void *vvar;
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, &vvar, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, &vvar, NULL, &val);
 		profile = (client_profile_t *) val;
 		switch_event_destroy(&profile->dial_params.app_list);
 		switch_event_destroy(&profile->var_params.expand_var_list);

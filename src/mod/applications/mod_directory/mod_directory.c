@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -24,6 +24,7 @@
  * Contributor(s):
  * 
  * Marc Olivier Chouinard <mochouinard at moctel dot com>
+ * Emmanuel Schmidbauer <e.schmidbauer@gmail.com>
  *
  *
  * mod_directory.c -- Search by Name Directory IVR
@@ -95,6 +96,7 @@ struct dir_profile {
 	uint32_t max_menu_attempt;
 	uint32_t digit_timeout;
 	uint32_t max_result;
+	switch_bool_t use_number_alias;
 	switch_mutex_t *mutex;
 
 	switch_thread_rwlock_t *rwlock;
@@ -177,7 +179,7 @@ char *string_to_keypad_digit(const char *in)
 
 		while (*s) {
 			char c;
-			if ((c = digit_matching_keypad(*s++)) > 0) {
+			if ((c = (char)digit_matching_keypad(*s++)) > 0) {
 				*d++ = c + 48;
 			}
 		}
@@ -385,6 +387,8 @@ dir_profile_t *profile_set_config(dir_profile_t *profile)
 						   &profile->max_menu_attempt, 3, &config_int_ht_0, NULL, NULL);
 	SWITCH_CONFIG_SET_ITEM(profile->config[i++], "max-result", SWITCH_CONFIG_INT, CONFIG_RELOADABLE,
 						   &profile->max_result, 5, &config_int_ht_0, NULL, NULL);
+	SWITCH_CONFIG_SET_ITEM(profile->config[i++], "use-number-alias", SWITCH_CONFIG_BOOL, CONFIG_RELOADABLE,
+						   &profile->use_number_alias, SWITCH_FALSE, NULL, NULL, NULL);
 
 	return profile;
 
@@ -524,6 +528,92 @@ static dir_profile_t *get_profile(const char *profile_name)
 	return profile;
 }
 
+char *generate_sql_entry_for_user(switch_core_session_t *session, switch_xml_t ut, switch_bool_t use_number_alias) {
+	char *sql = NULL;
+
+	int name_visible = 1;
+	int exten_visible = 1;
+	const char *id = switch_xml_attr_soft(ut, "id");
+	const char *number_alias = switch_xml_attr_soft(ut, "number-alias");
+	const char *extension = NULL;
+	char *fullName = NULL;
+	char *caller_name = NULL;
+	char *caller_name_override = NULL;
+	char *firstName = NULL;
+	char *lastName = NULL;
+	char *fullNameDigit = NULL;
+	char *firstNameDigit = NULL;
+	char *lastNameDigit = NULL;
+	switch_xml_t x_params, x_param, x_vars, x_var;
+
+	/* Check all the user params */
+	if ((x_params = switch_xml_child(ut, "params"))) {
+		for (x_param = switch_xml_child(x_params, "param"); x_param; x_param = x_param->next) {
+			const char *var = switch_xml_attr_soft(x_param, "name");
+			const char *val = switch_xml_attr_soft(x_param, "value");
+			if (!strcasecmp(var, "directory-visible")) {
+				name_visible = switch_true(val);
+			}
+			if (!strcasecmp(var, "directory-exten-visible")) {
+				exten_visible = switch_true(val);
+			}
+
+		}
+	}
+	/* Check all the user variables */
+	if ((x_vars = switch_xml_child(ut, "variables"))) {
+		for (x_var = switch_xml_child(x_vars, "variable"); x_var; x_var = x_var->next) {
+			const char *var = switch_xml_attr_soft(x_var, "name");
+			const char *val = switch_xml_attr_soft(x_var, "value");
+			if (!strcasecmp(var, "effective_caller_id_name")) {
+				caller_name = switch_core_session_strdup(session, val);
+			}
+			if (!strcasecmp(var, "directory_full_name")) {
+				caller_name_override = switch_core_session_strdup(session, val);
+			}
+		}
+	}
+	if (caller_name_override) {
+		fullName = caller_name_override;
+	} else {
+		fullName = caller_name;
+	}
+	if (zstr(fullName)) {
+		goto end;
+	}
+	firstName = switch_core_session_strdup(session, fullName);
+
+	if ((lastName = strrchr(firstName, ' '))) {
+		*lastName++ = '\0';
+	} else {
+		lastName = switch_core_session_strdup(session, firstName);
+	}
+
+	/* switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "FullName %s firstName [%s] lastName [%s]\n", fullName, firstName, lastName); */
+	if (use_number_alias == SWITCH_TRUE && !zstr(number_alias)) {
+		extension = number_alias;
+	} else {
+		extension = id;
+	}
+
+	/* Generate Digits key mapping */
+	fullNameDigit = string_to_keypad_digit(fullName);
+	lastNameDigit = string_to_keypad_digit(lastName);
+	firstNameDigit = string_to_keypad_digit(firstName);
+
+	/* add user into DB */
+	sql = switch_mprintf("insert into directory_search values('%q','%q','%q','%q','%q','%q','%q','%q','%q','%d','%d')",
+			globals.hostname, switch_core_session_get_uuid(session), extension, fullName, fullNameDigit, firstName, firstNameDigit,
+			lastName, lastNameDigit, name_visible, exten_visible);
+
+	switch_safe_free(fullNameDigit);
+	switch_safe_free(lastNameDigit);
+	switch_safe_free(firstNameDigit);
+
+end:
+
+	return sql;
+}
 static switch_status_t populate_database(switch_core_session_t *session, dir_profile_t *profile, const char *domain_name)
 {
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
@@ -531,13 +621,15 @@ static switch_status_t populate_database(switch_core_session_t *session, dir_pro
 	char *sql = NULL;
 	char *sqlvalues = NULL;
 	char *sqltmp = NULL;
+	switch_channel_t *channel = switch_core_session_get_channel(session);
+	const char *group_selection = switch_channel_get_variable(channel, "directory_group_selection");
 	int count = 0;
 
 	switch_xml_t xml_root = NULL, x_domain;
 	switch_xml_t ut;
 
 	switch_event_t *xml_params = NULL;
-	switch_xml_t group = NULL, groups = NULL, users = NULL, x_params = NULL, x_param = NULL, x_vars = NULL, x_var = NULL;
+	switch_xml_t group = NULL, groups = NULL, users = NULL;
 	switch_event_create(&xml_params, SWITCH_EVENT_REQUEST_PARAMS);
 	switch_assert(xml_params);
 
@@ -549,91 +641,42 @@ static switch_status_t populate_database(switch_core_session_t *session, dir_pro
 
 	if ((groups = switch_xml_child(x_domain, "groups"))) {
 		for (group = switch_xml_child(groups, "group"); group; group = group->next) {
+			const char *gname = switch_xml_attr_soft(group, "name");
+
+			if (group_selection && strcasecmp(gname, group_selection)) {
+				continue;
+			}
+
 			if ((users = switch_xml_child(group, "users"))) {
 				for (ut = switch_xml_child(users, "user"); ut; ut = ut->next) {
-					int name_visible = 1;
-					int exten_visible = 1;
+					const char *uname = switch_xml_attr_soft(ut, "id");
 					const char *type = switch_xml_attr_soft(ut, "type");
-					const char *id = switch_xml_attr_soft(ut, "id");
-					char *fullName = NULL;
-					char *caller_name = NULL;
-					char *caller_name_override = NULL;
-					char *firstName = NULL;
-					char *lastName = NULL;
-					char *fullNameDigit = NULL;
-					char *firstNameDigit = NULL;
-					char *lastNameDigit = NULL;
 
 					if (!strcasecmp(type, "pointer")) {
-						continue;
-					}
-					/* Check all the user params */
-					if ((x_params = switch_xml_child(ut, "params"))) {
-						for (x_param = switch_xml_child(x_params, "param"); x_param; x_param = x_param->next) {
-							const char *var = switch_xml_attr_soft(x_param, "name");
-							const char *val = switch_xml_attr_soft(x_param, "value");
-							if (!strcasecmp(var, "directory-visible")) {
-								name_visible = switch_true(val);
-							}
-							if (!strcasecmp(var, "directory-exten-visible")) {
-								exten_visible = switch_true(val);
-							}
+						switch_xml_t ux;
 
+						if (switch_xml_locate_user_merged("id", uname, domain_name, NULL, &ux, NULL) != SWITCH_STATUS_SUCCESS) {
+							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Can't find user [%s@%s] from pointer\n", uname, domain_name);
+						} else {
+							sql = generate_sql_entry_for_user(session, ux, profile->use_number_alias);
+							switch_xml_free(ux);
+						}
+						
+					} else {
+						sql = generate_sql_entry_for_user(session, ut, profile->use_number_alias);
+					}
+
+					if (sql) {
+						if (sqlvalues) {
+							sqltmp = sqlvalues;
+							sqlvalues = switch_mprintf("%s;%s", sqltmp, sql);
+							switch_safe_free(sqltmp);
+							switch_safe_free(sql);
+						} else {
+							sqlvalues = sql;
+							sql = NULL;
 						}
 					}
-					/* Check all the user variables */
-					if ((x_vars = switch_xml_child(ut, "variables"))) {
-						for (x_var = switch_xml_child(x_vars, "variable"); x_var; x_var = x_var->next) {
-							const char *var = switch_xml_attr_soft(x_var, "name");
-							const char *val = switch_xml_attr_soft(x_var, "value");
-							if (!strcasecmp(var, "effective_caller_id_name")) {
-								caller_name = switch_core_session_strdup(session, val);
-							}
-							if (!strcasecmp(var, "directory_full_name")) {
-								caller_name_override = switch_core_session_strdup(session, val);
-							}
-						}
-					}
-					if (caller_name_override) {
-						fullName = caller_name_override;
-					} else {
-						fullName = caller_name;
-					}
-					if (zstr(fullName)) {
-						continue;
-					}
-					firstName = switch_core_session_strdup(session, fullName);
-
-					if ((lastName = strrchr(firstName, ' '))) {
-						*lastName++ = '\0';
-					} else {
-						lastName = switch_core_session_strdup(session, firstName);
-					}
-
-					/* switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "FullName %s firstName [%s] lastName [%s]\n", fullName, firstName, lastName); */
-
-					/* Generate Digits key mapping */
-					fullNameDigit = string_to_keypad_digit(fullName);
-					lastNameDigit = string_to_keypad_digit(lastName);
-					firstNameDigit = string_to_keypad_digit(firstName);
-
-					/* add user into DB */
-					sql = switch_mprintf("insert into directory_search values('%q','%q','%q','%q','%q','%q','%q','%q','%q','%d','%d')",
-										 globals.hostname, switch_core_session_get_uuid(session), id, fullName, fullNameDigit, firstName, firstNameDigit,
-										 lastName, lastNameDigit, name_visible, exten_visible);
-
-					if (sqlvalues) {
-						sqltmp = sqlvalues;
-						sqlvalues = switch_mprintf("%s;%s", sqlvalues, sql);
-						switch_safe_free(sqltmp);
-					} else {
-						sqlvalues = sql;
-						sql = NULL;
-					}
-					switch_safe_free(sql);
-					switch_safe_free(fullNameDigit);
-					switch_safe_free(lastNameDigit);
-					switch_safe_free(firstNameDigit);
 					
 					if (++count >= 100) {
 						count = 0;
@@ -830,7 +873,7 @@ switch_status_t navigate_entrys(switch_core_session_t *session, dir_profile_t *p
 				globals.hostname, switch_core_session_get_uuid(session), (params->search_by == SEARCH_BY_LAST_NAME ? "last_name_digit" : "first_name_digit"), params->digits);
 	}
 
-	sql = switch_mprintf("select count(*) from directory_search where %s", sql_where);
+	sql = switch_mprintf("select count(*) from directory_search where %s group by last_name, first_name, extension", sql_where);
 
 	directory_execute_sql_callback(globals.mutex, sql, sql2str_callback, &cbt);
 	switch_safe_free(sql);
@@ -843,7 +886,7 @@ switch_status_t navigate_entrys(switch_core_session_t *session, dir_profile_t *p
 		params->try_again = 1;
 		status = SWITCH_STATUS_BREAK;
 		goto end;
-	} else if (profile->max_result != 0 && result_count > profile->max_result) {
+	} else if (profile->max_result != 0 && (uint32_t)result_count > profile->max_result) {
 		switch_ivr_phrase_macro(session, DIR_RESULT_COUNT_TOO_LARGE, NULL, NULL, NULL);
 		params->try_again = 1;
 		status = SWITCH_STATUS_BREAK;
@@ -857,7 +900,7 @@ switch_status_t navigate_entrys(switch_core_session_t *session, dir_profile_t *p
 	memset(&listing_cbt, 0, sizeof(listing_cbt));
 	listing_cbt.params = params;
 
-	sql = switch_mprintf("select extension, full_name, last_name, first_name, name_visible, exten_visible from directory_search where %s order by last_name, first_name", sql_where);
+	sql = switch_mprintf("select extension, full_name, last_name, first_name, name_visible, exten_visible from directory_search where %s group by extension, full_name, last_name, first_name, name_visible, exten_visible order by last_name, first_name", sql_where);
 
 	for (cur_entry = 0; cur_entry < result_count; cur_entry++) {
 		listing_cbt.index = 0;
@@ -1025,7 +1068,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_directory_load)
 	memset(&globals, 0, sizeof(globals));
 	globals.pool = pool;
 
-	switch_core_hash_init(&globals.profile_hash, globals.pool);
+	switch_core_hash_init(&globals.profile_hash);
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, globals.pool);
 
 	if ((status = load_config(SWITCH_FALSE)) != SWITCH_STATUS_SUCCESS) {
@@ -1057,8 +1100,8 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_directory_shutdown)
 
 	switch_mutex_lock(globals.mutex);
 
-	while ((hi = switch_hash_first(NULL, globals.profile_hash))) {
-		switch_hash_this(hi, &key, &keylen, &val);
+	while ((hi = switch_core_hash_first(globals.profile_hash))) {
+		switch_core_hash_this(hi, &key, &keylen, &val);
 		profile = (dir_profile_t *) val;
 
 		switch_core_hash_delete(globals.profile_hash, profile->name);

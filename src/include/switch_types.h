@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -227,6 +227,15 @@ SWITCH_BEGIN_EXTERN_C
 #define SWITCH_MAX_TRANS 2000
 #define SWITCH_CORE_SESSION_MAX_PRIVATES 2
 
+/* Jitter */
+#define JITTER_VARIANCE_THRESHOLD 400.0
+/* IPDV */
+#define IPDV_THRESHOLD 1.0
+/* Burst and Lost Rate */
+#define LOST_BURST_ANALYZE 500
+/* Burst */
+#define LOST_BURST_CAPTURE 1024
+
 typedef uint8_t switch_byte_t;
 
 typedef enum {
@@ -311,7 +320,9 @@ typedef uint32_t switch_originate_flag_t;
 typedef enum {
 	SPF_NONE = 0,
 	SPF_ODD = (1 << 0),
-	SPF_EVEN = (1 << 1)
+	SPF_EVEN = (1 << 1),
+	SPF_ROBUST_TCP = (1 << 2),
+	SPF_ROBUST_UDP = (1 << 3)
 } switch_port_flag_enum_t;
 typedef uint32_t switch_port_flag_t;
 
@@ -421,7 +432,8 @@ typedef enum {
 typedef enum {
 	SSG_MASCULINE,
 	SSG_FEMININE,
-	SSG_NEUTER
+	SSG_NEUTER,
+	SSG_UTRUM
 } switch_say_gender_t;
 
 typedef enum {
@@ -589,6 +601,29 @@ typedef struct {
 	switch_size_t cng_packet_count;
 	switch_size_t flush_packet_count;
 	switch_size_t largest_jb_size;
+	/* Jitter */
+	int64_t last_proc_time;		
+	int64_t jitter_n;
+	int64_t jitter_add;
+	int64_t jitter_addsq;
+
+	double variance;
+	double min_variance;
+	double max_variance;
+	double std_deviation;
+
+	/* Burst and Packet Loss */
+	double lossrate;
+	double burstrate;
+	double mean_interval;
+	int loss[LOST_BURST_CAPTURE];
+	int last_loss;
+	int recved;	
+	int last_processed_seq;
+	switch_size_t flaws;
+	switch_size_t last_flaw;
+	double R;
+	double mos;
 } switch_rtp_numbers_t;
 
 
@@ -671,6 +706,7 @@ typedef enum {
 	SWITCH_RTP_FLAG_PAUSE,
 	SWITCH_RTP_FLAG_FIR,
 	SWITCH_RTP_FLAG_PLI,
+	SWITCH_RTP_FLAG_RESET,
 	SWITCH_RTP_FLAG_INVALID
 } switch_rtp_flag_t;
 
@@ -973,10 +1009,13 @@ typedef enum {
 	SWITCH_MESSAGE_INDICATE_BLIND_TRANSFER_RESPONSE,
 	SWITCH_MESSAGE_INDICATE_STUN_ERROR,
 	SWITCH_MESSAGE_INDICATE_MEDIA_RENEG,
+	SWITCH_MESSAGE_INDICATE_KEEPALIVE,
 	SWITCH_MESSAGE_REFER_EVENT,
 	SWITCH_MESSAGE_ANSWER_EVENT,
 	SWITCH_MESSAGE_PROGRESS_EVENT,
 	SWITCH_MESSAGE_RING_EVENT,
+	SWITCH_MESSAGE_RESAMPLE_EVENT,
+	SWITCH_MESSAGE_HEARTBEAT_EVENT,
 	SWITCH_MESSAGE_INVALID
 } switch_core_session_message_types_t;
 
@@ -1232,6 +1271,10 @@ CF_EVENT_LOCK		- Don't parse events
 CF_RESET			- Tell extension parser to reset
 CF_ORIGINATING		- Channel is originating
 CF_STOP_BROADCAST	- Signal to stop broadcast
+
+CF_AUDIO_PAUSE      - Audio is not ready to read/write
+CF_VIDEO_PAUSE      - Video is not ready to read/write
+
 </pre>
  */
 
@@ -1358,12 +1401,17 @@ typedef enum {
 	CF_DTLS,
 	CF_VERBOSE_SDP,
 	CF_DTLS_OK,
+	CF_3PCC,
 	CF_VIDEO_PASSIVE,
 	CF_NOVIDEO,
 	CF_VIDEO_ECHO,
 	CF_SLA_INTERCEPT,
 	CF_VIDEO_BREAK,
-	CF_MEDIA_PAUSE,
+	CF_AUDIO_PAUSE,
+	CF_VIDEO_PAUSE,
+	CF_BYPASS_MEDIA_AFTER_HOLD,
+	CF_HANGUP_HELD,
+	CF_CONFERENCE_RESET_MEDIA,
 	/* WARNING: DO NOT ADD ANY FLAGS BELOW THIS LINE */
 	/* IF YOU ADD NEW ONES CHECK IF THEY SHOULD PERSIST OR ZERO THEM IN switch_core_session.c switch_core_session_request_xml() */
 	CF_FLAG_MAX
@@ -2033,6 +2081,8 @@ typedef struct switch_core_port_allocator switch_core_port_allocator_t;
 typedef struct switch_media_bug switch_media_bug_t;
 typedef struct switch_limit_interface switch_limit_interface_t;
 
+typedef void (*hashtable_destructor_t)(void *ptr);
+
 struct switch_console_callback_match_node {
 	char *val;
 	struct switch_console_callback_match_node *next;
@@ -2194,9 +2244,10 @@ typedef switch_xml_t(*switch_xml_search_function_t) (const char *section,
 													 const char *tag_name, const char *key_name, const char *key_value, switch_event_t *params,
 													 void *user_data);
 
-typedef struct switch_hash switch_hash_t;
-struct HashElem;
-typedef struct HashElem switch_hash_index_t;
+struct switch_hashtable;
+struct switch_hashtable_iterator;
+typedef struct switch_hashtable switch_hash_t;
+typedef struct switch_hashtable_iterator switch_hash_index_t;
 
 struct switch_network_list;
 typedef struct switch_network_list switch_network_list_t;
@@ -2270,6 +2321,66 @@ typedef void (*switch_event_channel_func_t)(const char *event_channel, cJSON *js
 
 struct switch_live_array_s;
 typedef struct switch_live_array_s switch_live_array_t;
+
+typedef enum {
+	SDP_TYPE_REQUEST,
+	SDP_TYPE_RESPONSE
+} switch_sdp_type_t;
+
+
+typedef enum {
+	AEAD_AES_256_GCM_8,
+	AEAD_AES_128_GCM_8,
+	AES_CM_256_HMAC_SHA1_80,
+	AES_CM_192_HMAC_SHA1_80,
+	AES_CM_128_HMAC_SHA1_80,
+	AES_CM_256_HMAC_SHA1_32,
+	AES_CM_192_HMAC_SHA1_32,
+	AES_CM_128_HMAC_SHA1_32,
+	AES_CM_128_NULL_AUTH,
+	CRYPTO_INVALID
+} switch_rtp_crypto_key_type_t;
+
+typedef struct payload_map_s {
+	switch_media_type_t type;
+	switch_sdp_type_t sdp_type;
+	uint32_t ptime;
+	uint32_t rate;
+	uint8_t allocated;
+	uint8_t negotiated;
+	uint8_t current;
+	unsigned long hash;
+
+	char *rm_encoding;
+	char *iananame;
+	switch_payload_t pt;
+	unsigned long rm_rate;
+	unsigned long adv_rm_rate;
+	uint32_t codec_ms;
+	uint32_t bitrate;
+
+	char *rm_fmtp;
+
+	switch_payload_t agreed_pt;
+	switch_payload_t recv_pt;
+
+	char *fmtp_out;
+
+	char *remote_sdp_ip;
+	switch_port_t remote_sdp_port;
+
+	int channels;
+	int adv_channels;
+
+	struct payload_map_s *next;
+
+} payload_map_t;
+
+typedef enum {
+	ICE_GOOGLE_JINGLE = (1 << 0),
+	ICE_VANILLA = (1 << 1),
+	ICE_CONTROLLED = (1 << 2)
+} switch_core_media_ice_type_t;
 
 
 

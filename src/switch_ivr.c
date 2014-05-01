@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -37,7 +37,6 @@
 
 #include <switch.h>
 #include <switch_ivr.h>
-#include "stfu.h"
 
 SWITCH_DECLARE(switch_status_t) switch_ivr_sound_test(switch_core_session_t *session)
 {
@@ -166,9 +165,8 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_sleep(switch_core_session_t *session,
 		switch_goto_status(SWITCH_STATUS_SUCCESS, end);
 	}
 
-	var = switch_channel_get_variable(channel, SWITCH_SEND_SILENCE_WHEN_IDLE_VARIABLE);
-	if (var) {
-		sval = atoi(var);
+	if ((var = switch_channel_get_variable(channel, SWITCH_SEND_SILENCE_WHEN_IDLE_VARIABLE))
+		&& (sval = atoi(var))) {
 		SWITCH_IVR_VERIFY_SILENCE_DIVISOR(sval);
 	}
 
@@ -1750,6 +1748,14 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_session_transfer(switch_core_session_
 	if ((profile = switch_channel_get_caller_profile(channel))) {
 		const char *var;
 
+		if (zstr(dialplan) && (var = switch_channel_get_variable(channel, "force_transfer_dialplan"))) {
+			use_dialplan = var;
+		}
+
+		if (zstr(context) && (var = switch_channel_get_variable(channel, "force_transfer_context"))) {
+			use_context = var;
+		}
+
 		if (zstr(use_dialplan)) {
 			use_dialplan = profile->dialplan;
 			if (!zstr(use_dialplan) && !strcasecmp(use_dialplan, "inline")) {
@@ -1771,14 +1777,6 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_session_transfer(switch_core_session_
 
 		if (zstr(extension)) {
 			extension = "service";
-		}
-
-		if (zstr(dialplan) && (var = switch_channel_get_variable(channel, "force_transfer_dialplan"))) {
-			use_dialplan = var;
-		}
-
-		if (zstr(context) && (var = switch_channel_get_variable(channel, "force_transfer_context"))) {
-			use_context = var;
 		}
 
 		new_profile = switch_caller_profile_clone(session, profile);
@@ -1931,7 +1929,7 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_digit_stream_parser_new(switch_memory
 			(*parser)->pool_auto_created = pool_auto_created;
 			(*parser)->pool = pool;
 			(*parser)->digit_timeout_ms = 1000;
-			switch_core_hash_init(&(*parser)->hash, (*parser)->pool);
+			switch_core_hash_init(&(*parser)->hash);
 
 			status = SWITCH_STATUS_SUCCESS;
 		} else {
@@ -2863,6 +2861,15 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_generate_json_cdr(switch_core_session
 
 			switch_snprintf(tmp, sizeof(tmp), "%" SWITCH_TIME_T_FMT, caller_profile->times->answered);
 			cJSON_AddItemToObject(j_times, "answered_time", cJSON_CreateString(tmp));
+
+			switch_snprintf(tmp, sizeof(tmp), "%" SWITCH_TIME_T_FMT, caller_profile->times->bridged);
+			cJSON_AddItemToObject(j_times, "bridged_time", cJSON_CreateString(tmp));
+
+			switch_snprintf(tmp, sizeof(tmp), "%" SWITCH_TIME_T_FMT, caller_profile->times->last_hold);
+			cJSON_AddItemToObject(j_times, "last_hold_time", cJSON_CreateString(tmp));
+
+			switch_snprintf(tmp, sizeof(tmp), "%" SWITCH_TIME_T_FMT, caller_profile->times->hold_accum);
+			cJSON_AddItemToObject(j_times, "hold_accum_time", cJSON_CreateString(tmp));
 
 			switch_snprintf(tmp, sizeof(tmp), "%" SWITCH_TIME_T_FMT, caller_profile->times->hungup);
 			cJSON_AddItemToObject(j_times, "hangup_time", cJSON_CreateString(tmp));

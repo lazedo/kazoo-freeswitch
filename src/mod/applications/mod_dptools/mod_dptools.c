@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -32,6 +32,7 @@
  * Cesar Cepeda <cesar@auronix.com>
  * Christopher M. Rienzo <chris@rienzo.com>
  * Seven Du <dujinfang@gmail.com>
+ * William King <william.king@quentustech.com>
  *
  * mod_dptools.c -- Raw Audio File Streaming Application Module
  *
@@ -551,6 +552,31 @@ SWITCH_STANDARD_APP(heartbeat_function)
 	if (data) {
 		seconds = atoi(data);
 		if (seconds >= 0) {
+
+			switch_core_session_enable_heartbeat(session, seconds);
+			return;
+		}
+	}
+
+	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Usage: %s\n", HEARTBEAT_SYNTAX);
+
+}
+
+
+#define KEEPALIVE_SYNTAX "[0|<seconds>]"
+SWITCH_STANDARD_APP(keepalive_function)
+{
+	int seconds = 0;
+
+	if (data) {
+		seconds = atoi(data);
+		if (seconds >= 0) {
+			switch_core_session_message_t msg = { 0 };
+
+			msg.message_id = SWITCH_MESSAGE_INDICATE_KEEPALIVE;
+			msg.numeric_arg = seconds;
+			switch_core_session_receive_message(session, &msg);
+			
 			switch_core_session_enable_heartbeat(session, seconds);
 			return;
 		}
@@ -1172,6 +1198,13 @@ SWITCH_STANDARD_APP(delay_function)
 
 SWITCH_STANDARD_APP(eval_function)
 {
+	return;
+}
+
+SWITCH_STANDARD_APP(set_media_stats_function)
+{
+	switch_core_media_set_stats(session);
+
 	return;
 }
 
@@ -3581,7 +3614,8 @@ static switch_status_t pickup_event_handler(switch_core_session_t *session)
 	switch_channel_t *channel = switch_core_session_get_channel(session);
 	switch_channel_state_t state = switch_channel_get_running_state(channel);
 	pickup_pvt_t *tech_pvt = switch_core_session_get_private(session);
-	
+	char *uuid = NULL;
+
 	switch(state) {
 	case CS_DESTROY:
 		if (tech_pvt->vars) {
@@ -3605,7 +3639,8 @@ static switch_status_t pickup_event_handler(switch_core_session_t *session)
 				switch_channel_clear_flag(channel, CF_CHANNEL_SWAP);
 			}
 
-			pickup_pop_uuid(tech_pvt->key, switch_core_session_get_uuid(session));
+			uuid = pickup_pop_uuid(tech_pvt->key, switch_core_session_get_uuid(session));
+			switch_safe_free(uuid);
 		}
 		break;
 	default:
@@ -4792,7 +4827,7 @@ SWITCH_STANDARD_APP(blind_transfer_ack_function)
 	switch_bool_t val = 0;
 
 	if (data) {
-		val = switch_true((char *) val);
+		val = (switch_bool_t)switch_true((char *) data);
 	}
 
 	switch_ivr_blind_transfer_ack(session, val);
@@ -5276,7 +5311,7 @@ void *SWITCH_THREAD_FUNC call_monitor_thread(switch_thread_t *thread, void *obj)
 	switch_mutex_t *mutex;
 	uint32_t counter = 0;
 	switch_memory_pool_t *pool = cm->pool;
-	int size;
+	unsigned int size;
 	char *argv[512] = { 0 };
 	int busy = 0;
 	switch_event_t *var_event = NULL;
@@ -5614,6 +5649,10 @@ SWITCH_STANDARD_API(page_api_function)
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_dptools_shutdown)
 {
 	switch_event_unbind_callback(pickup_pres_event_handler);
+	switch_mutex_destroy(globals.pickup_mutex);
+	switch_core_hash_destroy(&globals.pickup_hash);
+	switch_mutex_destroy(globals.mutex_mutex);
+	switch_core_hash_destroy(&globals.mutex_hash);
 
 	return SWITCH_STATUS_SUCCESS;
 }
@@ -5627,9 +5666,9 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dptools_load)
 	switch_file_interface_t *file_interface;
 
 	globals.pool = pool;
-	switch_core_hash_init(&globals.pickup_hash, globals.pool);
+	switch_core_hash_init(&globals.pickup_hash);
 	switch_mutex_init(&globals.pickup_mutex, SWITCH_MUTEX_NESTED, globals.pool);
-	switch_core_hash_init(&globals.mutex_hash, globals.pool);
+	switch_core_hash_init(&globals.mutex_hash);
 	switch_mutex_init(&globals.mutex_mutex, SWITCH_MUTEX_NESTED, globals.pool);
 
 	/* connect my internal structure to the blank pointer passed to me */
@@ -5729,6 +5768,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dptools_load)
 	SWITCH_ADD_APP(app_interface, "strftime", "strftime", "strftime", strftime_function, "[<epoch>|]<format string>", SAF_SUPPORT_NOMEDIA);
 	SWITCH_ADD_APP(app_interface, "phrase", "Say a Phrase", "Say a Phrase", phrase_function, "<macro_name>,<data>", SAF_NONE);
 	SWITCH_ADD_APP(app_interface, "eval", "Do Nothing", "Do Nothing", eval_function, "", SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC | SAF_ZOMBIE_EXEC);
+	SWITCH_ADD_APP(app_interface, "set_media_stats", "Set Media Stats", "Set Media Stats", set_media_stats_function, "", SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC | SAF_ZOMBIE_EXEC);
 	SWITCH_ADD_APP(app_interface, "stop", "Do Nothing", "Do Nothing", eval_function, "", SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC);
 	SWITCH_ADD_APP(app_interface, "set_zombie_exec", "Enable Zombie Execution", "Enable Zombie Execution", 
 				   zombie_function, "", SAF_SUPPORT_NOMEDIA | SAF_ROUTING_EXEC);
@@ -5805,6 +5845,10 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_dptools_load)
 				   sched_heartbeat_function, SCHED_HEARTBEAT_SYNTAX, SAF_SUPPORT_NOMEDIA);
 	SWITCH_ADD_APP(app_interface, "enable_heartbeat", "Enable Media Heartbeat", "Enable Media Heartbeat",
 				   heartbeat_function, HEARTBEAT_SYNTAX, SAF_SUPPORT_NOMEDIA);
+
+	SWITCH_ADD_APP(app_interface, "enable_keepalive", "Enable Keepalive", "Enable Keepalive",
+				   keepalive_function, KEEPALIVE_SYNTAX, SAF_SUPPORT_NOMEDIA);
+
 	SWITCH_ADD_APP(app_interface, "media_reset", "Reset all bypass/proxy media flags", "Reset all bypass/proxy media flags", media_reset_function, "", SAF_SUPPORT_NOMEDIA);
 	SWITCH_ADD_APP(app_interface, "mkdir", "Create a directory", "Create a directory", mkdir_function, MKDIR_SYNTAX, SAF_SUPPORT_NOMEDIA);
 	SWITCH_ADD_APP(app_interface, "rename", "Rename file", "Rename file", rename_function, RENAME_SYNTAX, SAF_SUPPORT_NOMEDIA | SAF_ZOMBIE_EXEC);

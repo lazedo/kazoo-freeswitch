@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -29,10 +29,10 @@
  * mod_event_multicast.c -- Multicast Events
  *
  */
+#include <switch.h>
 #ifdef HAVE_OPENSSL
 #include <openssl/evp.h>
 #endif
-#include <switch.h>
 
 #define MULTICAST_BUFFSIZE 65536
 
@@ -228,7 +228,7 @@ static void event_handler(switch_event_t *event)
 			switch_safe_free(globals.psk);
 			globals.psk = NULL;
 		}
-		switch_core_hash_init(&globals.event_hash, module_pool);
+		switch_core_hash_init(&globals.event_hash);
 		memset(globals.event_list, 0, SWITCH_EVENT_ALL + 1);
 		if (load_config() != SWITCH_STATUS_SUCCESS) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Failed to reload config file\n");
@@ -247,8 +247,8 @@ static void event_handler(switch_event_t *event)
 		struct peer_status *last;
 		char *host;
 
-		for (cur = switch_hash_first(NULL, globals.peer_hash); cur; cur = switch_hash_next(cur)) {
-			switch_hash_this(cur, &key, &keylen, &value);
+		for (cur = switch_core_hash_first(globals.peer_hash); cur; cur = switch_core_hash_next(&cur)) {
+			switch_core_hash_this(cur, &key, &keylen, &value);
 			host = (char *) key;
 			last = (struct peer_status *) value;
 			if (last->active && (now - (last->lastseen)) > 60) {
@@ -351,8 +351,8 @@ SWITCH_STANDARD_API(multicast_peers)
 	char *host;
 	int i = 0;
 
-	for (cur = switch_hash_first(NULL, globals.peer_hash); cur; cur = switch_hash_next(cur)) {
-		switch_hash_this(cur, &key, &keylen, &value);
+	for (cur = switch_core_hash_first(globals.peer_hash); cur; cur = switch_core_hash_next(&cur)) {
+		switch_core_hash_this(cur, &key, &keylen, &value);
 		host = (char *) key;
 		last = (struct peer_status *) value;
 
@@ -377,8 +377,8 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_event_multicast_load)
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, pool);
 	module_pool = pool;
 
-	switch_core_hash_init(&globals.event_hash, module_pool);
-	switch_core_hash_init(&globals.peer_hash, module_pool);
+	switch_core_hash_init(&globals.event_hash);
+	switch_core_hash_init(&globals.peer_hash);
 
 	globals.key_count = 0;
 
@@ -412,7 +412,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_event_multicast_load)
 		switch_goto_status(SWITCH_STATUS_TERM, fail);
 	}
 
-	if (switch_mcast_loopback(globals.udp_socket, globals.loopback) != SWITCH_STATUS_SUCCESS) {
+	if (switch_mcast_loopback(globals.udp_socket, (uint8_t)globals.loopback) != SWITCH_STATUS_SUCCESS) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to set loopback to '%d'\n", globals.loopback);
 		switch_goto_status(SWITCH_STATUS_TERM, fail);
 	}
@@ -573,7 +573,7 @@ SWITCH_MODULE_RUNTIME_FUNCTION(mod_event_multicast_runtime)
 			char *var, *val, *term = NULL, tmpname[128];
 			switch_event_add_header_string(local_event, SWITCH_STACK_BOTTOM, "Multicast", "yes");
 			var = packet;
-			while (*var) {
+			while (var && *var) {
 				if ((val = strchr(var, ':')) != 0) {
 					*val++ = '\0';
 					while (*val == ' ') {

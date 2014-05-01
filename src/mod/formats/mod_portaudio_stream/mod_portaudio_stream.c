@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -582,7 +582,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_portaudio_stream_load)
 	globals.running = 1;
 	globals.threads = 0;
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, module_pool);
-	switch_core_hash_init(&globals.source_hash, module_pool);
+	switch_core_hash_init(&globals.source_hash);
 
 
 	/* indicate that the module should continue to be loaded */

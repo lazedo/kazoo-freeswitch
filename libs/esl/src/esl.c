@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2012, Anthony Minessale II
+ * Copyright (c) 2007-2014, Anthony Minessale II
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -528,10 +528,10 @@ ESL_DECLARE(esl_status_t) esl_execute(esl_handle_t *handle, const char *app, con
 {
 	char cmd_buf[128] = "sendmsg";
 	char app_buf[512] = "";
-	char arg_buf[512] = "";
+	char arg_buf[4096] = "";
 	const char *el_buf = "event-lock: true\n";
 	const char *bl_buf = "async: true\n";
-	char send_buf[1292] = "";
+	char send_buf[5120] = "";
 	
     if (!handle || !handle->connected || handle->sock == ESL_SOCK_INVALID) {
         return ESL_FAIL;
@@ -645,13 +645,14 @@ struct thread_handler {
 	esl_socket_t server_sock;
 	esl_socket_t client_sock;
 	struct sockaddr_in addr;
+	void *user_data;
 };
 
 static void *client_thread(esl_thread_t *me, void *obj)
 {
 	struct thread_handler *handler = (struct thread_handler *) obj;
 
-	handler->callback(handler->server_sock, handler->client_sock, &handler->addr);
+	handler->callback(handler->server_sock, handler->client_sock, &handler->addr, handler->user_data);
 	free(handler);
 
 	return NULL;
@@ -679,7 +680,7 @@ static int prepare_sock(esl_socket_t sock)
 }
 
 
-ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_listen_callback_t callback, esl_socket_t *server_sockP)
+ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_listen_callback_t callback, void *user_data, esl_socket_t *server_sockP)
 {
 	esl_socket_t server_sock = ESL_SOCK_INVALID;
 	struct sockaddr_in addr;
@@ -728,7 +729,7 @@ ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_list
 			goto end;
 		}
 		prepare_sock(client_sock);
-		callback(server_sock, client_sock, &echoClntAddr);
+		callback(server_sock, client_sock, &echoClntAddr, user_data);
 	}
 
  end:
@@ -742,7 +743,7 @@ ESL_DECLARE(esl_status_t) esl_listen(const char *host, esl_port_t port, esl_list
 
 }
 
-ESL_DECLARE(esl_status_t) esl_listen_threaded(const char *host, esl_port_t port, esl_listen_callback_t callback, int max)
+ESL_DECLARE(esl_status_t) esl_listen_threaded(const char *host, esl_port_t port, esl_listen_callback_t callback, void *user_data, int max)
 {
 	esl_socket_t server_sock = ESL_SOCK_INVALID;
 	struct sockaddr_in addr;
@@ -796,6 +797,7 @@ ESL_DECLARE(esl_status_t) esl_listen_threaded(const char *host, esl_port_t port,
 		handler->server_sock = server_sock;
 		handler->client_sock = client_sock;
 		handler->addr = echoClntAddr;
+		handler->user_data = user_data;
 		esl_thread_create_detached(client_thread, handler);
 	}
 
@@ -831,6 +833,10 @@ ESL_DECLARE(int) esl_wait_sock(esl_socket_t sock, uint32_t ms, esl_poll_t flags)
 	fd_set wfds;
 	fd_set efds;
 	struct timeval tv;
+
+        if (sock == ESL_SOCK_INVALID) {
+                return ESL_SOCK_INVALID;
+        }
 
 	FD_ZERO(&rfds);
 	FD_ZERO(&wfds);
@@ -911,7 +917,11 @@ ESL_DECLARE(int) esl_wait_sock(esl_socket_t sock, uint32_t ms, esl_poll_t flags)
 {
 	struct pollfd pfds[2] = { { 0 } };
 	int s = 0, r = 0;
-	
+
+	if (sock == ESL_SOCK_INVALID) {
+		return ESL_SOCK_INVALID;
+	}	
+
 	pfds[0].fd = sock;
 
 	if ((flags & ESL_POLL_READ)) {
@@ -965,7 +975,7 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 	int err = WSAStartup(wVersionRequested, &wsaData);
 	if (err != 0) {
 		snprintf(handle->err, sizeof(handle->err), "WSAStartup Error");
-		return ESL_FAIL;
+		goto fail;
 	}
 
 #endif
@@ -985,8 +995,8 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 		goto fail;
 	}
 
-	memcpy(&handle->sockaddr, result->ai_addr, sizeof(handle->sockaddr));	
-        switch(handle->sockaddr.ss_family) {
+	memcpy(&handle->sockaddr, result->ai_addr, result->ai_addrlen);	
+	switch(handle->sockaddr.ss_family) {
 		case AF_INET:
 			sockaddr_in = (struct sockaddr_in*)&(handle->sockaddr);
 			sockaddr_in->sin_port = htons(port);
@@ -1007,7 +1017,7 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
 	
 	if (handle->sock == ESL_SOCK_INVALID) {
 		snprintf(handle->err, sizeof(handle->err), "Socket Error");
-		return ESL_FAIL;
+		goto fail;
 	}
 
 	if (timeout) {
@@ -1108,7 +1118,6 @@ ESL_DECLARE(esl_status_t) esl_connect_timeout(esl_handle_t *handle, const char *
  fail:
 
 	handle->connected = 0;
-	esl_disconnect(handle);
 
 	return ESL_FAIL;
 }
@@ -1228,12 +1237,14 @@ static esl_ssize_t handle_recv(esl_handle_t *handle, void *data, esl_size_t data
 	
 	if (handle->connected) {
 		if ((activity = esl_wait_sock(handle->sock, 1000, ESL_POLL_READ|ESL_POLL_ERROR)) > 0) {
-			if ((activity & ESL_POLL_ERROR)) {
+			if (activity < 0) {
+				activity = -1;
+			} else if ((activity & ESL_POLL_ERROR)) {
 				activity = -1;
 			} else if ((activity & ESL_POLL_READ)) {
 				if (!(activity = recv(handle->sock, data, datalen, 0))) {
 					activity = -1;
-				} else if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+				} else if (activity < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)) {
 					activity = 0;
 				}
 			}
@@ -1556,7 +1567,7 @@ ESL_DECLARE(esl_status_t) esl_send_recv_timed(esl_handle_t *handle, const char *
 	if (handle->last_sr_event) {
 		char *ct = esl_event_get_header(handle->last_sr_event,"content-type");
 
-		if (strcasecmp(ct, "api/response") && strcasecmp(ct, "command/reply")) {
+		if (ct && strcasecmp(ct, "api/response") && strcasecmp(ct, "command/reply")) {
 			esl_event_t *ep;
 
 			for(ep = handle->race_event; ep && ep->next; ep = ep->next);

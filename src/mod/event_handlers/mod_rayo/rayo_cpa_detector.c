@@ -31,6 +31,8 @@
 static struct {
 	/** detectors supported by this module mapped by signal-type */
 	switch_hash_t *detectors;
+	/** synchronizes access to detectors */
+	switch_mutex_t *detectors_mutex;
 } globals;
 
 struct rayo_cpa_detector;
@@ -247,6 +249,17 @@ done:
 }
 
 /**
+ * Detector definition destructor
+ */
+static void destroy_detector(void *ptr)
+{
+    struct rayo_cpa_detector *detector = (struct rayo_cpa_detector *) ptr;
+	if (detector->signal_type_map) {
+		switch_core_hash_destroy(&detector->signal_type_map);
+	}
+}
+
+/**
  * Configure CPA
  */
 static switch_status_t do_config(switch_memory_pool_t *pool, const char *config_file)
@@ -261,7 +274,7 @@ static switch_status_t do_config(switch_memory_pool_t *pool, const char *config_
 		return SWITCH_STATUS_TERM;
 	}
 
-	switch_core_hash_init(&bound_events, pool);
+	switch_core_hash_init(&bound_events);
 
 	cpa_xml = switch_xml_child(cfg, "cpa");
 	if (cpa_xml) {
@@ -279,7 +292,7 @@ static switch_status_t do_config(switch_memory_pool_t *pool, const char *config_
 			}
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "CPA detector: %s\n", name);
 			detector = switch_core_alloc(pool, sizeof(*detector));
-			switch_core_hash_init(&detector->signal_type_map, pool);
+			switch_core_hash_init(&detector->signal_type_map);
 			detector->name = switch_core_strdup(pool, name);
 			switch_uuid_str(id, sizeof(id));
 			detector->uuid = switch_core_strdup(pool, id);
@@ -351,7 +364,7 @@ static switch_status_t do_config(switch_memory_pool_t *pool, const char *config_
 						/* add signal-type to detector mapping */
 						const char *signal_type_ns = switch_core_sprintf(pool, "%s%s:%s", RAYO_CPA_BASE, signal_type, RAYO_VERSION);
 						event_ok = 1;
-						switch_core_hash_insert(globals.detectors, signal_type_ns, detector);
+						switch_core_hash_insert_destructor(globals.detectors, signal_type_ns, detector, destroy_detector);
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Adding CPA %s => %s\n", signal_type_ns, detector->name);
 					}
 
@@ -390,10 +403,12 @@ static switch_status_t rayo_cpa_detector_signal_types(const char *line, const ch
 	const void *vvar;
 	switch_console_callback_match_t *my_matches = NULL;
 
-	for (hi = switch_hash_first(NULL, globals.detectors); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, &vvar, NULL, &val);
+	switch_mutex_lock(globals.detectors_mutex);
+	for (hi = switch_core_hash_first(globals.detectors); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, &vvar, NULL, &val);
 		switch_console_push_match(&my_matches, (const char *) vvar);
 	}
+	switch_mutex_unlock(globals.detectors_mutex);
 
 	if (my_matches) {
 		*matches = my_matches;
@@ -414,16 +429,19 @@ switch_status_t rayo_cpa_detector_load(switch_loadable_module_interface_t **modu
 {
 	switch_api_interface_t *api_interface;
 
+	switch_core_hash_init(&globals.detectors);
+	switch_mutex_init(&globals.detectors_mutex, SWITCH_MUTEX_NESTED, pool);
+
+	if (do_config(pool, config_file) != SWITCH_STATUS_SUCCESS) {
+		return SWITCH_STATUS_TERM;
+	}
+
 	SWITCH_ADD_API(api_interface, "rayo_cpa", "Query rayo status", rayo_cpa_detector_api, RAYO_CPA_DETECTOR_SYNTAX);
 
 	switch_console_set_complete("add rayo_cpa ::console::list_uuid ::rayo_cpa::list_signal_types start");
 	switch_console_set_complete("add rayo_cpa ::console::list_uuid ::rayo_cpa::list_signal_types stop");
 	switch_console_add_complete_func("::rayo_cpa::list_signal_types", rayo_cpa_detector_signal_types);
 
-	switch_core_hash_init(&globals.detectors, pool);
-	if (do_config(pool, config_file) != SWITCH_STATUS_SUCCESS) {
-		return SWITCH_STATUS_TERM;
-	}
 	return SWITCH_STATUS_SUCCESS;
 }
 

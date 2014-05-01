@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -38,17 +38,6 @@
 SWITCH_BEGIN_EXTERN_C
 
 #define SWITCH_MAX_CAND_ACL 25
-
-typedef enum {
-	SDP_TYPE_REQUEST,
-	SDP_TYPE_RESPONSE
-} switch_sdp_type_t;
-
-typedef enum {
-	ICE_GOOGLE_JINGLE = (1 << 0),
-	ICE_VANILLA = (1 << 1),
-	ICE_CONTROLLED = (1 << 2)
-} switch_core_media_ice_type_t;
 
 typedef enum {
 	DTMF_2833,
@@ -157,53 +146,6 @@ typedef struct switch_core_media_params_s {
 
 } switch_core_media_params_t;
 
-typedef struct xpayload_map_s {
-	uint32_t pt;
-	uint32_t send_pt;
-	uint32_t rate;
-	uint32_t ptime;
-	switch_media_type_t type;
-	uint8_t negotiated;
-	char *name;
-	switch_sdp_type_t sdp_type;
-	unsigned long hash;
-	struct xpayload_map_s *next;
-} xpayload_map_t;
-
-typedef struct payload_map_s {
-	switch_media_type_t type;
-	switch_sdp_type_t sdp_type;
-	uint32_t ptime;
-	uint32_t rate;
-	uint8_t allocated;
-	uint8_t negotiated;
-	unsigned long hash;
-
-	char *rm_encoding;
-	char *iananame;
-	switch_payload_t pt;
-	unsigned long rm_rate;
-	unsigned long adv_rm_rate;
-	uint32_t codec_ms;
-	uint32_t bitrate;
-
-	char *rm_fmtp;
-
-	switch_payload_t agreed_pt;
-	switch_payload_t recv_pt;
-
-	char *fmtp_out;
-
-	char *remote_sdp_ip;
-	switch_port_t remote_sdp_port;
-
-	int channels;
-	int adv_channels;
-
-	struct payload_map_s *next;
-
-} payload_map_t;
-
 static inline const char *switch_media_type2str(switch_media_type_t type)
 {
 	switch(type) {
@@ -227,7 +169,7 @@ SWITCH_DECLARE(void) switch_media_handle_set_media_flag(switch_media_handle_t *s
 SWITCH_DECLARE(void) switch_media_handle_clear_media_flag(switch_media_handle_t *smh, switch_core_media_flag_t flag);
 SWITCH_DECLARE(int32_t) switch_media_handle_test_media_flag(switch_media_handle_t *smh, switch_core_media_flag_t flag);
 SWITCH_DECLARE(void) switch_media_handle_set_media_flags(switch_media_handle_t *smh, switch_core_media_flag_t flags[]);
-SWITCH_DECLARE(void) switch_core_session_check_outgoing_crypto(switch_core_session_t *session, const char *sec_var);
+SWITCH_DECLARE(void) switch_core_session_check_outgoing_crypto(switch_core_session_t *session);
 SWITCH_DECLARE(const char *) switch_core_session_local_crypto_key(switch_core_session_t *session, switch_media_type_t type);
 SWITCH_DECLARE(int) switch_core_session_check_incoming_crypto(switch_core_session_t *session, 
 															  const char *varname,
@@ -322,6 +264,12 @@ SWITCH_DECLARE(payload_map_t *) switch_core_media_add_payload_map(switch_core_se
 																  uint32_t rate, 
 																  uint32_t ptime, 
 																  uint8_t negotiated);
+
+
+SWITCH_DECLARE(switch_rtp_crypto_key_type_t) switch_core_media_crypto_str2type(const char *str);
+SWITCH_DECLARE(const char *) switch_core_media_crypto_type2str(switch_rtp_crypto_key_type_t type);
+SWITCH_DECLARE(int) switch_core_media_crypto_keylen(switch_rtp_crypto_key_type_t type);
+
 
 SWITCH_END_EXTERN_C
 #endif

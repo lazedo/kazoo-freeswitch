@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -82,7 +82,7 @@ SWITCH_DECLARE(switch_status_t) switch_frame_alloc(switch_frame_t **frame, switc
 	switch_zmalloc(new_frame, sizeof(*new_frame));
 
 	switch_set_flag(new_frame, SFF_DYNAMIC);
-	new_frame->buflen = size;
+	new_frame->buflen = (uint32_t)size;
 	new_frame->data = malloc(size);
 	switch_assert(new_frame->data);
 
@@ -167,7 +167,7 @@ SWITCH_DECLARE(char *) switch_find_parameter(const char *str, const char *param,
 		next = strchr(ptr, ';');
 
 		if (!strncasecmp(ptr, param, len) && *e == '=') {
-			int mlen;
+			size_t mlen;
 
 			ptr = ++e;
 
@@ -2149,7 +2149,7 @@ SWITCH_DECLARE(char *) switch_escape_string(const char *in, char *out, switch_si
 
 SWITCH_DECLARE(char *) switch_escape_string_pool(const char *in, switch_memory_pool_t *pool)
 {
-	int len = strlen(in) * 2 + 1;
+	size_t len = strlen(in) * 2 + 1;
 	char *buf = switch_core_alloc(pool, len);
 	return switch_escape_string(in, buf, len);
 }
@@ -3115,44 +3115,25 @@ SWITCH_DECLARE(int) switch_tod_cmp(const char *exp, int val)
 
 SWITCH_DECLARE(int) switch_split_user_domain(char *in, char **user, char **domain)
 {
-	char *p = NULL, *h = NULL, *u = in;
+	char *p = NULL, *h = NULL, *u = NULL;
 
-	if (!in) {
-		return 0;
-	}
+	if (!in) return 0;
 
-	/* First isolate the host part from the user part */
-	if ((h = strchr(u, '@'))) {
-		*h++ = '\0';
-	}
+	/* Remove URL scheme */
+	if (!strncasecmp(in, "sip:", 4)) in += 4;
+	else if (!strncasecmp(in, "sips:", 5)) in += 5;
 
-	/* Clean out the user part of its protocol prefix (if any) */
-	if ((p = strchr(u, ':'))) {
-		*p++ = '\0';
-		u = p;
-	}
+	/* Isolate the host part from the user part */
+	if ((h = in, p = strchr(h, '@'))) *p = '\0', u = in, h = p+1;
 
 	/* Clean out the host part of any suffix */
-	if (h) {
-		if ((p = strchr(h, ':'))) {
-			*p = '\0';
+	for (p = h; *p; p++)
+		if (*p == ':' || *p == ';' || *p == ' ') {
+			*p = '\0'; break;
 		}
 
-		if ((p = strchr(h, ';'))) {
-			*p = '\0';
-		}
-
-		if ((p = strchr(h, ' '))) {
-			*p = '\0';
-		}
-	}
-	if (user) {
-		*user = u;
-	}
-	if (domain) {
-		*domain = h;
-	}
-
+	if (user) *user = u;
+	if (domain) *domain = h;
 	return 1;
 }
 

@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -71,7 +71,7 @@ static valet_lot_t *valet_find_lot(const char *name, switch_bool_t create)
 		switch_zmalloc(lot, sizeof(*lot));
 		lot->name = strdup(name);
 		switch_mutex_init(&lot->mutex, SWITCH_MUTEX_NESTED, globals.pool);
-		switch_core_hash_init(&lot->hash, NULL);
+		switch_core_hash_init(&lot->hash);
 		switch_core_hash_insert(globals.hash, name, lot);
 	}
 	switch_mutex_unlock(globals.mutex);
@@ -105,7 +105,7 @@ static void check_timeouts(void)
 	valet_lot_t *lot;
 	switch_console_callback_match_t *matches = NULL;
 	switch_console_callback_match_node_t *m;
-	switch_hash_index_t *i_hi;
+	switch_hash_index_t *i_hi = NULL;
 	const void *i_var;
 	void *i_val;
 	char *i_ext;
@@ -120,8 +120,8 @@ static void check_timeouts(void)
 	}
 
 	globals.last_timeout_check = now;
-	for (hi = switch_hash_first(NULL, globals.hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, &var, NULL, &val);
+	for (hi = switch_core_hash_first(globals.hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, &var, NULL, &val);
 		switch_console_push_match(&matches, (const char *) var);
 	}
 	switch_mutex_unlock(globals.mutex);
@@ -135,8 +135,8 @@ static void check_timeouts(void)
 
 		top:
 		
-			for (i_hi = switch_hash_first(NULL, lot->hash); i_hi; i_hi = switch_hash_next(i_hi)) {
-				switch_hash_this(i_hi, &i_var, NULL, &i_val);
+			for (i_hi = switch_core_hash_first_iter( lot->hash, i_hi); i_hi; i_hi = switch_core_hash_next(&i_hi)) {
+				switch_core_hash_this(i_hi, &i_var, NULL, &i_val);
 				i_ext = (char *) i_var;
 				token = (valet_token_t *) i_val;
 
@@ -146,6 +146,7 @@ static void check_timeouts(void)
 					goto top;
 				}
 			}
+			switch_safe_free(i_hi);
 
 			switch_mutex_unlock(lot->mutex);
 		}
@@ -162,13 +163,14 @@ static int find_longest(valet_lot_t *lot, int min, int max)
 	const void *i_var;
 	void *i_val;
 	valet_token_t *token;
-	int longest = 0, cur = 0, longest_ext = 0;
+	int longest_ext = 0;
+	time_t longest = 0, cur = 0;
 	time_t now = switch_epoch_time_now(NULL);
 
 	switch_mutex_lock(lot->mutex);
-	for (i_hi = switch_hash_first(NULL, lot->hash); i_hi; i_hi = switch_hash_next(i_hi)) {
+	for (i_hi = switch_core_hash_first(lot->hash); i_hi; i_hi = switch_core_hash_next(&i_hi)) {
 		int i;
-		switch_hash_this(i_hi, &i_var, NULL, &i_val);
+		switch_core_hash_this(i_hi, &i_var, NULL, &i_val);
 		token = (valet_token_t *) i_val;
 		cur = (now - token->start_time);
 		i = atoi(token->ext);
@@ -256,8 +258,8 @@ static int valet_lot_count(valet_lot_t *lot)
 	now = switch_epoch_time_now(NULL);
 
 	switch_mutex_lock(lot->mutex);
-	for (i_hi = switch_hash_first(NULL, lot->hash); i_hi; i_hi = switch_hash_next(i_hi)) {
-		switch_hash_this(i_hi, &i_var, NULL, &i_val);
+	for (i_hi = switch_core_hash_first(lot->hash); i_hi; i_hi = switch_core_hash_next(&i_hi)) {
+		switch_core_hash_this(i_hi, &i_var, NULL, &i_val);
 		token = (valet_token_t *) i_val;
 		if (token->timeout > 0 && (token->timeout < now || token->timeout == 1)) {
 			continue;
@@ -607,7 +609,7 @@ SWITCH_STANDARD_APP(valet_parking_function)
 		}
 
 		dest = switch_core_session_sprintf(session, "%s%s%s%s"
-										   "set:valet_ticket=%s,set:valet_hold_music=%s,sleep:1000,valet_park:%s %s", 
+										   "set:valet_ticket=%s,set:valet_hold_music='%s',sleep:1000,valet_park:%s %s", 
 										   timeout_str,
 										   orbit_exten_str,
 										   orbit_dialplan_str,
@@ -737,13 +739,13 @@ SWITCH_STANDARD_API(valet_info_function)
 	stream->write_function(stream, "<lots>\n");
 
 	switch_mutex_lock(globals.mutex);
-	for (hi = switch_hash_first(NULL, globals.hash); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(globals.hash); hi; hi = switch_core_hash_next(&hi)) {
 		switch_hash_index_t *i_hi;
 		const void *i_var;
 		void *i_val;
 		char *i_ext;
 
-		switch_hash_this(hi, &var, NULL, &val);
+		switch_core_hash_this(hi, &var, NULL, &val);
 		name = (char *) var;
 		lot = (valet_lot_t *) val;
 
@@ -753,10 +755,10 @@ SWITCH_STANDARD_API(valet_info_function)
 		stream->write_function(stream, "  <lot name=\"%s\">\n", name);
 
 		switch_mutex_lock(lot->mutex);
-		for (i_hi = switch_hash_first(NULL, lot->hash); i_hi; i_hi = switch_hash_next(i_hi)) {
+		for (i_hi = switch_core_hash_first(lot->hash); i_hi; i_hi = switch_core_hash_next(&i_hi)) {
 			valet_token_t *token;
 
-			switch_hash_this(i_hi, &i_var, NULL, &i_val);
+			switch_core_hash_this(i_hi, &i_var, NULL, &i_val);
 			i_ext = (char *) i_var;
 			token = (valet_token_t *) i_val;
 
@@ -805,24 +807,22 @@ static void pres_event_handler(switch_event_t *event)
 
 		if (count) {
 			if (switch_event_create(&event, SWITCH_EVENT_PRESENCE_IN) == SWITCH_STATUS_SUCCESS) {
-				if (switch_event_create(&event, SWITCH_EVENT_PRESENCE_IN) == SWITCH_STATUS_SUCCESS) {
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", VALET_PROTO);
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "login", lot_name);
-					switch_event_add_header(event, SWITCH_STACK_BOTTOM, "from", "%s@%s", lot_name, domain_name);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", VALET_PROTO);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "login", lot_name);
+				switch_event_add_header(event, SWITCH_STACK_BOTTOM, "from", "%s@%s", lot_name, domain_name);
 
-					switch_event_add_header(event, SWITCH_STACK_BOTTOM, "force-status", "Active (%d caller%s)", count, count == 1 ? "" : "s");
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "rpid", "active");
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event_type", "presence");
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "alt_event_type", "dialog");
-					switch_event_add_header(event, SWITCH_STACK_BOTTOM, "event_count", "%d", EC++);
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "unique-id", lot_name);
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "channel-state", "CS_ROUTING");
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "answer-state", "confirmed");
-					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "call-direction", "inbound");
-					switch_event_fire(&event);
-				}
-				found++;
+				switch_event_add_header(event, SWITCH_STACK_BOTTOM, "force-status", "Active (%d caller%s)", count, count == 1 ? "" : "s");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "rpid", "active");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "event_type", "presence");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "alt_event_type", "dialog");
+				switch_event_add_header(event, SWITCH_STACK_BOTTOM, "event_count", "%d", EC++);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "unique-id", lot_name);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "channel-state", "CS_ROUTING");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "answer-state", "confirmed");
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "call-direction", "inbound");
+				switch_event_fire(&event);
 			}
+			found++;
 		} else {
 			if (switch_event_create(&event, SWITCH_EVENT_PRESENCE_IN) == SWITCH_STATUS_SUCCESS) {
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", VALET_PROTO);
@@ -849,8 +849,8 @@ static void pres_event_handler(switch_event_t *event)
 		const char *nvar;
 
 		switch_mutex_lock(globals.mutex);
-		for (hi = switch_hash_first(NULL, globals.hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, &var, NULL, &val);
+		for (hi = switch_core_hash_first(globals.hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, &var, NULL, &val);
 			nvar = (const char *) var;
 
 			if (!strchr(nvar, '@') || switch_stristr(domain_name, nvar)) {
@@ -931,7 +931,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_valet_parking_load)
 	memset(&globals, 0, sizeof(globals));
 
 	globals.pool = pool;
-	switch_core_hash_init(&globals.hash, NULL);
+	switch_core_hash_init(&globals.hash);
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, globals.pool);
 
 	/* connect my internal structure to the blank pointer passed to me */

@@ -2,9 +2,6 @@
 #include "switch_curl.h"
 #include <curl/curl.h>
 
-CURLcode Curl_setopt(switch_CURL *curl, CURLoption option, va_list arg);
-
-
 SWITCH_DECLARE(switch_CURL *) switch_curl_easy_init(void) 
 {
 	return curl_easy_init();
@@ -46,18 +43,6 @@ SWITCH_DECLARE(void) switch_curl_slist_free_all(switch_curl_slist_t * list)
 	curl_slist_free_all((struct curl_slist *) list);
 }
 
-SWITCH_DECLARE(switch_CURLcode) switch_curl_easy_setopt(CURL *handle, switch_CURLoption option, ...)
-{
-	va_list ap;
-	switch_CURLcode code;
-
-	va_start(ap, option);
-	code = Curl_setopt(handle, option, ap);
-	va_end(ap);
-
-	return code;
-}
-
 SWITCH_DECLARE(const char *) switch_curl_easy_strerror(switch_CURLcode errornum )
 {
 	return curl_easy_strerror(errornum);
@@ -96,21 +81,21 @@ SWITCH_DECLARE(switch_status_t) switch_curl_process_form_post_params(switch_even
 
 		if (!strncasecmp(hp->name, "attach_file:", 12)) {
 			char *pname = strdup(hp->name + 12);
-			char *fname = strchr(pname, ':');
 			
-			if (fname && pname) {
-				*fname++ = '\0';
+			if (pname) {
+				char *fname = strchr(pname, ':');
+				if (fname) {
+					*fname++ = '\0';
 
-				curl_formadd(&formpost,
-							 &lastptr,
-							 CURLFORM_COPYNAME, pname,
-							 CURLFORM_FILENAME, fname,
-							 CURLFORM_FILE, hp->value,
-							 CURLFORM_END);
+					curl_formadd(&formpost,
+								 &lastptr,
+								 CURLFORM_COPYNAME, pname,
+								 CURLFORM_FILENAME, fname,
+								 CURLFORM_FILE, hp->value,
+								 CURLFORM_END);
+				}
+				free(pname);
 			}
-
-			free(pname);
-
 		} else {
 			curl_formadd(&formpost,
 						 &lastptr,

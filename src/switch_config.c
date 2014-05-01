@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -105,7 +105,7 @@ SWITCH_DECLARE(int) switch_config_next_pair(switch_config_t *cfg, char **var, ch
 
 	*var = *val = NULL;
 
-	if ( !cfg->path || (cfg->path && cfg->path[0] != '\0' )) {
+	if ( !cfg->path[0] ){
 		return 0;
 	}
 

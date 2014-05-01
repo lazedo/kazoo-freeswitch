@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -32,6 +32,10 @@
 #include <switch.h>
 #include <switch_stun.h>
 #include <libdingaling.h>
+
+#define SWITCH_RTP_KEY_LEN 30
+#define SWITCH_RTP_CRYPTO_KEY_32 "AES_CM_128_HMAC_SHA1_32"
+#define SWITCH_RTP_CRYPTO_KEY_80 "AES_CM_128_HMAC_SHA1_80"
 
 #define MDL_RTCP_DUR 5000
 #define DL_CAND_WAIT 10000000
@@ -565,8 +569,8 @@ static void pres_event_handler(switch_event_t *event)
 		switch_mprintf("select sub_from, sub_to,'%q','%q','%q','%q' from jabber_subscriptions where sub_to = '%q%q'", type, rpid, status, proto, pstr,
 					   from);
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (mdl_profile_t *) val;
 
 		if (!(profile->user_flags & LDL_FLAG_COMPONENT)) {
@@ -697,8 +701,8 @@ static void roster_event_handler(switch_event_t *event)
 		sql = switch_mprintf("select *,'%q' from jabber_subscriptions", status ? status : "");
 	}
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (mdl_profile_t *) val;
 
 		if (!(profile->user_flags & LDL_FLAG_COMPONENT)) {
@@ -734,8 +738,8 @@ static void ipchanged_event_handler(switch_event_t *event)
 		mdl_profile_t *profile;
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "IP change detected [%s]->[%s]\n", old_ip4, new_ip4);
 		if (globals.profile_hash) {
-			for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-				switch_hash_this(hi, NULL, NULL, &val);
+			for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+				switch_core_hash_this(hi, NULL, NULL, &val);
 				profile = (mdl_profile_t *) val;
 				if (old_ip4 && profile->extip && !strcmp(profile->extip, old_ip4)) {
 					tmp = profile->extip;
@@ -795,8 +799,8 @@ static void sign_off(void)
 	sql = switch_mprintf("select * from jabber_subscriptions");
 
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (mdl_profile_t *) val;
 
 		if (!(profile->user_flags & LDL_FLAG_COMPONENT)) {
@@ -1104,7 +1108,7 @@ static void try_secure(struct private_object *tech_pvt, ldl_transport_type_t tty
 	}
 
 
-	//if (tech_pvt->transports[ttype].crypto_type) {
+	if (tech_pvt->transports[ttype].crypto_type) {
 		switch_rtp_add_crypto_key(tech_pvt->transports[ttype].rtp_session, 
 								  SWITCH_RTP_CRYPTO_SEND, 1, tech_pvt->transports[ttype].crypto_type, 
 								  tech_pvt->transports[ttype].local_raw_key, SWITCH_RTP_KEY_LEN);
@@ -1120,7 +1124,7 @@ static void try_secure(struct private_object *tech_pvt, ldl_transport_type_t tty
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(tech_pvt->session), SWITCH_LOG_NOTICE, 
 						  "%s %s crypto confirmed\n", ldl_transport_type_str(ttype), switch_core_session_get_name(tech_pvt->session));
 
-		//}
+		}
 
 }
 
@@ -1543,7 +1547,7 @@ static int do_tport_candidates(struct private_object *tech_pvt, ldl_transport_ty
 	cand->port = tech_pvt->transports[ttype].adv_local_port;
 	cand->address = address;
 
-	if (!strncasecmp(advip, "stun:", 5)) {
+	if (advip && !strncasecmp(advip, "stun:", 5)) {
 		char *stun_ip = advip + 5;
 
 		if (tech_pvt->transports[ttype].stun_ip) {
@@ -1665,7 +1669,7 @@ static char *lame(char *in)
 static void setup_codecs(struct private_object *tech_pvt)
 {
 	ldl_payload_t payloads[LDL_MAX_PAYLOADS] = { {0} };
-	int idx = 0, i = 0;
+	unsigned int idx = 0, i = 0;
 	int dft_audio = -1, dft_video = -1;
 
 	memset(payloads, 0, sizeof(payloads));
@@ -1686,7 +1690,7 @@ static void setup_codecs(struct private_object *tech_pvt)
 
 	idx = 0;
 
-	payloads[0].type = LDL_TPORT_RTP;
+	payloads[0].type = LDL_PAYLOAD_AUDIO;
 	if (tech_pvt->transports[LDL_TPORT_RTP].codec_index < 0) {
 		if (dft_audio > -1) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(tech_pvt->session), SWITCH_LOG_DEBUG, "Don't have my audio codec yet here's one\n");
@@ -1715,7 +1719,7 @@ static void setup_codecs(struct private_object *tech_pvt)
 	}
 
 
-	payloads[1].type = LDL_TPORT_VIDEO_RTP;
+	payloads[1].type = LDL_PAYLOAD_VIDEO;
 	if (tech_pvt->transports[LDL_TPORT_VIDEO_RTP].codec_index < 0) {
 		if (dft_video > -1) {
 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(tech_pvt->session), SWITCH_LOG_DEBUG, "Don't have my video codec yet here's one\n");
@@ -2203,7 +2207,7 @@ static switch_status_t channel_read_frame(switch_core_session_t *session, switch
 
 				if (!switch_test_flag((&tech_pvt->transports[LDL_TPORT_RTP].read_frame), SFF_CNG)) {
 					if ((bytes = tech_pvt->transports[LDL_TPORT_RTP].read_codec.implementation->encoded_bytes_per_packet)) {
-						frames = (tech_pvt->transports[LDL_TPORT_RTP].read_frame.datalen / bytes);
+						frames = (int)(tech_pvt->transports[LDL_TPORT_RTP].read_frame.datalen / bytes);
 					}
 					tech_pvt->transports[LDL_TPORT_RTP].read_frame.samples = (int) (frames * tech_pvt->transports[LDL_TPORT_RTP].read_codec.implementation->samples_per_packet);
 				}
@@ -2341,7 +2345,7 @@ static switch_status_t channel_write_video_frame(switch_core_session_t *session,
 		wrote = switch_rtp_write_frame(tech_pvt->transports[LDL_TPORT_VIDEO_RTP].rtp_session, frame);
 	}
 
-	return wrote > 0 ? SWITCH_STATUS_SUCCESS : SWITCH_STATUS_GENERR;
+	return wrote > -1 ? SWITCH_STATUS_SUCCESS : SWITCH_STATUS_GENERR;
 }
 
 static switch_status_t channel_answer_channel(switch_core_session_t *session)
@@ -2680,8 +2684,8 @@ static switch_status_t list_profiles(const char *line, const char *cursor, switc
 	switch_console_callback_match_t *my_matches = NULL;
 	switch_status_t status = SWITCH_STATUS_FALSE;
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, &vvar, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, &vvar, NULL, &val);
 		profile = (mdl_profile_t *) val;
 		if (!strncmp("dl_logout", line, 9)) {
 			if (profile->handle) {
@@ -2936,7 +2940,9 @@ static void set_profile_val(mdl_profile_t *profile, char *var, char *val)
 			globals.auto_nat = 0;
 			ip = zstr(val) ? globals.guess_ip : val;
 		}
-		profile->extip = switch_core_strdup(module_pool, ip);
+		if (ip) {
+			profile->extip = switch_core_strdup(module_pool, ip);
+		}
 	} else if (!strcasecmp(var, "server") && !zstr(val)) {
 		profile->server = switch_core_strdup(module_pool, val);
 	} else if (!strcasecmp(var, "rtp-timer-name") && !zstr(val)) {
@@ -3084,8 +3090,8 @@ SWITCH_STANDARD_API(dingaling)
 	if (argv[0] && !strncasecmp(argv[0], "status", 6)) {
 		stream->write_function(stream, "--DingaLing status--\n");
 		stream->write_function(stream, "login	|	connected\n");
-		for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-			switch_hash_this(hi, NULL, NULL, &val);
+		for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+			switch_core_hash_this(hi, NULL, NULL, &val);
 			profile = (mdl_profile_t *) val;
 			stream->write_function(stream, "%s	|	", profile->login);
 			if (profile->handle && ldl_handle_authorized(profile->handle)) {
@@ -3270,7 +3276,7 @@ static switch_status_t soft_reload(void)
 	void *data = NULL;
 	switch_hash_t *name_hash;
 	switch_hash_index_t *hi;
-	switch_core_hash_init(&name_hash, module_pool);
+	switch_core_hash_init(&name_hash);
 
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Open of %s failed\n", cf);
@@ -3339,8 +3345,8 @@ static switch_status_t soft_reload(void)
 
 	switch_xml_free(xml);
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &data);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &data);
 		profile = (mdl_profile_t *) data;
 
 		if (switch_core_hash_find(name_hash, profile->name)) {
@@ -3350,8 +3356,8 @@ static switch_status_t soft_reload(void)
 		}
 	}
 
-	for (hi = switch_hash_first(NULL, name_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &data);
+	for (hi = switch_core_hash_first(name_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &data);
 
 		if ((profile = switch_core_hash_find(globals.profile_hash, (char *) data))) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Deleting unused profile %s [%s]\n", profile->name, profile->login);
@@ -3376,7 +3382,7 @@ static switch_status_t load_config(void)
 
 	switch_find_local_ip(globals.guess_ip, sizeof(globals.guess_ip), NULL, AF_INET);
 
-	switch_core_hash_init(&globals.profile_hash, module_pool);
+	switch_core_hash_init(&globals.profile_hash);
 
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Open of %s failed\n", cf);
@@ -3549,7 +3555,7 @@ static void do_vcard(ldl_handle_t *handle, char *to, char *from, char *id)
 	switch_safe_free(xmlstr);
 }
 
-static switch_status_t parse_candidates(ldl_session_t *dlsession, switch_core_session_t *session, ldl_transport_type_t ttype, const char *subject) 
+static ldl_status parse_candidates(ldl_session_t *dlsession, switch_core_session_t *session, ldl_transport_type_t ttype, const char *subject) 
 {
 	
 	ldl_candidate_t *candidates;
@@ -3557,10 +3563,10 @@ static switch_status_t parse_candidates(ldl_session_t *dlsession, switch_core_se
 	unsigned int x, choice = 0, ok = 0;
 	uint8_t lanaddr = 0;
 	struct private_object *tech_pvt = NULL;
-	switch_status_t status = LDL_STATUS_SUCCESS;
+	ldl_status status = LDL_STATUS_SUCCESS;
 
 	if (!(tech_pvt = switch_core_session_get_private(session))) {
-		return SWITCH_STATUS_FALSE;
+		return LDL_STATUS_FALSE;
 	}
 
 	if (ldl_session_get_candidates(dlsession, ttype, &candidates, &len) != LDL_STATUS_SUCCESS) {
@@ -3751,7 +3757,7 @@ static ldl_status parse_payloads_type(ldl_session_t *dlsession, switch_core_sess
 										ldl_transport_type_t ttype, ldl_payload_t *payloads, unsigned int len)
 {
 	struct private_object *tech_pvt = NULL;
-	switch_status_t status = LDL_STATUS_SUCCESS;
+	ldl_status status = LDL_STATUS_SUCCESS;
 	unsigned int x, y;
 	int match = 0;
 
@@ -4247,6 +4253,22 @@ static ldl_status handle_signalling(ldl_handle_t *handle, ldl_session_t *dlsessi
 				}
 
 				tech_pvt->them = switch_core_session_strdup(session, ldl_session_get_callee(dlsession));
+
+				if (tech_pvt->them && (tmp = strdup(tech_pvt->them))) {
+					char *p, *q;
+
+					if ((p = strchr(tmp, '@'))) {
+						*p++ = '\0';
+						if ((q = strchr(p, '/'))) {
+							*q = '\0';
+						}
+						switch_channel_set_variable(channel, "dl_to_user", tmp);
+						switch_channel_set_variable(channel, "dl_to_host", p);
+					}
+
+					switch_safe_free(tmp);
+				}
+
 				tech_pvt->us = switch_core_session_strdup(session, ldl_session_get_caller(dlsession));
 
 				if (tech_pvt->us && (tmp = strdup(tech_pvt->us))) {
@@ -4405,7 +4427,7 @@ static ldl_status handle_signalling(ldl_handle_t *handle, ldl_session_t *dlsessi
 		break;
 	case LDL_SIGNAL_CANDIDATES:
 		if (dl_signal) {
-			status = SWITCH_STATUS_SUCCESS;
+			status = LDL_STATUS_SUCCESS;
 
 			status = parse_candidates(dlsession, session, LDL_TPORT_RTP, subject);
 			status = parse_candidates(dlsession, session, LDL_TPORT_VIDEO_RTP, subject); 

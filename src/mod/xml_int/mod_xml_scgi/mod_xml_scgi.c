@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -282,7 +282,7 @@ static switch_status_t do_config(void)
 				}
 			} else if (!strcasecmp(var, "enable-post-var")) {
 				if (!vars_map && need_vars_map == 0) {
-					if (switch_core_hash_init(&vars_map, globals.pool) != SWITCH_STATUS_SUCCESS) {
+					if (switch_core_hash_init(&vars_map) != SWITCH_STATUS_SUCCESS) {
 						need_vars_map = -1;
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Can't init params hash!\n");
 						continue;
@@ -320,8 +320,8 @@ static switch_status_t do_config(void)
 		binding->host = switch_core_strdup(globals.pool, host);
 		binding->port = atoi(port);
 		binding->vars_map = vars_map;
-		binding->uri = switch_mprintf("/%s", bname);
-		binding->url = switch_mprintf("scgi://%s:%s/%s", host, port, bname);
+		binding->uri = switch_core_sprintf(globals.pool, "/%s", bname);
+		binding->url = switch_core_sprintf(globals.pool, "scgi://%s:%s/%s", host, port, bname);
 
 		if (server) {
 			binding->server = switch_core_strdup(globals.pool, server);

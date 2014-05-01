@@ -108,7 +108,7 @@ static char active_lines_sql[] =
 char *skinny_expand_textid(const char *str)
 {
 	char *tmp;
-	int i;
+	switch_size_t i;
 
 	/* Look for \200, if found, next character indicates string id */
 	char match = (char) 128;
@@ -197,8 +197,8 @@ skinny_profile_t *skinny_find_profile_by_domain(const char *domain_name)
 	skinny_profile_t *profile = NULL, *tmp_profile;
 
 	switch_mutex_lock(globals.mutex);
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		tmp_profile = (skinny_profile_t *) val;
 
 		switch_mutex_lock(tmp_profile->listener_mutex);
@@ -210,6 +210,7 @@ skinny_profile_t *skinny_find_profile_by_domain(const char *domain_name)
 			break;
 		}
 	}
+	switch_safe_free(hi);
 	switch_mutex_unlock(globals.mutex);
 
 	return profile;
@@ -500,6 +501,38 @@ uint32_t skinny_line_get_state(listener_t *listener, uint32_t line_instance, uin
 	return helper.call_state;
 }
 
+struct skinny_line_count_active_helper {
+	uint32_t count;
+};
+
+int skinny_line_count_active_callback(void *pArg, int argc, char **argv, char **columnNames)
+{
+	struct skinny_line_count_active_helper *helper = pArg;
+	helper->count++;
+	return 0;
+}
+
+uint32_t skinny_line_count_active(listener_t *listener)
+{
+	char *sql;
+	struct skinny_line_count_active_helper helper = {0};
+
+	switch_assert(listener);
+
+	helper.count = 0;
+	if ((sql = switch_mprintf(
+			"SELECT call_state FROM skinny_active_lines "
+			"WHERE device_name='%s' AND device_instance=%d "
+			"AND call_state != 2",
+			listener->device_name, listener->device_instance
+			))) {
+
+		skinny_execute_sql_callback(listener->profile, listener->profile->sql_mutex, sql, skinny_line_count_active_callback, &helper);
+		switch_safe_free(sql);
+	}
+
+	return helper.count;
+}
 
 switch_status_t skinny_tech_set_codec(private_t *tech_pvt, int force)
 {
@@ -844,6 +877,10 @@ switch_status_t channel_on_destroy(switch_core_session_t *session)
 		if (switch_core_codec_ready(&tech_pvt->write_codec)) {
 			switch_core_codec_destroy(&tech_pvt->write_codec);
 		}
+
+		if (switch_rtp_ready(tech_pvt->rtp_session)) {
+			switch_rtp_destroy(&tech_pvt->rtp_session);
+		}
 	}
 
 	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "%s CHANNEL DESTROY\n", switch_channel_get_name(channel));
@@ -955,7 +992,7 @@ switch_status_t channel_on_hangup(switch_core_session_t *session)
 
 	skinny_session_walk_lines(tech_pvt->profile, switch_core_session_get_uuid(session), channel_on_hangup_callback, &helper);
 	if ((sql = switch_mprintf(
-					"DELETE FROM skinny_active_lines WHERE channel_uuid='%s'",
+					"DELETE FROM skinny_active_lines WHERE channel_uuid='%q'",
 					switch_core_session_get_uuid(session)
 				 ))) {
 		skinny_execute_sql(tech_pvt->profile, sql, tech_pvt->profile->sql_mutex);
@@ -1110,7 +1147,7 @@ switch_status_t channel_answer_channel(switch_core_session_t *session)
 		/* Wait for media */
 		while(!switch_test_flag(tech_pvt, TFLAG_IO)) {
 			switch_cond_next();
-			if (++x > 1000) {
+			if (++x > 5000) {
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "Wait tooo long to answer %s:%s\n",
 						switch_channel_get_variable(channel, "skinny_device_name"), switch_channel_get_variable(channel, "skinny_device_instance"));
 				return SWITCH_STATUS_FALSE;
@@ -1369,8 +1406,8 @@ static void walk_listeners(skinny_listener_callback_func_t callback, void *pvt)
 
 	/* walk listeners */
 	switch_mutex_lock(globals.mutex);
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (skinny_profile_t *) val;
 
 		profile_walk_listeners(profile, callback, pvt);
@@ -1405,7 +1442,7 @@ void skinny_clean_device_from_db(listener_t *listener, char *device_name)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_devices "
-						"WHERE name='%s'",
+						"WHERE name='%q'",
 						device_name))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1413,7 +1450,7 @@ void skinny_clean_device_from_db(listener_t *listener, char *device_name)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_lines "
-						"WHERE device_name='%s'",
+						"WHERE device_name='%q'",
 						device_name))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1421,7 +1458,7 @@ void skinny_clean_device_from_db(listener_t *listener, char *device_name)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_buttons "
-						"WHERE device_name='%s'",
+						"WHERE device_name='%q'",
 						device_name))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1429,7 +1466,7 @@ void skinny_clean_device_from_db(listener_t *listener, char *device_name)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_active_lines "
-						"WHERE device_name='%s'",
+						"WHERE device_name='%q'",
 						device_name))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1453,7 +1490,7 @@ void skinny_clean_listener_from_db(listener_t *listener)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_devices "
-						"WHERE name='%s' and instance=%d",
+						"WHERE name='%q' and instance=%d",
 						listener->device_name, listener->device_instance))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1461,7 +1498,7 @@ void skinny_clean_listener_from_db(listener_t *listener)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_lines "
-						"WHERE device_name='%s' and device_instance=%d",
+						"WHERE device_name='%q' and device_instance=%d",
 						listener->device_name, listener->device_instance))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1469,7 +1506,7 @@ void skinny_clean_listener_from_db(listener_t *listener)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_buttons "
-						"WHERE device_name='%s' and device_instance=%d",
+						"WHERE device_name='%q' and device_instance=%d",
 						listener->device_name, listener->device_instance))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -1477,7 +1514,7 @@ void skinny_clean_listener_from_db(listener_t *listener)
 
 		if ((sql = switch_mprintf(
 						"DELETE FROM skinny_active_lines "
-						"WHERE device_name='%s' and device_instance=%d",
+						"WHERE device_name='%q' and device_instance=%d",
 						listener->device_name, listener->device_instance))) {
 			skinny_execute_sql(profile, sql, profile->sql_mutex);
 			switch_safe_free(sql);
@@ -2054,7 +2091,7 @@ static switch_status_t load_skinny_config(void)
 				}
 
 				/* Soft Key Set Sets */
-				switch_core_hash_init(&profile->soft_key_set_sets_hash, profile->pool);
+				switch_core_hash_init(&profile->soft_key_set_sets_hash);
 				if ((xsoft_key_set_sets = switch_xml_child(xprofile, "soft-key-set-sets"))) {
 					switch_xml_t xsoft_key_set_set;
 					for (xsoft_key_set_set = switch_xml_child(xsoft_key_set_sets, "soft-key-set-set"); xsoft_key_set_set; xsoft_key_set_set = xsoft_key_set_set->next) {
@@ -2122,7 +2159,7 @@ static switch_status_t load_skinny_config(void)
 
 
 				/* Device types */
-				switch_core_hash_init(&profile->device_type_params_hash, profile->pool);
+				switch_core_hash_init(&profile->device_type_params_hash);
 				if ((xdevice_types = switch_xml_child(xprofile, "device-types"))) {
 					switch_xml_t xdevice_type;
 					for (xdevice_type = switch_xml_child(xdevice_types, "device-type"); xdevice_type; xdevice_type = xdevice_type->next) {
@@ -2139,6 +2176,7 @@ static switch_status_t load_skinny_config(void)
 								}
 							} /* param */
 							switch_core_hash_insert(profile->device_type_params_hash, id_str, params);
+							switch_safe_free(id_str);
 						} else {
 							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING,
 									"Unknow device type %s in profile %s.\n", switch_xml_attr_soft(xdevice_type, "id"), profile->name);
@@ -2267,8 +2305,8 @@ static void skinny_call_state_event_handler(switch_event_t *event)
 				if ((sql = switch_mprintf(
 								"UPDATE skinny_active_lines "
 								"SET call_state=%d "
-								"WHERE device_name='%s' AND device_instance=%d "
-								"AND %s AND %s",
+								"WHERE device_name='%q' AND device_instance=%d "
+								"AND %q AND %q",
 								call_state,
 								listener->device_name, listener->device_instance,
 								line_instance_condition, call_id_condition
@@ -2409,8 +2447,8 @@ static void skinny_trap_event_handler(switch_event_t *event)
 
 		switch_mutex_lock(globals.mutex);
 		if (globals.profile_hash) {
-			for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
-				switch_hash_this(hi, &var, NULL, &val);
+			for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
+				switch_core_hash_this(hi, &var, NULL, &val);
 				if ((profile = (skinny_profile_t *) val) && profile->auto_restart) {
 					if (!strcmp(profile->ip, old_ip4)) {
 						skinny_profile_set(profile, "ip", new_ip4);
@@ -2438,14 +2476,14 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_skinny_load)
 		return SWITCH_STATUS_TERM;
 	}
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, globals.pool);
-	switch_core_hash_init(&globals.profile_hash, globals.pool);
+	switch_core_hash_init(&globals.profile_hash);
 	globals.running = 1;
 	globals.auto_restart = SWITCH_TRUE;
 
 	load_skinny_config();
 
 	/* at least one profile */
-	if (!switch_hash_first(NULL, globals.profile_hash)) {
+	if (switch_core_hash_empty( globals.profile_hash)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "No profile found!\n");
 		return SWITCH_STATUS_TERM;
 	}
@@ -2508,11 +2546,11 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_skinny_load)
 
 	/* launch listeners */
 	switch_mutex_lock(globals.mutex);
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
 		void *val;
 		skinny_profile_t *profile;
 
-		switch_hash_this(hi, NULL, NULL, &val);
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (skinny_profile_t *) val;
 
 		launch_skinny_profile_thread(profile);
@@ -2555,9 +2593,9 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_skinny_shutdown)
 
 	/* close sockets */
 	switch_mutex_lock(globals.mutex);
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
 		skinny_profile_t *profile;
-		switch_hash_this(hi, NULL, NULL, &val);
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (skinny_profile_t *) val;
 
 		close_socket(&profile->sock, profile);

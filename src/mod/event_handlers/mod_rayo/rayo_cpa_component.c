@@ -82,7 +82,7 @@ static void subscribe(const char *uuid, const char *signal_type, const char *jid
 		switch_log_printf(SWITCH_CHANNEL_UUID_LOG(uuid), SWITCH_LOG_DEBUG, "Subscribe %s => %s\n", signal_type, jid);
 		if (!signal_subscribers) {
 			switch_log_printf(SWITCH_CHANNEL_UUID_LOG(uuid), SWITCH_LOG_DEBUG, "Create %s subscriber hash\n", signal_type);
-			switch_core_hash_init(&signal_subscribers, NULL);
+			switch_core_hash_init(&signal_subscribers);
 			switch_core_hash_insert(globals.subscribers, key, signal_subscribers);
 		}
 		switch_core_hash_insert(signal_subscribers, jid, "1");
@@ -105,7 +105,7 @@ static void unsubscribe(const char *uuid, const char *signal_type, const char *j
 			switch_log_printf(SWITCH_CHANNEL_UUID_LOG(uuid), SWITCH_LOG_DEBUG, "Unsubscribe %s => %s\n", signal_type, jid);
 
 			/* clean up hash if empty */
-			if (!switch_core_hash_first(signal_subscribers)) {
+			if (switch_core_hash_empty(signal_subscribers)) {
 				switch_log_printf(SWITCH_CHANNEL_UUID_LOG(uuid), SWITCH_LOG_DEBUG, "Destroy %s subscriber hash\n", signal_type);
 				switch_core_hash_destroy(&signal_subscribers);
 				switch_core_hash_delete(globals.subscribers, key);
@@ -133,7 +133,7 @@ static void subscriber_execute(const char *uuid, const char *signal_type, subscr
 		switch_hash_index_t *hi = NULL;
 		switch_hash_t *signal_subscribers = switch_core_hash_find(globals.subscribers, key);
 		if (signal_subscribers) {
-			for (hi = switch_core_hash_first(signal_subscribers); hi; hi = switch_core_hash_next(hi)) {
+			for (hi = switch_core_hash_first(signal_subscribers); hi; hi = switch_core_hash_next(&hi)) {
 				const void *jid;
 				void *dont_care;
 				switch_core_hash_this(hi, &jid, NULL, &dont_care);
@@ -161,13 +161,13 @@ static void stop_cpa_detectors(struct cpa_component *cpa)
 {
 	if (cpa->signals) {
 		switch_hash_index_t *hi = NULL;
-		for (hi = switch_core_hash_first(cpa->signals); hi; hi = switch_core_hash_next(hi)) {
-			const char *signal_type;
-			struct cpa_signal *cpa_signal = NULL;
-			switch_core_hash_this(hi, (const void **)&signal_type, NULL, (void **)&cpa_signal);
+		for (hi = switch_core_hash_first(cpa->signals); hi; hi = switch_core_hash_next(&hi)) {
+			const void *signal_type;
+			void *cpa_signal = NULL;
+			switch_core_hash_this(hi, &signal_type, NULL, &cpa_signal);
 			if (cpa_signal) {
-				rayo_cpa_detector_stop(RAYO_COMPONENT(cpa)->parent->id, cpa_signal->name);
-				unsubscribe(RAYO_COMPONENT(cpa)->parent->id, cpa_signal->name, RAYO_JID(cpa));
+				rayo_cpa_detector_stop(RAYO_COMPONENT(cpa)->parent->id, ((struct cpa_signal *)cpa_signal)->name);
+				unsubscribe(RAYO_COMPONENT(cpa)->parent->id, ((struct cpa_signal *)cpa_signal)->name, RAYO_JID(cpa));
 			}
 		}
 		switch_core_hash_destroy(&cpa->signals);
@@ -285,9 +285,13 @@ iks *rayo_cpa_component_start(struct rayo_actor *call, struct rayo_message *msg,
 	/* create CPA component */
 	switch_core_new_memory_pool(&pool);
 	component = switch_core_alloc(pool, sizeof(*component));
-	rayo_component_init((struct rayo_component *)component, pool, RAT_CALL_COMPONENT, "cpa", NULL, call, iks_find_attrib(iq, "from"));
+	component = CPA_COMPONENT(rayo_component_init((struct rayo_component *)component, pool, RAT_CALL_COMPONENT, "cpa", NULL, call, iks_find_attrib(iq, "from")));
+	if (!component) {
+		switch_core_destroy_memory_pool(&pool);
+		return iks_new_error_detailed(iq, STANZA_ERROR_INTERNAL_SERVER_ERROR, "Failed to create CPA entity");
+	}
 
-	switch_core_hash_init(&component->signals, pool);
+	switch_core_hash_init(&component->signals);
 
 	/* start CPA detectors */
 	for (grammar = iks_find(input, "grammar"); grammar; grammar = iks_next_tag(grammar)) {
@@ -372,7 +376,7 @@ switch_status_t rayo_cpa_component_load(switch_loadable_module_interface_t **mod
 	switch_event_bind("rayo_cpa_component", SWITCH_EVENT_CHANNEL_HANGUP_COMPLETE, NULL, on_channel_hangup_complete_event, NULL);
 	
 	globals.pool = pool;
-	switch_core_hash_init(&globals.subscribers, pool);
+	switch_core_hash_init(&globals.subscribers);
 	switch_mutex_init(&globals.subscribers_mutex, SWITCH_MUTEX_NESTED, pool);
 
 	return rayo_cpa_detector_load(module_interface, pool, config_file);

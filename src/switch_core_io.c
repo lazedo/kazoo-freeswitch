@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Moular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -46,7 +46,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_write_video_frame(switch_cor
 		return SWITCH_STATUS_FALSE;
 	}
 
-	if (switch_channel_test_flag(session->channel, CF_MEDIA_PAUSE)) {
+	if (switch_channel_test_flag(session->channel, CF_VIDEO_PAUSE)) {
 		return SWITCH_STATUS_SUCCESS;
 	}
 
@@ -74,7 +74,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_video_frame(switch_core
 		return SWITCH_STATUS_FALSE;
 	}
 
-	if (switch_channel_test_flag(session->channel, CF_MEDIA_PAUSE)) {
+	if (switch_channel_test_flag(session->channel, CF_VIDEO_PAUSE)) {
 		*frame = &runtime.dummy_cng_frame;
 		switch_yield(20000);
 		return SWITCH_STATUS_SUCCESS;
@@ -177,7 +177,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_frame(switch_core_sessi
 			return SWITCH_STATUS_SUCCESS;
 		}
 
-		if (switch_channel_test_flag(session->channel, CF_MEDIA_PAUSE)) {
+		if (switch_channel_test_flag(session->channel, CF_AUDIO_PAUSE)) {
 			switch_yield(20000);
 			*frame = &runtime.dummy_cng_frame;
 			// switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Media Paused!!!!\n");
@@ -226,8 +226,14 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_frame(switch_core_sessi
 	if (session->read_codec && !session->track_id && session->track_duration) {
 		if (session->read_frame_count == 0) {
 			switch_event_t *event;
+			switch_core_session_message_t msg = { 0 };
+
 			session->read_frame_count = (session->read_impl.actual_samples_per_second / session->read_impl.samples_per_packet) * session->track_duration;
 
+			msg.message_id = SWITCH_MESSAGE_HEARTBEAT_EVENT;
+			msg.numeric_arg = session->track_duration;
+			switch_core_session_receive_message(session, &msg);
+			
 			switch_event_create(&event, SWITCH_EVENT_SESSION_HEARTBEAT);
 			switch_channel_event_set_data(session->channel, event);
 			switch_event_fire(&event);
@@ -599,6 +605,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_frame(switch_core_sessi
 			case SWITCH_STATUS_RESAMPLE:
 				if (!session->read_resampler) {
 					switch_mutex_lock(session->resample_mutex);
+
 					status = switch_resample_create(&session->read_resampler,
 													read_frame->codec->implementation->actual_samples_per_second,
 													session->read_impl.actual_samples_per_second,
@@ -610,6 +617,13 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_frame(switch_core_sessi
 						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Unable to allocate resampler\n");
 						status = SWITCH_STATUS_FALSE;
 						goto done;
+					} else {
+						switch_core_session_message_t msg = { 0 };
+						msg.numeric_arg = 1;
+						msg.message_id = SWITCH_MESSAGE_RESAMPLE_EVENT;
+						switch_core_session_receive_message(session, &msg);
+
+						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Activating read resampler\n");
 					}
 				}
 			case SWITCH_STATUS_SUCCESS:
@@ -636,6 +650,14 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_read_frame(switch_core_sessi
 					switch_resample_destroy(&session->read_resampler);
 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Deactivating read resampler\n");
 					switch_mutex_unlock(session->resample_mutex);
+
+					{
+						switch_core_session_message_t msg = { 0 };
+						msg.numeric_arg = 0;
+						msg.message_id = SWITCH_MESSAGE_RESAMPLE_EVENT;
+						switch_core_session_receive_message(session, &msg);
+					}
+
 				}
 
 				status = SWITCH_STATUS_SUCCESS;
@@ -1053,7 +1075,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_write_frame(switch_core_sess
 		}
 	}
 
-	if (switch_channel_test_flag(session->channel, CF_MEDIA_PAUSE)) {
+	if (switch_channel_test_flag(session->channel, CF_AUDIO_PAUSE)) {
 		return SWITCH_STATUS_SUCCESS;
 	}
 
@@ -1199,6 +1221,13 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_write_frame(switch_core_sess
 				switch_mutex_unlock(session->resample_mutex);
 				if (status != SWITCH_STATUS_SUCCESS) {
 					goto done;
+				} else {
+					switch_core_session_message_t msg = { 0 };
+					msg.numeric_arg = 1;
+					msg.message_id = SWITCH_MESSAGE_RESAMPLE_EVENT;
+					switch_core_session_receive_message(session, &msg);
+
+					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Activating write resampler\n");
 				}
 			}
 			break;
@@ -1226,6 +1255,14 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_write_frame(switch_core_sess
 				switch_resample_destroy(&session->write_resampler);
 				switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Deactivating write resampler\n");
 				switch_mutex_unlock(session->resample_mutex);
+
+				{
+					switch_core_session_message_t msg = { 0 };
+					msg.numeric_arg = 0;
+					msg.message_id = SWITCH_MESSAGE_RESAMPLE_EVENT;
+					switch_core_session_receive_message(session, &msg);
+				}
+
 			}
 			write_frame = frame;
 			status = SWITCH_STATUS_SUCCESS;
@@ -1497,6 +1534,14 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_write_frame(switch_core_sess
 
 						if (status != SWITCH_STATUS_SUCCESS) {
 							goto done;
+						} else {
+							switch_core_session_message_t msg = { 0 };
+							msg.numeric_arg = 1;
+							msg.message_id = SWITCH_MESSAGE_RESAMPLE_EVENT;
+							switch_core_session_receive_message(session, &msg);
+							
+
+							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Activating write resampler\n");
 						}
 					}
 					break;
@@ -1511,12 +1556,23 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_write_frame(switch_core_sess
 					break;
 				case SWITCH_STATUS_NOOP:
 					if (session->write_resampler) {
+						switch_core_session_message_t msg = { 0 };
+						int ok = 0;
+
 						switch_mutex_lock(session->resample_mutex);
-						if (session->write_resampler) {
+						if (session->write_resampler) {					
 							switch_resample_destroy(&session->write_resampler);
 							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Deactivating write resampler\n");
+							ok = 1;
 						}
 						switch_mutex_unlock(session->resample_mutex);
+
+						if (ok) {
+							msg.numeric_arg = 0;
+							msg.message_id = SWITCH_MESSAGE_RESAMPLE_EVENT;
+							switch_core_session_receive_message(session, &msg);
+						}
+
 					}
 					enc_frame->codec = session->write_codec;
 					enc_frame->samples = enc_frame->datalen / sizeof(int16_t);

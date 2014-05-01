@@ -63,9 +63,6 @@
 /languages/mod_lua/mod_lua.log
 /languages/mod_managed/freeswitch_wrap.cpp
 /languages/mod_python/Makefile
-/languages/mod_spidermonkey/Makefile
-/languages/mod_spidermonkey/Makefile.in
-/languages/mod_spidermonkey/mod_spidermonkey.log
 /loggers/mod_console/Makefile
 /loggers/mod_logfile/Makefile
 /loggers/mod_syslog/Makefile
@@ -75,3 +72,7 @@
 /say/mod_say_ru/Makefile
 /timers/mod_posix_timer/Makefile
 /timers/mod_timerfd/Makefile
+/endpoints/mod_unicall/Makefile
+*/*/Makefile.in
+*/*/Makefile
+*/*/mod_*.log

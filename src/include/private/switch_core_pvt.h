@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -259,6 +259,7 @@ struct switch_runtime {
 	uint32_t debug_level;
 	uint32_t runlevel;
 	uint32_t tipping_point;
+	uint32_t cpu_idle_smoothing_depth;
 	uint32_t microseconds_per_tick;
 	int32_t timer_affinity;
 	switch_profile_timer_t *profile_timer;
@@ -277,6 +278,7 @@ struct switch_runtime {
 	char *core_db_inner_pre_trans_execute;
 	char *core_db_inner_post_trans_execute;
 	int events_use_dispatch;
+	uint32_t port_alloc_flags;
 };
 
 extern struct switch_runtime runtime;

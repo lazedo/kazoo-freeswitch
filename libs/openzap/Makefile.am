@@ -1,4 +1,4 @@
-# Copyright (c) 2007-2012, Anthony Minessale II
+# Copyright (c) 2007-2014, Anthony Minessale II
 # All rights reserved.
 # 
 # Redistribution and use in source and binary forms, with or without
@@ -257,16 +257,16 @@ endif
 dox doxygen:
 	cd docs && doxygen $(OZ_SRCDIR)/docs/Doxygen.conf
 
-mod_openzap/mod_openzap.$(DYNAMIC_LIB_EXTEN): $(MYLIB) mod_openzap/mod_openzap.c
+mod_openzap/mod_openzap.so: $(MYLIB) mod_openzap/mod_openzap.c
 	cd mod_openzap && make
 
-mod_openzap: mod_openzap/mod_openzap.$(DYNAMIC_LIB_EXTEN)
+mod_openzap: mod_openzap/mod_openzap.so
 
 mod_openzap-install: mod_openzap
 	cd mod_openzap && make install
 
 mod_openzap-clean:
-	@if [ -f mod_openzap/mod_openzap.$(DYNAMIC_LIB_EXTEN) ] ; then cd mod_openzap && make clean ; fi
+	@if [ -f mod_openzap/mod_openzap.so ] ; then cd mod_openzap && make clean ; fi
 
 install-data-local:
 	$(mkinstalldirs) $(DESTDIR)$(PREFIX)

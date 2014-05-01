@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -30,8 +30,8 @@
  * mod_format_cdr.c -- XML CDR Module to files or curl
  *
  */
-#include <sys/stat.h>
 #include <switch.h>
+#include <sys/stat.h>
 #include <switch_curl.h>
 #define MAX_URLS 20
 #define MAX_ERR_DIRS 20
@@ -79,7 +79,7 @@ struct cdr_profile {
 	int prefix_a;
 	int disable100continue;
 	int rotate;
-	int auth_scheme;
+	long auth_scheme;
 	int timeout;
 	switch_memory_pool_t *pool;
 };
@@ -495,9 +495,9 @@ static switch_status_t my_on_reporting(switch_core_session_t *session)
 
 	status = SWITCH_STATUS_SUCCESS;
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
 		cdr_profile_t *profile;
-		switch_hash_this(hi, NULL, NULL, &val);
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (cdr_profile_t *) val;
 
 		tmpstatus = my_on_reporting_cb(session, profile);
@@ -518,9 +518,9 @@ static void event_handler(switch_event_t *event)
 	const char *sig = switch_event_get_header(event, "Trapped-Signal");
 
 	if (sig && !strcmp(sig, "HUP")) {
-		for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
+		for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
 			cdr_profile_t *profile;
-			switch_hash_this(hi, NULL, NULL, &val);
+			switch_core_hash_this(hi, NULL, NULL, &val);
 			profile = (cdr_profile_t *) val;
 
 			if (profile->rotate) {
@@ -671,7 +671,7 @@ switch_status_t mod_format_cdr_load_profile_xml(switch_xml_t xprofile)
 				} else if (!strcasecmp(val, "GSS-NEGOTIATE")) {
 					profile->auth_scheme |= CURLAUTH_GSSNEGOTIATE;
 				} else if (!strcasecmp(val, "any")) {
-					profile->auth_scheme = CURLAUTH_ANY;
+					profile->auth_scheme = (long)CURLAUTH_ANY;
 				}
 			} else if (!strcasecmp(var, "encode-values") && !zstr(val)) {
 				profile->encode_values = switch_true(val) ? ENCODING_DEFAULT : ENCODING_NONE;
@@ -732,7 +732,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_format_cdr_load)
 	globals.pool = pool;
 
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, globals.pool);
-    switch_core_hash_init(&globals.profile_hash, globals.pool);
+    switch_core_hash_init(&globals.profile_hash);
 
 	/* parse the config */
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
@@ -785,9 +785,9 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_format_cdr_shutdown)
 	switch_event_unbind(&globals.node);
 	switch_core_remove_state_handler(&state_handlers);
 
-	for (hi = switch_hash_first(NULL, globals.profile_hash); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(globals.profile_hash); hi; hi = switch_core_hash_next(&hi)) {
 		cdr_profile_t *profile;
-		switch_hash_this(hi, NULL, NULL, &val);
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		profile = (cdr_profile_t *) val;
 
 		if ( profile ) {

@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -37,7 +37,6 @@
 #define SWITCH_FRAME_H
 
 #include <switch.h>
-#include <switch_core_media.h>
 
 SWITCH_BEGIN_EXTERN_C
 /*! \brief An abstraction of a data frame */

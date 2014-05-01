@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -32,13 +32,12 @@
 
 #include <switch.h>
 #include <switch_console.h>
-#include <switch_version.h>
 #ifndef _MSC_VER
 #include <switch_private.h>
 #endif
 #define CMD_BUFLEN 1024
 
-#ifdef SWITCH_HAVE_LIBEDIT
+#ifdef HAVE_LIBEDIT
 #include <histedit.h>
 
 static EditLine *el;
@@ -711,7 +710,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 	int pos = 0;
 	int sc = 0;
 
-#ifndef SWITCH_HAVE_LIBEDIT
+#ifndef HAVE_LIBEDIT
 #ifndef _MSC_VER
 	if (!stream) {
 		return CC_ERROR;
@@ -725,7 +724,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 	}
 
 	if (!zstr(cursor) && !zstr(line)) {
-		pos = (cursor - line);
+		pos = (int)(cursor - line);
 	}
 
 	h.out = console_out;
@@ -746,7 +745,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 	}
 
 	if (!*buf) {
-#ifdef SWITCH_HAVE_LIBEDIT
+#ifdef HAVE_LIBEDIT
 		if (h.out && sc) {
 			el_deletestr(el, sc);
 		}
@@ -761,7 +760,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 	}
 
 	if (sc > 1) {
-#ifdef SWITCH_HAVE_LIBEDIT
+#ifdef HAVE_LIBEDIT
 		if (h.out) {
 			el_deletestr(el, sc - 1);
 		}
@@ -784,7 +783,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 		buf = lp + 1;
 	}
 
-	h.len = strlen(buf);
+	h.len = (int)strlen(buf);
 
 	if (h.out) {
 		fprintf(h.out, "\n\n");
@@ -899,7 +898,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 			switch_xml_set_txt_d(x_write, h.partial);
 		}
 	}
-#ifdef SWITCH_HAVE_LIBEDIT
+#ifdef HAVE_LIBEDIT
 	if (h.out) {
 		if (h.hits == 1 && !zstr(h.last)) {
 			el_deletestr(el, h.len);
@@ -942,7 +941,7 @@ SWITCH_DECLARE(unsigned char) switch_console_complete(const char *line, const ch
 }
 
 
-#if defined(SWITCH_HAVE_LIBEDIT) || defined(_MSC_VER)
+#if defined(HAVE_LIBEDIT) || defined(_MSC_VER)
 /*
  * If a fnkey is configured then process the command
  */
@@ -972,14 +971,14 @@ static unsigned char console_fnkey_pressed(int i)
 
 SWITCH_DECLARE(void) switch_console_save_history(void)
 {
-#ifdef SWITCH_HAVE_LIBEDIT
+#ifdef HAVE_LIBEDIT
 	history(myhistory, &ev, H_SAVE, hfile);
 #else
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CONSOLE, "NOT IMPLEMENTED!\n");
 #endif
 }
 
-#ifdef SWITCH_HAVE_LIBEDIT
+#ifdef HAVE_LIBEDIT
 static char prompt_str[512] = "";
 
 static unsigned char console_f1key(EditLine * el, int ch)
@@ -1661,7 +1660,7 @@ static struct {
 SWITCH_DECLARE(switch_status_t) switch_console_init(switch_memory_pool_t *pool)
 {
 	switch_mutex_init(&globals.func_mutex, SWITCH_MUTEX_NESTED, pool);
-	switch_core_hash_init(&globals.func_hash, pool);
+	switch_core_hash_init(&globals.func_hash);
 	switch_console_add_complete_func("::console::list_available_modules", (switch_console_complete_callback_t) switch_console_list_available_modules);
 	switch_console_add_complete_func("::console::list_loaded_modules", (switch_console_complete_callback_t) switch_console_list_loaded_modules);
 	switch_console_add_complete_func("::console::list_interfaces", (switch_console_complete_callback_t) switch_console_list_interfaces);
@@ -1881,7 +1880,11 @@ SWITCH_DECLARE(switch_status_t) switch_console_set_complete(const char *string)
 				status = SWITCH_STATUS_SUCCESS;
 			} else if (!strcasecmp(argv[0], "del")) {
 				char *what = argv[1];
-				if (!strcasecmp(what, "*")) {
+				if (zstr(what)) {
+					switch_safe_free(mystream.data);  
+					switch_safe_free(mydata); 
+					return SWITCH_STATUS_FALSE;
+				} else if (!strcasecmp(what, "*")) {
 					mystream.write_function(&mystream, "delete from complete where hostname='%s'", switch_core_get_hostname());
 					switch_core_sql_exec(mystream.data);
 				} else {
@@ -1921,7 +1924,7 @@ SWITCH_DECLARE(switch_status_t) switch_console_set_alias(const char *string)
 			switch_cache_db_handle_t *db = NULL;
 			char *sql = NULL;
 
-			if (!strcmp(argv[1], argv[2])) {
+			if (argc > 2 && !strcmp(argv[1], argv[2])) {
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Alias and command cannot be the same, this will cause loop!\n");
 				return SWITCH_STATUS_FALSE;
 			}

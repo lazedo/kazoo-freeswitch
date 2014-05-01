@@ -1,6 +1,6 @@
 /*
  * mod_rayo for FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2013, Grasshopper
+ * Copyright (C) 2013-2014, Grasshopper
  *
  * Version: MPL 1.1
  *
@@ -37,10 +37,12 @@ struct output_component {
 	struct rayo_component base;
 	/** document to play */
 	iks *document;
+	/** where to start playing in document */
+	int start_offset_ms;
 	/** maximum time to play */
-	int max_time;
+	int max_time_ms;
 	/** silence between repeats */
-	int repeat_interval;
+	int repeat_interval_ms;
 	/** number of times to repeat */
 	int repeat_times;
 	/** true if started paused */
@@ -66,16 +68,20 @@ static struct rayo_component *create_output_component(struct rayo_actor *actor, 
 
 	switch_core_new_memory_pool(&pool);
 	output_component = switch_core_alloc(pool, sizeof(*output_component));
-	rayo_component_init((struct rayo_component *)output_component, pool, type, "output", NULL, actor, client_jid);
+	output_component = OUTPUT_COMPONENT(rayo_component_init((struct rayo_component *)output_component, pool, type, "output", NULL, actor, client_jid));
+	if (output_component) {
+		output_component->document = iks_copy(output);
+		output_component->start_offset_ms = iks_find_int_attrib(output, "start-offset");
+		output_component->repeat_interval_ms = iks_find_int_attrib(output, "repeat-interval");
+		output_component->repeat_times = iks_find_int_attrib(output, "repeat-times");
+		output_component->max_time_ms = iks_find_int_attrib(output, "max-time");
+		output_component->start_paused = iks_find_bool_attrib(output, "start-paused");
+		output_component->renderer = switch_core_strdup(RAYO_POOL(output_component), iks_find_attrib_soft(output, "renderer"));
+	} else {
+		switch_core_destroy_memory_pool(&pool);
+	}
 
-	output_component->document = iks_copy(output);
-	output_component->repeat_interval = iks_find_int_attrib(output, "repeat-interval");
-	output_component->repeat_times = iks_find_int_attrib(output, "repeat-times");
-	output_component->max_time = iks_find_int_attrib(output, "max-time");
-	output_component->start_paused = iks_find_bool_attrib(output, "start-paused");
-	output_component->renderer = iks_find_attrib(output, "renderer");
-
-	return (struct rayo_component *)output_component;
+	return RAYO_COMPONENT(output_component);
 }
 
 /**
@@ -97,23 +103,30 @@ static iks *start_call_output(struct rayo_component *component, switch_core_sess
 	stream.write_function(&stream, "{id=%s,session=%s,pause=%s",
 		RAYO_JID(component), switch_core_session_get_uuid(session),
 		OUTPUT_COMPONENT(component)->start_paused ? "true" : "false");
-	if (OUTPUT_COMPONENT(component)->max_time > 0) {
-		stream.write_function(&stream, ",timeout=%i", OUTPUT_COMPONENT(component)->max_time * 1000);
+	if (OUTPUT_COMPONENT(component)->max_time_ms > 0) {
+		stream.write_function(&stream, ",timeout=%i", OUTPUT_COMPONENT(component)->max_time_ms);
+	}
+	if (OUTPUT_COMPONENT(component)->start_offset_ms > 0) {
+		stream.write_function(&stream, ",start_offset_ms=%i", OUTPUT_COMPONENT(component)->start_offset_ms);
 	}
 	stream.write_function(&stream, "}fileman://rayo://%s", RAYO_JID(component));
 
 	if (switch_ivr_displace_session(session, stream.data, 0, "m") == SWITCH_STATUS_SUCCESS) {
 		RAYO_UNLOCK(component);
 	} else {
-		if (OUTPUT_COMPONENT(component)->document) {
-			iks_delete(OUTPUT_COMPONENT(component)->document);
-		}
-		if (switch_channel_get_state(switch_core_session_get_channel(session)) >= CS_HANGUP) {
-			rayo_component_send_complete(component, COMPONENT_COMPLETE_HANGUP);
-			component = NULL;
+		if (component->complete) {
+			/* component is already destroyed */
+			RAYO_UNLOCK(component);
 		} else {
-			rayo_component_send_complete(component, COMPONENT_COMPLETE_ERROR);
-			component = NULL;
+			/* need to destroy component */
+			if (OUTPUT_COMPONENT(component)->document) {
+				iks_delete(OUTPUT_COMPONENT(component)->document);
+			}
+			if (switch_channel_get_state(switch_core_session_get_channel(session)) >= CS_HANGUP) {
+				rayo_component_send_complete(component, COMPONENT_COMPLETE_HANGUP);
+			} else {
+				rayo_component_send_complete(component, COMPONENT_COMPLETE_ERROR);
+			}
 		}
 	}
 	switch_safe_free(stream.data);
@@ -143,6 +156,9 @@ static iks *start_call_output_component(struct rayo_actor *call, struct rayo_mes
 	}
 
 	output_component = create_output_component(call, RAT_CALL_COMPONENT, output, iks_find_attrib(iq, "from"));
+	if (!output_component) {
+		return iks_new_error_detailed(iq, STANZA_ERROR_INTERNAL_SERVER_ERROR, "Failed to create output entity");
+	}
 	return start_call_output(output_component, session, output, iq);
 }
 
@@ -169,6 +185,9 @@ static iks *start_mixer_output_component(struct rayo_actor *mixer, struct rayo_m
 	}
 
 	component = create_output_component(mixer, RAT_MIXER_COMPONENT, output, iks_find_attrib(iq, "from"));
+	if (!component) {
+		return iks_new_error_detailed(iq, STANZA_ERROR_INTERNAL_SERVER_ERROR, "Failed to create output entity");
+	}
 
 	/* build conference command */
 	SWITCH_STANDARD_STREAM(stream);
@@ -177,10 +196,16 @@ static iks *start_mixer_output_component(struct rayo_actor *mixer, struct rayo_m
 	stream.write_function(&stream, "{id=%s,pause=%s",
 		RAYO_JID(component),
 		OUTPUT_COMPONENT(component)->start_paused ? "true" : "false");
-	if (OUTPUT_COMPONENT(component)->max_time > 0) {
-		stream.write_function(&stream, ",timeout=%i", OUTPUT_COMPONENT(component)->max_time * 1000);
+	if (OUTPUT_COMPONENT(component)->max_time_ms > 0) {
+		stream.write_function(&stream, ",timeout=%i", OUTPUT_COMPONENT(component)->max_time_ms);
+	}
+	if (OUTPUT_COMPONENT(component)->start_offset_ms > 0) {
+		stream.write_function(&stream, ",start_offset_ms=%i", OUTPUT_COMPONENT(component)->start_offset_ms);
 	}
 	stream.write_function(&stream, "}fileman://rayo://%s", RAYO_JID(component));
+
+	/* acknowledge command */
+	rayo_component_send_start(component, iq);
 
 	rayo_component_api_execute_async(component, "conference", stream.data);
 
@@ -381,7 +406,7 @@ static switch_status_t next_file(switch_file_handle_t *handle)
 	if (!context->cur_doc) {
 		if (output->repeat_times == 0 || ++context->play_count < output->repeat_times) {
 			/* repeat all document(s) */
-			if (!output->repeat_interval) {
+			if (!output->repeat_interval_ms) {
 				goto top;
 			}
 		} else {
@@ -394,7 +419,7 @@ static switch_status_t next_file(switch_file_handle_t *handle)
 	if (!context->cur_doc) {
 		/* play silence between repeats */
 		switch_safe_free(context->ssml);
-		context->ssml = switch_mprintf("silence_stream://%i", output->repeat_interval);
+		context->ssml = switch_mprintf("silence_stream://%i", output->repeat_interval_ms);
 	} else {
 		/* play next document */
 		iks *speak = NULL;
@@ -509,9 +534,26 @@ static switch_status_t rayo_file_close(switch_file_handle_t *handle)
 		if (output->stop) {
 			rayo_component_send_complete(context->component, COMPONENT_COMPLETE_STOP);
 		} else {
-			rayo_component_send_complete(context->component, OUTPUT_FINISH);
+			if (!strcmp(RAYO_ACTOR(context->component)->type, RAT_CALL_COMPONENT)) {
+				/* call output... check for hangup */
+				switch_core_session_t *session = switch_core_session_locate(context->component->parent->id);
+				if (session) {
+					if (switch_channel_get_state(switch_core_session_get_channel(session)) >= CS_HANGUP) {
+						rayo_component_send_complete(context->component, COMPONENT_COMPLETE_HANGUP);
+					} else {
+						rayo_component_send_complete(context->component, OUTPUT_FINISH);
+					}
+					switch_core_session_rwunlock(session);
+				} else {
+					/* session is gone */
+					rayo_component_send_complete(context->component, COMPONENT_COMPLETE_HANGUP);
+				}
+			} else {
+				/* mixer output... finished */
+				rayo_component_send_complete(context->component, OUTPUT_FINISH);
+			}
 		}
-		/* TODO hangup / timed out */
+		/* TODO timed out */
 
 		/* cleanup internals */
 		switch_safe_free(context->ssml);
@@ -621,6 +663,7 @@ struct fileman_file_context {
  */
 static switch_status_t fileman_file_open(switch_file_handle_t *handle, const char *path)
 {
+	int start_offset_ms = 0;
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	struct fileman_file_context *context = switch_core_alloc(handle->memory_pool, sizeof(*context));
 	handle->private_info = context;
@@ -628,11 +671,18 @@ static switch_status_t fileman_file_open(switch_file_handle_t *handle, const cha
 	if (handle->params) {
 		const char *id = switch_event_get_header(handle->params, "id");
 		const char *uuid = switch_event_get_header(handle->params, "session");
+		const char *start_offset_ms_str = switch_event_get_header(handle->params, "start_offset_ms");
 		if (!zstr(id)) {
 			context->id = switch_core_strdup(handle->memory_pool, id);
 		}
 		if (!zstr(uuid)) {
 			context->uuid = switch_core_strdup(handle->memory_pool, uuid);
+		}
+		if (!zstr(start_offset_ms_str) && switch_is_number(start_offset_ms_str)) {
+			start_offset_ms = atoi(start_offset_ms_str);
+			if (start_offset_ms < 0) {
+				start_offset_ms = 0;
+			}
 		}
 	}
 
@@ -682,6 +732,13 @@ static switch_status_t fileman_file_open(switch_file_handle_t *handle, const cha
 
 	if (handle->params && switch_true(switch_event_get_header(handle->params, "pause"))) {
 		switch_set_flag(handle, SWITCH_FILE_PAUSE);
+	}
+
+	if (handle->seekable && start_offset_ms) {
+		unsigned int pos = 0;
+		int32_t target = start_offset_ms * (handle->samplerate / 1000);
+		switch_log_printf(SWITCH_CHANNEL_UUID_LOG(context->uuid), SWITCH_LOG_DEBUG, "seek to position %d\n", target);
+		switch_core_file_seek(&context->fh, &pos, target, SEEK_SET);
 	}
 
 	return status;
@@ -952,6 +1009,7 @@ static switch_status_t fileman_process_cmd(const char *cmd, switch_file_handle_t
 	}
 
 	if (fhp) {
+		struct fileman_file_context *context = (struct fileman_file_context *)fhp->private_info;
 		if (!switch_test_flag(fhp, SWITCH_FILE_OPEN)) {
 			return SWITCH_STATUS_FALSE;
 		}
@@ -1048,12 +1106,12 @@ static switch_status_t fileman_process_cmd(const char *cmd, switch_file_handle_t
 						target = 0;
 					}
 
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "seek to position %d\n", target);
+					switch_log_printf(SWITCH_CHANNEL_UUID_LOG(context->uuid), SWITCH_LOG_DEBUG, "seek to position %d\n", target);
 					switch_core_file_seek(fhp, &pos, target, SEEK_SET);
 
 				} else {
 					samps = switch_atoui(p) * (fhp->samplerate / 1000);
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "seek to position %d\n", samps);
+					switch_log_printf(SWITCH_CHANNEL_UUID_LOG(context->uuid), SWITCH_LOG_DEBUG, "seek to position %d\n", samps);
 					switch_core_file_seek(fhp, &pos, samps, SEEK_SET);
 				}
 			}
@@ -1146,7 +1204,7 @@ switch_status_t rayo_output_component_load(switch_loadable_module_interface_t **
 	file_interface->file_seek = rayo_file_seek;
 
 	switch_mutex_init(&fileman_globals.mutex, SWITCH_MUTEX_NESTED, pool);
-	switch_core_hash_init(&fileman_globals.hash, pool);
+	switch_core_hash_init(&fileman_globals.hash);
 
 	file_interface = switch_loadable_module_create_interface(*module_interface, SWITCH_FILE_INTERFACE);
 	file_interface->interface_name = "mod_rayo";
@@ -1168,6 +1226,8 @@ switch_status_t rayo_output_component_load(switch_loadable_module_interface_t **
  */
 switch_status_t rayo_output_component_shutdown(void)
 {
+	switch_core_hash_destroy(&fileman_globals.hash);
+
 	return SWITCH_STATUS_SUCCESS;
 }
 

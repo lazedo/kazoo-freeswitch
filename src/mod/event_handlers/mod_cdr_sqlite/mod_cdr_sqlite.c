@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -196,7 +196,7 @@ static switch_status_t load_config(switch_memory_pool_t *pool)
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 
 	memset(&globals, 0, sizeof(globals));
-	switch_core_hash_init(&globals.template_hash, pool);
+	switch_core_hash_init(&globals.template_hash);
 
 	globals.pool = pool;
 
@@ -297,6 +297,7 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_cdr_sqlite_shutdown)
 {
 	globals.shutdown = 1;
 	switch_core_remove_state_handler(&state_handlers);
+	switch_core_hash_destroy(&globals.template_hash);
 
 	return SWITCH_STATUS_SUCCESS;
 }

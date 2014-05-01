@@ -1,6 +1,6 @@
 /*
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -47,7 +47,6 @@
 #define SOFIA_QUEUE_SIZE 50000
 #define HAVE_APR
 #include <switch.h>
-#include <switch_version.h>
 #define SOFIA_NAT_SESSION_TIMEOUT 90
 #define SOFIA_MAX_ACL 100
 #ifdef _MSC_VER
@@ -99,7 +98,6 @@ typedef struct private_object private_object_t;
 
 #define MULTICAST_EVENT "multicast::event"
 #define SOFIA_REPLACES_HEADER "_sofia_replaces_"
-#define SOFIA_USER_AGENT "FreeSWITCH-mod_sofia/" SWITCH_VERSION_FULL
 #define SOFIA_CHAT_PROTO "sip"
 #define SOFIA_MULTIPART_PREFIX "sip_mp_"
 #define SOFIA_MULTIPART_PREFIX_T "~sip_mp_"
@@ -116,9 +114,6 @@ typedef struct private_object private_object_t;
 #define SOFIA_DEFAULT_PORT "5060"
 #define SOFIA_DEFAULT_TLS_PORT "5061"
 #define SOFIA_REFER_TO_VARIABLE "sip_refer_to"
-#define SOFIA_SECURE_MEDIA_VARIABLE "rtp_secure_media"
-#define SOFIA_SECURE_MEDIA_CONFIRMED_VARIABLE "rtp_secure_media_confirmed"
-#define SOFIA_SECURE_VIDEO_CONFIRMED_VARIABLE "sip_secure_video_confirmed"
 //#define SOFIA_HAS_CRYPTO_VARIABLE "rtp_has_crypto"
 //#define SOFIA_HAS_VIDEO_CRYPTO_VARIABLE "sip_has_video_crypto"
 //#define SOFIA_CRYPTO_MANDATORY_VARIABLE "sip_crypto_mandatory"
@@ -226,6 +221,7 @@ typedef enum {
 	PFLAG_RECIEVED_IN_NAT_REG_CONTACT,
 	PFLAG_3PCC,
 	PFLAG_3PCC_PROXY,
+	PFLAG_3PCC_REINVITE_BRIDGED_ON_ACK,
 	PFLAG_CALLID_AS_UUID,
 	PFLAG_UUID_AS_CALLID,
 	PFLAG_MANAGE_SHARED_APPEARANCE,
@@ -271,9 +267,17 @@ typedef enum {
 	PFLAG_FIRE_MESSAGE_EVENTS,
 	PFLAG_SEND_DISPLAY_UPDATE,
 	PFLAG_RUNNING_TRANS,
+	PFLAG_SOCKET_TCP_KEEPALIVE,
 	PFLAG_TCP_KEEPALIVE,
 	PFLAG_TCP_PINGPONG,
 	PFLAG_TCP_PING2PONG,
+	PFLAG_MESSAGES_RESPOND_200_OK,
+	PFLAG_SUBSCRIBE_RESPOND_200_OK,
+	PFLAG_PARSE_ALL_INVITE_HEADERS,
+	PFLAG_TCP_UNREG_ON_SOCKET_CLOSE,
+	PFLAG_TLS_ALWAYS_NAT,
+	PFLAG_TCP_ALWAYS_NAT,
+	PFLAG_ENABLE_CHAT,
 	/* No new flags below this line */
 	PFLAG_MAX
 } PFLAGS;
@@ -323,6 +327,7 @@ typedef enum {
 	TFLAG_CAPTURE,
 	TFLAG_REINVITED,
 	TFLAG_PASS_ACK,
+	TFLAG_KEEPALIVE,
 	/* No new flags below this line */
 	TFLAG_MAX
 } TFLAGS;
@@ -362,6 +367,7 @@ struct mod_sofia_globals {
 	int presence_flush;
 	switch_thread_t *presence_thread;
 	uint32_t max_reg_threads;
+	time_t presence_epoch;
 };
 extern struct mod_sofia_globals mod_sofia_globals;
 
@@ -404,6 +410,14 @@ typedef enum {
 } sofia_transport_t;
 
 typedef enum {
+	SOFIA_TLS_VERSION_SSLv2 = (1 << 0),
+	SOFIA_TLS_VERSION_SSLv3 = (1 << 1),
+	SOFIA_TLS_VERSION_TLSv1 = (1 << 2),
+	SOFIA_TLS_VERSION_TLSv1_1 = (1 << 3),
+	SOFIA_TLS_VERSION_TLSv1_2 = (1 << 4),
+} sofia_tls_version_t;
+
+typedef enum {
 	SOFIA_GATEWAY_DOWN,
 	SOFIA_GATEWAY_UP,
 
@@ -417,6 +431,7 @@ typedef enum {
 	SUB_STATE_SUBED,
 	SUB_STATE_UNSUBSCRIBE,
 	SUB_STATE_FAILED,
+	SUB_STATE_FAIL_WAIT,
 	SUB_STATE_EXPIRED,
 	SUB_STATE_NOSUB,
 	v_STATE_LAST
@@ -512,7 +527,8 @@ typedef enum {
 typedef enum {
 	MEDIA_OPT_NONE = 0,
 	MEDIA_OPT_MEDIA_ON_HOLD = (1 << 0),
-	MEDIA_OPT_BYPASS_AFTER_ATT_XFER = (1 << 1)
+	MEDIA_OPT_BYPASS_AFTER_ATT_XFER = (1 << 1),
+	MEDIA_OPT_BYPASS_AFTER_HOLD = (1 << 2)
 } sofia_media_options_t;
 
 typedef enum {
@@ -524,8 +540,14 @@ typedef enum {
 
 #define MAX_RTPIP 50
 
+typedef enum {
+	KA_MESSAGE,
+	KA_INFO
+} ka_type_t;
+
 struct sofia_profile {
 	int debug;
+	int parse_invite_tel_params;
 	char *name;
 	char *domain_name;
 	char *dbname;
@@ -582,6 +604,7 @@ struct sofia_profile {
 	switch_port_t sip_port;
 	switch_port_t extsipport;
 	switch_port_t tls_sip_port;
+	char *tls_ciphers;
 	int tls_version;
 	unsigned int tls_timeout;
 	char *inbound_codec_string;
@@ -668,7 +691,7 @@ struct sofia_profile {
 	int watchdog_enabled;
 	switch_mutex_t *gw_mutex;
 	uint32_t queued_events;
-	uint32_t cseq_base;
+	uint32_t last_cseq;
 	int tls_only;
 	int tls_verify_date;
 	enum tport_tls_verify_policy tls_verify_policy;
@@ -678,6 +701,7 @@ struct sofia_profile {
 	su_strlst_t *tls_verify_in_subjects;
 	uint32_t sip_force_expires;
 	uint32_t sip_expires_max_deviation;
+	uint32_t sip_expires_late_margin;
 	uint32_t sip_subscription_max_deviation;
 	int ireg_seconds;
 	sofia_paid_type_t paid_type;
@@ -689,9 +713,11 @@ struct sofia_profile {
 	switch_port_t ws_port;
 	char *wss_ip;
 	switch_port_t wss_port;
+	int socket_tcp_keepalive;
 	int tcp_keepalive;
 	int tcp_pingpong;
 	int tcp_ping2pong;
+	ka_type_t keepalive;
 };
 
 
@@ -758,6 +784,7 @@ struct private_object {
 	int respond_code;
 	char *respond_dest;
 	time_t last_vid_info;
+	uint32_t keepalive;
 };
 
 
@@ -893,7 +920,7 @@ void sofia_reg_auth_challenge(sofia_profile_t *profile, nua_handle_t *nh, sofia_
 							  sofia_regtype_t regtype, const char *realm, int stale, long exptime);
 auth_res_t sofia_reg_parse_auth(sofia_profile_t *profile, sip_authorization_t const *authorization,
 								sip_t const *sip,
-								sofia_dispatch_event_t *de, const char *regstr, char *np, size_t nplen, char *ip, switch_event_t **v_event,
+								sofia_dispatch_event_t *de, const char *regstr, char *np, size_t nplen, char *ip, int network_port, switch_event_t **v_event,
 								long exptime, sofia_regtype_t regtype, const char *to_user, switch_event_t **auth_params, long *reg_count, switch_xml_t *user_xml);
 
 
@@ -938,10 +965,11 @@ void sofia_reg_unregister(sofia_profile_t *profile);
 void sofia_glue_pass_sdp(private_object_t *tech_pvt, char *sdp);
 switch_call_cause_t sofia_glue_sip_cause_to_freeswitch(int status);
 void sofia_glue_do_xfer_invite(switch_core_session_t *session);
-uint8_t sofia_reg_handle_register(nua_t *nua, sofia_profile_t *profile, nua_handle_t *nh, sip_t const *sip,
+uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nua_handle_t *nh, sip_t const *sip,
 								  sofia_dispatch_event_t *de,
 								  sofia_regtype_t regtype, char *key,
-								  uint32_t keylen, switch_event_t **v_event, const char *is_nat, sofia_private_t **sofia_private_p, switch_xml_t *user_xml);
+								  uint32_t keylen, switch_event_t **v_event, const char *is_nat, sofia_private_t **sofia_private_p, switch_xml_t *user_xml, const char *sw_acl_token);
+#define sofia_reg_handle_register(_nua_, _profile_, _nh_, _sip_, _de_, _regtype_, _key_, _keylen_, _v_event_, _is_nat_, _sofia_private_p_, _user_xml_) sofia_reg_handle_register_token(_nua_, _profile_, _nh_, _sip_, _de_, _regtype_, _key_, _keylen_, _v_event_, _is_nat_, _sofia_private_p_, _user_xml_, NULL)
 extern switch_endpoint_interface_t *sofia_endpoint_interface;
 void sofia_presence_set_chat_hash(private_object_t *tech_pvt, sip_t const *sip);
 switch_status_t sofia_on_hangup(switch_core_session_t *session);
@@ -1098,6 +1126,7 @@ switch_bool_t sofia_glue_profile_exists(const char *key);
 void sofia_glue_global_siptrace(switch_bool_t on);
 void sofia_glue_global_capture(switch_bool_t on);
 void sofia_glue_global_watchdog(switch_bool_t on);
+uint32_t sofia_presence_get_cseq(sofia_profile_t *profile);
 
 void sofia_glue_build_vid_refresh_message(switch_core_session_t *session, const char *pl);
 char *sofia_glue_gen_contact_str(sofia_profile_t *profile, sip_t const *sip, nua_handle_t *nh, sofia_dispatch_event_t *de, sofia_nat_parse_t *np);

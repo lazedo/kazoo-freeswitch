@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -40,7 +40,6 @@
 #include <switch_ssl.h>
 #include <switch_stun.h>
 #include <switch_nat.h>
-#include <switch_version.h>
 #include "private/switch_core_pvt.h"
 #include <switch_curl.h>
 #ifndef WIN32
@@ -50,6 +49,7 @@
 #endif
 #endif
 #include <errno.h>
+#include <sqlite3.h>
 
 
 SWITCH_DECLARE_DATA switch_directories SWITCH_GLOBAL_dirs = { 0 };
@@ -83,7 +83,7 @@ static void send_heartbeat(void)
 								duration.sec, duration.sec == 1 ? "" : "s",
 								duration.ms, duration.ms == 1 ? "" : "s", duration.mms, duration.mms == 1 ? "" : "s");
 
-		switch_event_add_header(event, SWITCH_STACK_BOTTOM, "FreeSWITCH-Version", SWITCH_VERSION_FULL);
+		switch_event_add_header(event, SWITCH_STACK_BOTTOM, "FreeSWITCH-Version", "%s", switch_version_full());
 		switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Uptime-msec", "%"SWITCH_TIME_T_FMT, switch_core_uptime() / 1000);
 		switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Session-Count", "%u", switch_core_session_count());
 		switch_event_add_header(event, SWITCH_STACK_BOTTOM, "Max-Sessions", "%u", switch_core_session_limit(0));
@@ -1023,7 +1023,7 @@ SWITCH_DECLARE(const char *) switch_core_mime_ext2type(const char *ext)
 
 SWITCH_DECLARE(switch_hash_index_t *) switch_core_mime_index(void)
 {
-	return switch_hash_first(NULL, runtime.mime_types);
+	return switch_core_hash_first(runtime.mime_types);
 }
 
 SWITCH_DECLARE(switch_status_t) switch_core_mime_add_type(const char *type, const char *ext)
@@ -1251,7 +1251,7 @@ SWITCH_DECLARE(void) switch_load_network_lists(switch_bool_t reload)
 
 	memset(&IP_LIST, 0, sizeof(IP_LIST));
 	switch_core_new_memory_pool(&IP_LIST.pool);
-	switch_core_hash_init(&IP_LIST.hash, IP_LIST.pool);
+	switch_core_hash_init(&IP_LIST.hash);
 
 
 	tmp_name = "rfc1918.auto";
@@ -1609,6 +1609,10 @@ SWITCH_DECLARE(switch_status_t) switch_core_init(switch_core_flag_t flags, switc
 
 	if (!runtime.cpu_count) runtime.cpu_count = 1;
 
+	if (sqlite3_initialize() != SQLITE_OK) {
+		*err = "FATAL ERROR! Could not initialize SQLite\n";
+		return SWITCH_STATUS_MEMERR;
+	}
 
 	/* INIT APR and Create the pool context */
 	if (apr_initialize() != SWITCH_STATUS_SUCCESS) {
@@ -1647,8 +1651,8 @@ SWITCH_DECLARE(switch_status_t) switch_core_init(switch_core_flag_t flags, switc
 	switch_core_set_globals();
 	switch_core_session_init(runtime.memory_pool);
 	switch_event_create_plain(&runtime.global_vars, SWITCH_EVENT_CHANNEL_DATA);
-	switch_core_hash_init(&runtime.mime_types, runtime.memory_pool);
-	switch_core_hash_init_case(&runtime.ptimes, runtime.memory_pool, SWITCH_FALSE);
+	switch_core_hash_init(&runtime.mime_types);
+	switch_core_hash_init_case(&runtime.ptimes, SWITCH_FALSE);
 	load_mime_types();
 	runtime.flags |= flags;
 	runtime.sps_total = 30;
@@ -1977,6 +1981,8 @@ static void switch_load_core_config(const char *file)
 					switch_core_min_idle_cpu(atof(val));
 				} else if (!strcasecmp(var, "tipping-point") && !zstr(val)) {
 					runtime.tipping_point = atoi(val);
+				} else if (!strcasecmp(var, "cpu-idle-smoothing-depth") && !zstr(val)) {
+					runtime.cpu_idle_smoothing_depth = atoi(val);
 				} else if (!strcasecmp(var, "events-use-dispatch") && !zstr(val)) {
 					runtime.events_use_dispatch = switch_true(val);
 				} else if (!strcasecmp(var, "initial-event-threads") && !zstr(val)) {
@@ -2015,6 +2021,8 @@ static void switch_load_core_config(const char *file)
 					switch_rtp_set_start_port((switch_port_t) atoi(val));
 				} else if (!strcasecmp(var, "rtp-end-port") && !zstr(val)) {
 					switch_rtp_set_end_port((switch_port_t) atoi(val));
+				} else if (!strcasecmp(var, "rtp-port-usage-robustness") && switch_true(val)) {
+					runtime.port_alloc_flags |= SPF_ROBUST_UDP;
 				} else if (!strcasecmp(var, "core-db-name") && !zstr(val)) {
 					runtime.dbname = switch_core_strdup(runtime.memory_pool, val);
 				} else if (!strcasecmp(var, "core-db-dsn") && !zstr(val)) {
@@ -2140,9 +2148,9 @@ SWITCH_DECLARE(switch_status_t) switch_core_init_and_modload(switch_core_flag_t 
 #endif
 
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_CONSOLE,
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO,
 					  "\nFreeSWITCH Version %s (%s)\n\nFreeSWITCH Started\nMax Sessions [%u]\nSession Rate [%d]\nSQL [%s]\n",
-					  SWITCH_VERSION_FULL, SWITCH_VERSION_REVISION_HUMAN,
+					  switch_version_full(), switch_version_revision_human(),
 					  switch_core_session_limit(0),
 					  switch_core_sessions_per_second(0), switch_test_flag((&runtime), SCF_USE_SQL) ? "Enabled" : "Disabled");
 
@@ -2676,6 +2684,8 @@ SWITCH_DECLARE(switch_status_t) switch_core_destroy(void)
 		apr_pool_destroy(runtime.memory_pool);
 		apr_terminate();
 	}
+
+	sqlite3_shutdown();
 
 	return switch_test_flag((&runtime), SCF_RESTART) ? SWITCH_STATUS_RESTART : SWITCH_STATUS_SUCCESS;
 }

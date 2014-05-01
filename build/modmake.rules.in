@@ -27,17 +27,10 @@ INSTALL=@INSTALL@
 GETLIB=@GETLIB@
 LIBTOOL=@LIBTOOL@
 AR=@AR@
-LIBGNUTLS_LIBS=@LIBGNUTLS_LIBS@
 LTINSTALL=$(LIBTOOL) --quiet --mode=install $(INSTALL) 
 LTUNINSTALL=$(LIBTOOL) --mode=uninstall rm -f 
 CCLD = $(CC)
 CXXLD = $(CXX)
-
-LIBCURL_DEPS=@LIBCURL_DEPS@
-LIBCURL=@LIBCURL@
-LIBCURL_CPPFLAGS=@LIBCURL_CPPFLAGS@
-CURL_DIR=$(switch_srcdir)/libs/curl
-CURLLA=$(switch_builddir)/libs/curl/lib/libcurl.la
 
 OPENSSL_LIBS=@openssl_LIBS@
 OPENSSL_CFLAGS=@openssl_CFLAGS@
@@ -48,7 +41,6 @@ DEFS=@DEFS@
 DYLD_LIBRARY_PATH=@libdir@:$DYLD_LIBRARY_PATH
 LD_LIBRARY_PATH=@libdir@:$LD_LIBRARY_PATH
 OSARCH=`uname -s`
-DYNAMIC_LIB_EXTEN = @DYNAMIC_LIB_EXTEN@
 LIBTOOL_LIB_EXTEN = @LIBTOOL_LIB_EXTEN@
 SOLINK = @SOLINK@
 
@@ -122,9 +114,6 @@ Makefile:
 	  echo BASE=$$rulesdir > Makefile ; \
 	  echo 'include $$(BASE)/build/modmake.rules' >> Makefile ; \
 	fi ;
-
-$(CURLLA):
-	@cd $(CURL_DIR) && $(MAKE)
 
 LINK_OUTPUT_REDIR=> .libs/$(MODNAME).log || error="yes" ; \
 			if test -n "$(VERBOSE)" -o "$$error" = "yes"; then \

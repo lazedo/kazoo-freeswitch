@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -278,11 +278,9 @@ SWITCH_DECLARE(void) switch_channel_perform_set_callstate(switch_channel_t *chan
 					  "(%s) Callstate Change %s -> %s\n", channel->name, 
 					  switch_channel_callstate2str(o_callstate), switch_channel_callstate2str(callstate));
 
-	switch_channel_check_device_state(channel, channel->callstate);
-
-	if (callstate == CCS_HANGUP) {
-		process_device_hup(channel);
-	}	
+	if (callstate != CCS_HANGUP) {
+		switch_channel_check_device_state(channel, channel->callstate);
+	}
 
 	if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_CALLSTATE) == SWITCH_STATUS_SUCCESS) {
 		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Original-Channel-Call-State", switch_channel_callstate2str(o_callstate));
@@ -418,7 +416,7 @@ SWITCH_DECLARE(switch_status_t) switch_channel_alloc(switch_channel_t **channel,
 
 	switch_event_create_plain(&(*channel)->variables, SWITCH_EVENT_CHANNEL_DATA);
 
-	switch_core_hash_init(&(*channel)->private_hash, pool);
+	switch_core_hash_init(&(*channel)->private_hash);
 	switch_queue_create(&(*channel)->dtmf_queue, SWITCH_DTMF_LOG_LEN, pool);
 	switch_queue_create(&(*channel)->dtmf_log_queue, SWITCH_DTMF_LOG_LEN, pool);
 
@@ -1864,7 +1862,7 @@ SWITCH_DECLARE(void) switch_channel_set_app_flag_key(const char *key, switch_cha
 	switch_mutex_lock(channel->flag_mutex);
 
 	if (!channel->app_flag_hash) {
-		switch_core_hash_init(&channel->app_flag_hash, switch_core_session_get_pool(channel->session));
+		switch_core_hash_init(&channel->app_flag_hash);
 		new++;
 	}
 	
@@ -3160,6 +3158,11 @@ SWITCH_DECLARE(switch_channel_state_t) switch_channel_perform_hangup(switch_chan
 	}
 	switch_mutex_unlock(channel->state_mutex);
 
+	if (switch_channel_test_flag(channel, CF_LEG_HOLDING)) {
+		switch_channel_mark_hold(channel, SWITCH_FALSE);
+		switch_channel_set_flag(channel, CF_HANGUP_HELD);
+	}
+
 	if (!ok) {
 		return channel->state;
 	}
@@ -3329,21 +3332,6 @@ SWITCH_DECLARE(void) switch_channel_check_zrtp(switch_channel_t *channel)
 	}
 }
 
-static void check_secure(switch_channel_t *channel)
-{
-	const char *var, *sec;
-
-	if (!switch_channel_media_ready(channel) && switch_channel_direction(channel) == SWITCH_CALL_DIRECTION_INBOUND) {
-		if ((sec = switch_channel_get_variable(channel, "rtp_secure_media")) && switch_true(sec)) {
-			if (!(var = switch_channel_get_variable(channel, "rtp_has_crypto"))) {
-				switch_log_printf(SWITCH_CHANNEL_CHANNEL_LOG(channel), SWITCH_LOG_WARNING, "rtp_secure_media invalid in this context.\n");
-				switch_channel_set_variable(channel, "rtp_secure_media", NULL);
-			}
-		}
-	}
-
-}
-
 SWITCH_DECLARE(switch_status_t) switch_channel_perform_mark_pre_answered(switch_channel_t *channel, const char *file, const char *func, int line)
 {
 	switch_event_t *event;
@@ -3430,8 +3418,6 @@ SWITCH_DECLARE(switch_status_t) switch_channel_perform_pre_answer(switch_channel
 	if (switch_channel_test_flag(channel, CF_EARLY_MEDIA)) {
 		return SWITCH_STATUS_SUCCESS;
 	}
-
-	check_secure(channel);
 
 	if (switch_channel_direction(channel) == SWITCH_CALL_DIRECTION_INBOUND) {
 		msg.message_id = SWITCH_MESSAGE_INDICATE_PROGRESS;
@@ -3558,6 +3544,9 @@ static void do_execute_on(switch_channel_t *channel, const char *variable)
 		}
 	}
 	
+	if (!strncasecmp(app, "perl", 4)) {
+		bg++;
+	}
 	
 	if (bg) {
 		switch_core_session_execute_application_async(channel->session, app, arg);
@@ -3668,6 +3657,14 @@ SWITCH_DECLARE(switch_status_t) switch_channel_perform_mark_answered(switch_chan
 					  channel->name);
 
 
+	if ((var = switch_channel_get_variable(channel, "absolute_codec_string"))) {
+		/* inherit_codec == true will implicitly clear the absolute_codec_string 
+		   variable if used since it was the reason it was set in the first place and is no longer needed */
+		if (switch_true(switch_channel_get_variable(channel, "inherit_codec"))) {
+			switch_channel_set_variable(channel, "absolute_codec_string", NULL);
+		}
+	}
+
 	switch_channel_execute_on(channel, SWITCH_CHANNEL_EXECUTE_ON_ANSWER_VARIABLE);
 
 	if (!switch_channel_test_flag(channel, CF_EARLY_MEDIA)) {
@@ -3709,8 +3706,6 @@ SWITCH_DECLARE(switch_status_t) switch_channel_perform_answer(switch_channel_t *
 	if (switch_channel_test_flag(channel, CF_ANSWERED)) {
 		return SWITCH_STATUS_SUCCESS;
 	}
-
-	check_secure(channel);
 
 	msg.message_id = SWITCH_MESSAGE_INDICATE_ANSWER;
 	msg.from = channel->name;
@@ -4694,7 +4689,7 @@ SWITCH_DECLARE(void) switch_channel_global_init(switch_memory_pool_t *pool)
 	globals.pool = pool;
 
 	switch_mutex_init(&globals.device_mutex, SWITCH_MUTEX_NESTED, pool);
-	switch_core_hash_init(&globals.device_hash, globals.pool);
+	switch_core_hash_init(&globals.device_hash);
 }
 
 SWITCH_DECLARE(void) switch_channel_global_uninit(void)
@@ -4835,6 +4830,14 @@ SWITCH_DECLARE(void) switch_channel_clear_device_record(switch_channel_t *channe
 	switch_mutex_unlock(globals.device_mutex);
 	
 	
+}
+
+SWITCH_DECLARE(void) switch_channel_process_device_hangup(switch_channel_t *channel) 
+{
+
+	switch_channel_check_device_state(channel, channel->callstate);
+	process_device_hup(channel);
+
 }
 
 static void process_device_hup(switch_channel_t *channel)

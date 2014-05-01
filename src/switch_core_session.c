@@ -1,6 +1,6 @@
 /* 
  * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
- * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
+ * Copyright (C) 2005-2014, Anthony Minessale II <anthm@freeswitch.org>
  *
  * Version: MPL 1.1
  *
@@ -222,8 +222,8 @@ SWITCH_DECLARE(uint32_t) switch_core_session_hupall_matching_var_ans(const char 
 		return r;
 
 	switch_mutex_lock(runtime.session_hash_mutex);
-	for (hi = switch_hash_first(NULL, session_manager.session_table); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(session_manager.session_table); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		if (val) {
 			session = (switch_core_session_t *) val;
 			if (switch_core_session_read_lock(session) == SWITCH_STATUS_SUCCESS) {
@@ -275,8 +275,8 @@ SWITCH_DECLARE(switch_console_callback_match_t *) switch_core_session_findall_ma
 	switch_core_new_memory_pool(&pool);
 
 	switch_mutex_lock(runtime.session_hash_mutex);
-	for (hi = switch_hash_first(NULL, session_manager.session_table); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(session_manager.session_table); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		if (val) {
 			session = (switch_core_session_t *) val;
 			if (switch_core_session_read_lock(session) == SWITCH_STATUS_SUCCESS) {
@@ -319,8 +319,8 @@ SWITCH_DECLARE(void) switch_core_session_hupall_endpoint(const switch_endpoint_i
 	switch_core_new_memory_pool(&pool);
 	
 	switch_mutex_lock(runtime.session_hash_mutex);
-	for (hi = switch_hash_first(NULL, session_manager.session_table); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(session_manager.session_table); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		if (val) {
 			session = (switch_core_session_t *) val;
 			if (switch_core_session_read_lock(session) == SWITCH_STATUS_SUCCESS) {
@@ -359,8 +359,8 @@ SWITCH_DECLARE(void) switch_core_session_hupall(switch_call_cause_t cause)
 
 
 	switch_mutex_lock(runtime.session_hash_mutex);
-	for (hi = switch_hash_first(NULL, session_manager.session_table); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(session_manager.session_table); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		if (val) {
 			session = (switch_core_session_t *) val;
 			if (switch_core_session_read_lock(session) == SWITCH_STATUS_SUCCESS) {
@@ -394,8 +394,8 @@ SWITCH_DECLARE(switch_console_callback_match_t *) switch_core_session_findall(vo
 	switch_console_callback_match_t *my_matches = NULL;
 
 	switch_mutex_lock(runtime.session_hash_mutex);
-	for (hi = switch_hash_first(NULL, session_manager.session_table); hi; hi = switch_hash_next(hi)) {
-		switch_hash_this(hi, NULL, NULL, &val);
+	for (hi = switch_core_hash_first(session_manager.session_table); hi; hi = switch_core_hash_next(&hi)) {
+		switch_core_hash_this(hi, NULL, NULL, &val);
 		if (val) {
 			session = (switch_core_session_t *) val;
 			if (switch_core_session_read_lock(session) == SWITCH_STATUS_SUCCESS) {
@@ -452,7 +452,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_event_send(const char *uuid_
 
 SWITCH_DECLARE(void *) switch_core_session_get_private_class(switch_core_session_t *session, switch_pvt_class_t index)
 {
-	if (index >= SWITCH_CORE_SESSION_MAX_PRIVATES) {
+	if ((int)index >= SWITCH_CORE_SESSION_MAX_PRIVATES) {
 		return NULL;
 	}
 
@@ -465,7 +465,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_set_private_class(switch_cor
 {
 	switch_assert(session != NULL);
 
-	if (index >= SWITCH_CORE_SESSION_MAX_PRIVATES) {
+	if ((int)index >= SWITCH_CORE_SESSION_MAX_PRIVATES) {
 		return SWITCH_STATUS_FALSE;
 	}
 
@@ -751,9 +751,12 @@ static const char *message_names[] = {
 	"BLIND_TRANSFER_RESPONSE",
 	"STUN_ERROR",
 	"MEDIA_RENEG",
+	"KEEPALIVE",
 	"ANSWER_EVENT",
 	"PROGRESS_EVENT",
 	"RING_EVENT",
+	"RESAMPLE_EVENT",
+	"HEARTBEAT_EVENT",
 	"INVALID"
 };
 
@@ -900,6 +903,7 @@ SWITCH_DECLARE(switch_status_t) switch_core_session_perform_receive_message(swit
 		case SWITCH_MESSAGE_INDICATE_BROADCAST:
 		case SWITCH_MESSAGE_INDICATE_MEDIA_REDIRECT:
 		case SWITCH_MESSAGE_INDICATE_DEFLECT:
+			switch_channel_set_flag(session->channel, CF_VIDEO_BREAK);
 			switch_core_session_kill_channel(session, SWITCH_SIG_BREAK);
 			break;
 		default:
@@ -1492,6 +1496,7 @@ SWITCH_STANDARD_SCHED_FUNC(sch_heartbeat_callback)
 	switch_event_t *event;
 	switch_core_session_t *session;
 	char *uuid = task->cmd_arg;
+	switch_core_session_message_t msg = { 0 }; 
 
 	if ((session = switch_core_session_locate(uuid))) {
 		switch_event_create(&event, SWITCH_EVENT_SESSION_HEARTBEAT);
@@ -1500,6 +1505,10 @@ SWITCH_STANDARD_SCHED_FUNC(sch_heartbeat_callback)
 
 		/* reschedule this task */
 		task->runtime = switch_epoch_time_now(NULL) + session->track_duration;
+
+		msg.message_id = SWITCH_MESSAGE_HEARTBEAT_EVENT;
+		msg.numeric_arg = session->track_duration;
+		switch_core_session_receive_message(session, &msg);
 
 		switch_core_session_rwunlock(session);
 	}
@@ -1517,7 +1526,7 @@ SWITCH_DECLARE(void) switch_core_session_sched_heartbeat(switch_core_session_t *
 {
 
 	switch_core_session_unsched_heartbeat(session);
-	session->track_id = switch_scheduler_add_task(switch_epoch_time_now(NULL), sch_heartbeat_callback, (char *) __SWITCH_FUNC__,
+	session->track_id = switch_scheduler_add_task(switch_epoch_time_now(NULL) + session->track_duration, sch_heartbeat_callback, (char *) __SWITCH_FUNC__,
 												  switch_core_session_get_uuid(session), 0, strdup(switch_core_session_get_uuid(session)), SSHF_FREE_ARG);
 }
 
@@ -1531,19 +1540,22 @@ SWITCH_DECLARE(void) switch_core_session_enable_heartbeat(switch_core_session_t 
 
 	session->track_duration = seconds;
 
-	if (switch_channel_test_flag(session->channel, CF_PROXY_MODE)) {
+	if (switch_channel_test_flag(session->channel, CF_PROXY_MODE) || 
+		switch_true(switch_channel_get_variable_dup(session->channel, "bypass_media", SWITCH_FALSE, -1)) ||
+		switch_true(switch_channel_get_variable_dup(session->channel, "bypass_media_after_bridge", SWITCH_FALSE, -1))) {
 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_WARNING, "%s using scheduler due to bypass_media mode\n",
 						  switch_channel_get_name(session->channel));
 		switch_core_session_sched_heartbeat(session, seconds);
 		return;
 	}
 
+	session->read_frame_count = (session->read_impl.actual_samples_per_second / session->read_impl.samples_per_packet) * seconds;
+
+
 	switch_core_session_unsched_heartbeat(session);
 
 	switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "%s setting session heartbeat to %u second(s).\n",
 					  switch_channel_get_name(session->channel), seconds);
-
-	session->read_frame_count = 0;
 
 }
 
@@ -2513,7 +2525,7 @@ void switch_core_session_init(switch_memory_pool_t *pool)
 	session_manager.session_limit = 1000;
 	session_manager.session_id = 1;
 	session_manager.memory_pool = pool;
-	switch_core_hash_init(&session_manager.session_table, session_manager.memory_pool);
+	switch_core_hash_init(&session_manager.session_table);
 	
 	if (switch_test_flag((&runtime), SCF_SESSION_THREAD_POOL)) {
 		switch_threadattr_t *thd_attr;

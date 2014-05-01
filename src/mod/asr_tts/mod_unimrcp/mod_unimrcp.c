@@ -440,6 +440,9 @@ static const char *grammar_type_to_mime(grammar_type_t type, profile_t *profile)
  * RECOGNIZER : UniMRCP <--> FreeSWITCH asr interface
  */
 
+#define START_OF_INPUT_RECEIVED 1
+#define START_OF_INPUT_REPORTED 2
+
 /**
  * Data specific to the recognizer
  */
@@ -538,8 +541,8 @@ static switch_status_t profile_create(profile_t ** profile, const char *name, sw
 		lprofile->gsl_mime_type = "application/x-nuance-gsl";
 		lprofile->jsgf_mime_type = "application/x-jsgf";
 		lprofile->ssml_mime_type = "application/ssml+xml";
-		switch_core_hash_init(&lprofile->default_synth_params, pool);
-		switch_core_hash_init(&lprofile->default_recog_params, pool);
+		switch_core_hash_init(&lprofile->default_synth_params);
+		switch_core_hash_init(&lprofile->default_recog_params);
 		*profile = lprofile;
 
 		if (globals.enable_profile_events && switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_PROFILE_CREATE) == SWITCH_STATUS_SUCCESS) {
@@ -873,7 +876,7 @@ static switch_status_t speech_channel_create(speech_channel_t ** schannel, const
 		status = SWITCH_STATUS_FALSE;
 		goto done;
 	}
-	switch_core_hash_init(&schan->params, pool);
+	switch_core_hash_init(&schan->params);
 	schan->data = NULL;
 	if (zstr(name)) {
 		schan->name = "";
@@ -1155,11 +1158,11 @@ static switch_status_t synth_channel_set_params(speech_channel_t *schannel, mrcp
 {
 	/* loop through each param and add to synth header or vendor-specific-params */
 	switch_hash_index_t *hi = NULL;
-	for (hi = switch_hash_first(NULL, schannel->params); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(schannel->params); hi; hi = switch_core_hash_next(&hi)) {
 		char *param_name = NULL, *param_val = NULL;
 		const void *key;
 		void *val;
-		switch_hash_this(hi, &key, NULL, &val);
+		switch_core_hash_this(hi, &key, NULL, &val);
 		param_name = (char *) key;
 		param_val = (char *) val;
 		if (!zstr(param_name) && !zstr(param_val)) {
@@ -1630,11 +1633,11 @@ static switch_status_t synth_speech_open(switch_speech_handle_t *sh, const char 
 	}
 
 	/* Set default TTS params */
-	for (hi = switch_hash_first(NULL, profile->default_synth_params); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(profile->default_synth_params); hi; hi = switch_core_hash_next(&hi)) {
 		char *param_name = NULL, *param_val = NULL;
 		const void *key;
 		void *val;
-		switch_hash_this(hi, &key, NULL, &val);
+		switch_core_hash_this(hi, &key, NULL, &val);
 		param_name = (char *) key;
 		param_val = (char *) val;
 		speech_channel_set_param(schannel, param_name, param_val);
@@ -2047,11 +2050,11 @@ static switch_status_t synth_load(switch_loadable_module_interface_t *module_int
 	mrcp_client_application_register(globals.mrcp_client, globals.synth.app, "synth");
 
 	/* map FreeSWITCH params to MRCP param */
-	switch_core_hash_init_nocase(&globals.synth.fs_param_map, pool);
+	switch_core_hash_init_nocase(&globals.synth.fs_param_map);
 	switch_core_hash_insert(globals.synth.fs_param_map, "voice", "voice-name");
 
 	/* map MRCP params to UniMRCP ID */
-	switch_core_hash_init_nocase(&globals.synth.param_id_map, pool);
+	switch_core_hash_init_nocase(&globals.synth.param_id_map);
 	switch_core_hash_insert(globals.synth.param_id_map, "jump-size", unimrcp_param_id_create(SYNTHESIZER_HEADER_JUMP_SIZE, pool));
 	switch_core_hash_insert(globals.synth.param_id_map, "kill-on-barge-in", unimrcp_param_id_create(SYNTHESIZER_HEADER_KILL_ON_BARGE_IN, pool));
 	switch_core_hash_insert(globals.synth.param_id_map, "speaker-profile", unimrcp_param_id_create(SYNTHESIZER_HEADER_SPEAKER_PROFILE, pool));
@@ -2192,16 +2195,17 @@ static switch_status_t recog_channel_start(speech_channel_t *schannel)
 	r->timers_started = zstr(start_input_timers) || strcasecmp(start_input_timers, "false");
 
 	/* count enabled grammars */
-	for (egk = switch_hash_first(NULL, r->enabled_grammars); egk; egk = switch_hash_next(egk)) {
+	for (egk = switch_core_hash_first(r->enabled_grammars); egk; egk = switch_core_hash_next(&egk)) {
 		// NOTE: This postponed type check is necessary to allow a non-URI-list grammar to execute alone
 		if (grammar_uri_count == 1 && grammar->type != GRAMMAR_TYPE_URI)
 			goto no_grammar_alone;
 		++grammar_uri_count;
-		switch_hash_this(egk, (void *) &key, NULL, (void *) &grammar);
+		switch_core_hash_this(egk, (void *) &key, NULL, (void *) &grammar);
 		if (grammar->type != GRAMMAR_TYPE_URI && grammar_uri_count != 1) {
 		      no_grammar_alone:
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "(%s) Grammar '%s' can only be used alone (not a URI list)\n", schannel->name, key);
 			status = SWITCH_STATUS_FALSE;
+			switch_safe_free(egk);
 			goto done;
 		}
 		len = strlen(grammar->data);
@@ -2224,8 +2228,8 @@ static switch_status_t recog_channel_start(speech_channel_t *schannel)
 		/* get the enabled grammars list */
 		grammar_uri_list = switch_core_alloc(schannel->memory_pool, grammar_uri_list_len + 1);
 		grammar_uri_list_len = 0;
-		for (egk = switch_hash_first(NULL, r->enabled_grammars); egk; egk = switch_hash_next(egk)) {
-			switch_hash_this(egk, (void *) &key, NULL, (void *) &grammar);
+		for (egk = switch_core_hash_first(r->enabled_grammars); egk; egk = switch_core_hash_next(&egk)) {
+			switch_core_hash_this(egk, (void *) &key, NULL, (void *) &grammar);
 			len = strlen(grammar->data);
 			if (!len)
 				continue;
@@ -2497,7 +2501,7 @@ static switch_status_t recog_channel_disable_all_grammars(speech_channel_t *scha
 	recognizer_data_t *r = (recognizer_data_t *) schannel->data;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) Disabling all grammars\n", schannel->name);
 	switch_core_hash_destroy(&r->enabled_grammars);
-	switch_core_hash_init(&r->enabled_grammars, schannel->memory_pool);
+	switch_core_hash_init(&r->enabled_grammars);
 
 	return status;
 }
@@ -2515,7 +2519,7 @@ static switch_status_t recog_channel_check_results(speech_channel_t *schannel)
 	r = (recognizer_data_t *) schannel->data;
 	if (!zstr(r->result)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) SUCCESS, have result\n", schannel->name);
-	} else if (r->start_of_input) {
+	} else if (r->start_of_input == START_OF_INPUT_RECEIVED) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) SUCCESS, start of input\n", schannel->name);
 	} else {
 		status = SWITCH_STATUS_FALSE;
@@ -2536,7 +2540,7 @@ static switch_status_t recog_channel_start_input_timers(speech_channel_t *schann
 	recognizer_data_t *r = (recognizer_data_t *) schannel->data;
 	switch_mutex_lock(schannel->mutex);
 
-	if (schannel->state == SPEECH_CHANNEL_PROCESSING && !r->timers_started) {
+	if (schannel->state == SPEECH_CHANNEL_PROCESSING && !r->timers_started && !r->start_of_input) {
 		mrcp_message_t *mrcp_message;
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) Starting input timers\n", schannel->name);
 		/* Send START-INPUT-TIMERS to MRCP server */
@@ -2568,7 +2572,7 @@ static switch_status_t recog_channel_set_start_of_input(speech_channel_t *schann
 	recognizer_data_t *r;
 	switch_mutex_lock(schannel->mutex);
 	r = (recognizer_data_t *) schannel->data;
-	r->start_of_input = 1;
+	r->start_of_input = START_OF_INPUT_RECEIVED;
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) start of input\n", schannel->name);
 	switch_mutex_unlock(schannel->mutex);
 	return status;
@@ -2757,11 +2761,11 @@ static switch_status_t recog_channel_get_results(speech_channel_t *schannel, cha
 		*result = strdup(r->result);
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) result:\n\n%s\n", schannel->name, *result ? *result : "");
 		r->result = NULL;
-		r->start_of_input = 0;
-	} else if (r->start_of_input) {
+		r->start_of_input = START_OF_INPUT_REPORTED;
+	} else if (r->start_of_input == START_OF_INPUT_RECEIVED) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "(%s) start of input\n", schannel->name);
 		status = SWITCH_STATUS_BREAK;
-		r->start_of_input = 0;
+		r->start_of_input = START_OF_INPUT_REPORTED;
 	} else {
 		status = SWITCH_STATUS_FALSE;
 	}
@@ -2807,11 +2811,11 @@ static switch_status_t recog_channel_set_params(speech_channel_t *schannel, mrcp
 {
 	/* loop through each param and add to recog header or vendor-specific-params */
 	switch_hash_index_t *hi = NULL;
-	for (hi = switch_hash_first(NULL, schannel->params); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(schannel->params); hi; hi = switch_core_hash_next(&hi)) {
 		char *param_name = NULL, *param_val = NULL;
 		const void *key;
 		void *val;
-		switch_hash_this(hi, &key, NULL, &val);
+		switch_core_hash_this(hi, &key, NULL, &val);
 		param_name = (char *) key;
 		param_val = (char *) val;
 		if (!zstr(param_name) && !zstr(param_val)) {
@@ -3111,8 +3115,8 @@ static switch_status_t recog_asr_open(switch_asr_handle_t *ah, const char *codec
 	r = (recognizer_data_t *) switch_core_alloc(ah->memory_pool, sizeof(recognizer_data_t));
 	schannel->data = r;
 	memset(r, 0, sizeof(recognizer_data_t));
-	switch_core_hash_init(&r->grammars, ah->memory_pool);
-	switch_core_hash_init(&r->enabled_grammars, ah->memory_pool);
+	switch_core_hash_init(&r->grammars);
+	switch_core_hash_init(&r->enabled_grammars);
 
 	/* Open the channel */
 	if (zstr(profile_name)) {
@@ -3129,11 +3133,11 @@ static switch_status_t recog_asr_open(switch_asr_handle_t *ah, const char *codec
 	}
 
 	/* Set default ASR params */
-	for (hi = switch_hash_first(NULL, profile->default_recog_params); hi; hi = switch_hash_next(hi)) {
+	for (hi = switch_core_hash_first(profile->default_recog_params); hi; hi = switch_core_hash_next(&hi)) {
 		char *param_name = NULL, *param_val = NULL;
 		const void *key;
 		void *val;
-		switch_hash_this(hi, &key, NULL, &val);
+		switch_core_hash_this(hi, &key, NULL, &val);
 		param_name = (char *) key;
 		param_val = (char *) val;
 		speech_channel_set_param(schannel, param_name, param_val);
@@ -3794,12 +3798,12 @@ static switch_status_t recog_load(switch_loadable_module_interface_t *module_int
 	mrcp_client_application_register(globals.mrcp_client, globals.recog.app, "recog");
 
 	/* map FreeSWITCH params or old params to MRCPv2 param */
-	switch_core_hash_init_nocase(&globals.recog.fs_param_map, pool);
+	switch_core_hash_init_nocase(&globals.recog.fs_param_map);
 	/* MRCPv1 param */
 	switch_core_hash_insert(globals.recog.fs_param_map, "recognizer-start-timers", "start-input-timers");
 
 	/* map MRCP params to UniMRCP ID */
-	switch_core_hash_init_nocase(&globals.recog.param_id_map, pool);
+	switch_core_hash_init_nocase(&globals.recog.param_id_map);
 	switch_core_hash_insert(globals.recog.param_id_map, "Confidence-Threshold", unimrcp_param_id_create(RECOGNIZER_HEADER_CONFIDENCE_THRESHOLD, pool));
 	switch_core_hash_insert(globals.recog.param_id_map, "Sensitivity-Level", unimrcp_param_id_create(RECOGNIZER_HEADER_SENSITIVITY_LEVEL, pool));
 	switch_core_hash_insert(globals.recog.param_id_map, "Speed-Vs-Accuracy", unimrcp_param_id_create(RECOGNIZER_HEADER_SPEED_VS_ACCURACY, pool));
@@ -4332,7 +4336,7 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_unimrcp_load)
 	memset(&globals, 0, sizeof(globals));
 	switch_mutex_init(&globals.mutex, SWITCH_MUTEX_UNNESTED, pool);
 	globals.speech_channel_number = 0;
-	switch_core_hash_init_nocase(&globals.profiles, pool);
+	switch_core_hash_init_nocase(&globals.profiles);
 
 	/* get MRCP module configuration */
 	mod_unimrcp_do_config();

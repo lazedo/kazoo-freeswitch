@@ -2,19 +2,23 @@
 # -*- mode:makefile -*-
 ##### Author: Travis Cross <tc@traviscross.com>
 
-#export DH_VERBOSE=1
+export DH_VERBOSE=1
+export VERBOSE=1
+export V=1
 
 FS_CC?=gcc
 FS_CXX?=g++
-FS_CFLAGS?=-g3 -O2 -fPIC
-FS_CPPFLAGS?=
+FS_CPPFLAGS?=-D_FORTIFY_SOURCE=2
+FS_CFLAGS?=-g3 -O2 -fPIC -fstack-protector --param=ssp-buffer-size=4
 FS_CXXFLAGS?=$(FS_CFLAGS)
+FS_LDFLAGS?=-Wl,-z,relro
 export PATH?=/usr/lib/ccache:/usr/sbin:/usr/bin:/sbin:/bin
-export CC=$(FS_CC)
-export CXX=$(FS_CXX)
-export CFLAGS=$(FS_CFLAGS)
-export CPPFLAGS=$(FS_CPPFLAGS)
-export CXXFLAGS=$(FS_CXXFLAGS)
+export CC:=$(FS_CC)
+export CXX:=$(FS_CXX)
+export CPPFLAGS:=$(FS_CPPFLAGS)
+export CFLAGS:=$(FS_CFLAGS)
+export CXXFLAGS:=$(FS_CXXFLAGS)
+export LDFLAGS:=$(FS_LDFLAGS)
 
 show_vars= \
 	echo; \
@@ -22,9 +26,10 @@ show_vars= \
 	echo "PATH='$(PATH)'"; \
 	echo "CC='$(CC)'"; \
 	echo "CXX='$(CXX)'"; \
-	echo "CFLAGS='$(CFLAGS)'"; \
 	echo "CPPFLAGS='$(CPPFLAGS)'"; \
+	echo "CFLAGS='$(CFLAGS)'"; \
 	echo "CXXFLAGS='$(CXXFLAGS)'"; \
+	echo "LDFLAGS='$(LDFLAGS)'"; \
 	echo "CCACHE_DIR='$(CCACHE_DIR)'"; \
 	echo;
 
@@ -78,7 +83,8 @@ override_dh_auto_clean:
 		--with-grammardir=/usr/share/freeswitch/grammar \
 		--with-certsdir=/etc/freeswitch/tls \
 		--with-scriptdir=/usr/share/freeswitch/scripts \
-		--with-recordingsdir=/var/lib/freeswitch/recordings
+		--with-recordingsdir=/var/lib/freeswitch/recordings \
+		--enable-static-v8 --disable-parallel-build-v8
 	touch $@
 
 override_dh_auto_configure: .stamp-configure

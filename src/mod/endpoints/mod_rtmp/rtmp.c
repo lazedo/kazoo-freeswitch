@@ -243,12 +243,12 @@ switch_status_t rtmp_check_auth(rtmp_session_t *rsession, const char *user, cons
     if (disallow_multiple_registration) {
         switch_hash_index_t *hi;
         switch_thread_rwlock_rdlock(rsession->profile->session_rwlock);
-        for (hi = switch_hash_first(NULL, rsession->profile->session_hash); hi; hi = switch_hash_next(hi)) {
+        for (hi = switch_core_hash_first(rsession->profile->session_hash); hi; hi = switch_core_hash_next(&hi)) {
             void *val;	
             const void *key;
             switch_ssize_t keylen;
             rtmp_session_t *item;
-            switch_hash_this(hi, &key, &keylen, &val);
+            switch_core_hash_this(hi, &key, &keylen, &val);
             
             item = (rtmp_session_t *)val;
             if (rtmp_session_check_user(item, user, domain) == SWITCH_STATUS_SUCCESS) {
@@ -601,7 +601,7 @@ switch_status_t rtmp_send_message(rtmp_session_t *rsession, uint8_t amfnumber, u
 	
 	/* Find out what is the smallest header we can use */
 	if (!(flags & MSG_FULLHEADER) && stream_id > 0 && state->stream_id == stream_id && timestamp >= state->ts) {
-		if (state->type == type && state->origlen == len) {
+		if (state->type == type && state->origlen == (int)len) {
 			if (state->ts == timestamp) {
 				/* Type 3: no header! */
 				hdrsize = 1;
@@ -930,7 +930,7 @@ switch_status_t rtmp_handle_data(rtmp_session_t *rsession)
 
 								
 								switch_mutex_lock(rsession->tech_pvt->readbuf_mutex);
-								if (rsession->tech_pvt->maxlen && switch_buffer_inuse(rsession->tech_pvt->readbuf) > rsession->tech_pvt->maxlen * 40) {
+								if (rsession->tech_pvt->maxlen && switch_buffer_inuse(rsession->tech_pvt->readbuf) > (switch_size_t)(rsession->tech_pvt->maxlen * 40)) {
 									rsession->tech_pvt->over_size++;
 								} else {
 									rsession->tech_pvt->over_size = 0;

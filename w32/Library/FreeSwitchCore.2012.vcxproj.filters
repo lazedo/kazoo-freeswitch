@@ -34,7 +34,7 @@
     <ClCompile Include="..\..\libs\libnatpmp\natpmp.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\libs\stfu\stfu.c">
+    <ClCompile Include="..\..\src\switch_stfu.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\..\src\switch_apr.c">
@@ -172,6 +172,9 @@
     <ClCompile Include="..\..\src\switch_pcm.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\switch_speex.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\src\switch_profile.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -220,6 +223,12 @@
     <ClCompile Include="..\..\libs\libtpl-1.5\src\win\mmap.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\src\switch_version.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\switch_hashtable.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\libs\miniupnpc\declspec.h">
@@ -246,7 +255,7 @@
     <ClInclude Include="..\..\src\include\switch_caller.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\libs\stfu\stfu.h">
+    <ClInclude Include="..\..\src\include\switch_stfu.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\src\include\switch_channel.h">
@@ -343,6 +352,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\libs\libtpl-1.5\src\tpl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\include\switch_hashtable.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

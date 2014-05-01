@@ -280,12 +280,24 @@ void tport_stamp(tport_t const *self, msg_t *msg,
   char name[SU_ADDRSIZE] = "";
   su_sockaddr_t const *su;
   unsigned short second, minute, hour;
+  /* should check for ifdef HAVE_LOCALTIME_R instead -_- */
+#if defined(HAVE_GETTIMEOFDAY) || defined(HAVE_CLOCK_MONOTONIC)
+  struct tm nowtm = { 0 };
+  time_t nowtime = (now.tv_sec - SU_TIME_EPOCH); /* see su_time0.c 'now' is not really 'now', so we decrease it by SU_TIME_EPOCH */
+#endif
 
   assert(self); assert(msg);
 
+#if defined(HAVE_GETTIMEOFDAY) || defined(HAVE_CLOCK_MONOTONIC)
+  localtime_r(&nowtime, &nowtm);
+  second = nowtm.tm_sec;
+  minute = nowtm.tm_min;
+  hour = nowtm.tm_hour;
+#else
   second = (unsigned short)(now.tv_sec % 60);
   minute = (unsigned short)((now.tv_sec / 60) % 60);
   hour = (unsigned short)((now.tv_sec / 3600) % 24);
+#endif
 
   su = msg_addr(msg);
 
@@ -347,7 +359,11 @@ void tport_capt_msg(tport_t const *self, msg_t *msg, size_t n,
    int buflen = 0, error;
    su_sockaddr_t const *su, *su_self;
    struct hep_hdr hep_header;
+#if __sun__
+   struct hep_iphdr hep_ipheader = {{{{0}}}};
+#else
    struct hep_iphdr hep_ipheader = {{0}};   
+#endif
 #if SU_HAVE_IN6
    struct hep_ip6hdr hep_ip6header = {{{{0}}}};
 #endif   
@@ -466,7 +482,7 @@ void tport_log_msg(tport_t *self, msg_t *msg,
   size_t i, iovlen = msg_iovec(msg, iov, 80);
   size_t linelen = 0, n, logged = 0, truncated = 0;
   int skip_lf = 0;
-
+  int j, unprintable = 0;
 
 #define MSG_SEPARATOR \
   "------------------------------------------------------------------------\n"
@@ -484,39 +500,57 @@ void tport_log_msg(tport_t *self, msg_t *msg,
     if (skip_lf && s < end && s[0] == '\n') { s++; logged++; skip_lf = 0; }
 
     while (s < end) {
-      if (s[0] == '\0') {
-	truncated = logged;
-	break;
-      }
+		if (s[0] == '\0') {
+			truncated = logged;
+			break;
+		}
 
-      n = su_strncspn(s, end - s, "\r\n");
+		n = su_strncspn(s, end - s, "\r\n");
 
-      if (linelen + n > MAX_LINELEN) {
-	n = MAX_LINELEN - linelen;
-	truncated = logged + n;
-      }
+		if (linelen + n > MAX_LINELEN) {
+			n = MAX_LINELEN - linelen;
+			truncated = logged + n;
+		}
+		
+		if (!unprintable) {
+			for (j = 0; j < 4; j++) {
+				if (s[j] == 0) break;
+				if (s[j] != 9 && s[j] != 10 && s[j] != 13 && (s[j] < 32 || s[j] > 126)) {
+					unprintable++;
+				}
+			}
+		}
 
-      su_log("%s%.*s", linelen > 0 ? "" : "   ", (int)n, s);
-      s += n, linelen += n, logged += n;
+		if (unprintable) {
+			if (unprintable == 1)
+				su_log("\n   <ENCODED DATA>");
+			unprintable++;
+		} else {
+			su_log("%s%.*s", linelen > 0 ? "" : "   ", (int)n, s);
+		}
 
-      if (truncated)
-	break;
-      if (s == end)
-	break;
+		s += n, linelen += n, logged += n;
 
-      linelen = 0;
-      su_log("\n");
+		if (truncated)
+			break;
+		if (s == end)
+			break;
+		
+		linelen = 0;
+		su_log("\n");
+		
+		/* Skip eol */
+		if (s[0] == '\r') {
+			s++, logged++;
+			if (s == end) {
+				skip_lf = 1;
+				continue;
+			}
+		}
 
-      /* Skip eol */
-      if (s[0] == '\r') {
-	s++, logged++;
-	if (s == end) {
-	  skip_lf = 1;
-	  continue;
-	}
-      }
-      if (s[0] == '\n')
-	s++, logged++;
+		if (s[0] == '\n') {
+			s++, logged++;
+		}
     }
   }
 
