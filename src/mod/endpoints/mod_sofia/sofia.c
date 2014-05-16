@@ -9886,7 +9886,7 @@ int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const
 
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", sip->sip_from->a_url->url_user);
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", sip->sip_from->a_url->url_host);
-	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-REGISTER");
 
 	for (un = sip->sip_unknown; un; un = un->un_next) {
 		if (!strncasecmp(un->un_name, "X-", 2)) {
