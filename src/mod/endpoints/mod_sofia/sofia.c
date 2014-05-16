@@ -5075,6 +5075,10 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 						} else {
 							profile->paid_type = PAID_DEFAULT;
 						}
+					} else if (!strcasecmp(var, "use-nonce-from-directory")) {
+						if (switch_true(val)) {
+							sofia_set_pflag(profile, PFLAG_USE_NONCE_FROM_DIRECTORY);
+						}
 					}
 				}
 
@@ -8652,10 +8656,9 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 
 		if (sip && sip->sip_from) {
 			user = switch_core_session_sprintf(session, "%s@%s", sip->sip_from->a_url->url_user, sip->sip_from->a_url->url_host);
-			switch_ivr_set_user(session, user);
+			is_auth += sofia_set_user(session, user, sip, profile);
 		}
 
-		is_auth++;
 	}
 
 	if (!is_auth &&
@@ -9841,6 +9844,83 @@ static void set_variable_sip_param(switch_channel_t *channel, char *header_type,
 		sh = sh_save;
 	}
 }
+
+/*** 2600hz start ****/
+/* we needed to send more properties on blind reg
+ */
+int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile)
+{
+	switch_xml_t x_user = 0;
+	char *user, *domain;
+	switch_event_t *params = NULL;
+	sip_unknown_t *un;
+       int ret = 0;
+
+	char *prefix;
+
+	if (zstr(data)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ERROR GETTING *DATA : IS NULL ");
+		return 0;
+	}
+
+	user = switch_core_session_strdup(session, data);
+
+	if ((prefix = strchr(user, ' '))) {
+		*prefix++ = 0;
+	}
+
+	if (!(domain = strchr(user, '@'))) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ERROR GETTING DOMAIN");
+		return 0;
+	}
+
+	*domain++ = '\0';
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "action", "sip_auth");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_profile", profile->name);
+
+	if (sip->sip_user_agent && !zstr(sip->sip_user_agent->g_string))
+           switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", sip->sip_user_agent->g_string);
+
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", sip->sip_from->a_url->url_user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", sip->sip_from->a_url->url_host);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND");
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+
+	if (switch_xml_locate_user_merged("id", user, domain, NULL, &x_user, params) == SWITCH_STATUS_SUCCESS) {
+           switch_ivr_set_user_xml(session, prefix, user, domain, x_user);
+           ret = 1;
+	}
+
+
+	switch_event_destroy(&params);
+
+	if (x_user)
+           switch_xml_free(x_user);
+
+      return ret;
+}
+
+/*** 2600hz end ****/
+
 
 /* For Emacs:
  * Local Variables:

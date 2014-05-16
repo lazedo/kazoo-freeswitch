@@ -278,6 +278,7 @@ typedef enum {
 	PFLAG_TLS_ALWAYS_NAT,
 	PFLAG_TCP_ALWAYS_NAT,
 	PFLAG_ENABLE_CHAT,
+	PFLAG_USE_NONCE_FROM_DIRECTORY,
 	/* No new flags below this line */
 	PFLAG_MAX
 } PFLAGS;
@@ -1152,6 +1153,13 @@ void sofia_reg_check_socket(sofia_profile_t *profile, const char *call_id, const
 void sofia_reg_close_handles(sofia_profile_t *profile);
 
 void write_csta_xml_chunk(switch_event_t *event, switch_stream_handle_t stream, const char *csta_event, char *fwd_type);
+
+/*** 2600hz start ****/
+void sofia_reg_auth_challenge_ex(sofia_profile_t *profile, nua_handle_t *nh, sofia_dispatch_event_t *de, sofia_regtype_t regtype, const char *realm, int stale, long exptime, char *uuid_str);
+void sofia_reg_get_nonce_from_directory(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str);
+int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile);
+/*** 2600hz end ****/
+
 /* For Emacs:
  * Local Variables:
  * mode:c
