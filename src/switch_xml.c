@@ -1998,24 +1998,26 @@ static switch_status_t switch_xml_locate_user_cache(const char *key, const char 
 
 	switch_mutex_lock(CACHE_MUTEX);
 	if ((lookup = switch_core_hash_find(CACHE_HASH, mega_key))) {
-		char *expires_lookup = NULL;
+		time_t *expires_lookup = NULL;
 
 		if ((expires_lookup = switch_core_hash_find(CACHE_EXPIRES_HASH, mega_key))) {
-			switch_time_t time_expires = 0;
-			switch_time_t time_now = 0;
+			time_t time_expires;
+			time_t time_now;
 
-			time_now = switch_micro_time_now();
-			time_expires = atol(expires_lookup);
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Cache Info\nTime Now:\t%ld\nExpires:\t%ld\n", (long)time_now, (long)time_expires);
+			time_now = time(NULL);
+			time_expires = *expires_lookup;
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Cache Info - Time Now : %ld - Expires : %ld\n", time_now, time_expires);
 			if (time_expires < time_now) {
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Cache expired for %s@%s, doing fresh lookup\n", user_name, domain_name);
 			} else {
 				*user = switch_xml_dup(lookup);
 				status = SWITCH_STATUS_SUCCESS;
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "%s@%s fetched from cache\n", user_name, domain_name);
 			}
 		} else {
 			*user = switch_xml_dup(lookup);
 			status = SWITCH_STATUS_SUCCESS;
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "%s@%s fetched from cache\n", user_name, domain_name);
 		}
 	}
 	switch_mutex_unlock(CACHE_MUTEX);
@@ -2023,7 +2025,7 @@ static switch_status_t switch_xml_locate_user_cache(const char *key, const char 
 	return status;
 }
 
-static void switch_xml_user_cache(const char *key, const char *user_name, const char *domain_name, switch_xml_t user, switch_time_t expires)
+static void switch_xml_user_cache(const char *key, const char *user_name, const char *domain_name, switch_xml_t user, time_t expires)
 {
 	char mega_key[1024];
 	switch_xml_t lookup;
@@ -2041,10 +2043,9 @@ static void switch_xml_user_cache(const char *key, const char *user_name, const 
 		switch_safe_free(expires_lookup);
 	}
 	if (expires) {
-		char *expires_val = malloc(1024);
-		if (sprintf(expires_val, "%ld", (long)expires)) {
-			switch_core_hash_insert(CACHE_EXPIRES_HASH, mega_key, expires_val);
-		}
+		time_t *expires_val = malloc(sizeof(time_t));
+		*expires_val = expires;
+		switch_core_hash_insert(CACHE_EXPIRES_HASH, mega_key, expires_val);
 	}
 	switch_core_hash_insert(CACHE_HASH, mega_key, switch_xml_dup(user));
 	switch_mutex_unlock(CACHE_MUTEX);
@@ -2079,15 +2080,15 @@ SWITCH_DECLARE(switch_status_t) switch_xml_locate_user_merged(const char *key, c
 
 			cacheable = switch_xml_attr(x_user_dup, "cacheable");
 			if (!zstr(cacheable)) {
-				switch_time_t expires = 0;
-				switch_time_t time_now = 0;
+				time_t expires = 0;
+				time_t time_now = 0;
 
 				if (switch_is_number(cacheable)) {
-					int cache_ms = atol(cacheable);
-					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "caching lookup for user %s@%s for %d milliseconds\n", 
-									  user_name, domain_name, cache_ms);
-					time_now = switch_micro_time_now();
-					expires = time_now + (cache_ms * 1000);
+					int cache_sec = atol(cacheable);
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "caching lookup for user %s@%s for %d seconds\n",
+									  user_name, domain_name, cache_sec);
+					time_now = time(NULL);
+					expires = time_now + cache_sec;
 				} else {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "caching lookup for user %s@%s indefinitely\n", user_name, domain_name);
 				}
