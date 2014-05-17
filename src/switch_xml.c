@@ -2084,7 +2084,7 @@ SWITCH_DECLARE(switch_status_t) switch_xml_locate_user_merged(const char *key, c
 				time_t time_now = 0;
 
 				if (switch_is_number(cacheable)) {
-					int cache_sec = atol(cacheable);
+					int cache_sec = atol(cacheable) / 1000;
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "caching lookup for user %s@%s for %d seconds\n",
 									  user_name, domain_name, cache_sec);
 					time_now = time(NULL);
