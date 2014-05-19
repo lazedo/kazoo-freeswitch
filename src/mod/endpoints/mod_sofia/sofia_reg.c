@@ -1665,7 +1665,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			realm = from_host;
 		}
 
-        sofia_reg_get_nonce_from_directory(profile, sip, realm, from_user, agent, network_ip, uuid_str);
+        sofia_pre_register(profile, sip, realm, from_user, agent, network_ip, uuid_str);
         sofia_reg_auth_challenge_ex(profile, nh, de, regtype, realm, stale, exptime, uuid_str);
 
 		if (profile->debug) {
@@ -3301,7 +3301,7 @@ switch_status_t sofia_reg_add_gateway(sofia_profile_t *profile, const char *key,
 	return status;
 }
 
-void sofia_reg_get_nonce_from_directory(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str)
+void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str)
 {
 	switch_uuid_t uuid;
 	switch_event_t *params = NULL;
@@ -3311,8 +3311,16 @@ void sofia_reg_get_nonce_from_directory(sofia_profile_t *profile, sip_t const *s
 	switch_uuid_get(&uuid);
 	switch_uuid_format(uuid_str, &uuid);
 
-       if(!sofia_test_pflag(profile, PFLAG_USE_NONCE_FROM_DIRECTORY))
-           return;
+    if(!sofia_test_pflag(profile, PFLAG_ENABLE_PRE_REGISTER)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia pre-register disabled");
+    	return;
+    }
+
+    if(!sofia_check_acl(profile->pre_register_acl_count, profile->pre_register_acl, sip, ip, profile)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for pre-register");
+    	return;
+
+    }
 
 	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
 	switch_assert(params);

@@ -278,7 +278,7 @@ typedef enum {
 	PFLAG_TLS_ALWAYS_NAT,
 	PFLAG_TCP_ALWAYS_NAT,
 	PFLAG_ENABLE_CHAT,
-	PFLAG_USE_NONCE_FROM_DIRECTORY,
+	PFLAG_ENABLE_PRE_REGISTER,
 	/* No new flags below this line */
 	PFLAG_MAX
 } PFLAGS;
@@ -719,6 +719,10 @@ struct sofia_profile {
 	int tcp_pingpong;
 	int tcp_ping2pong;
 	ka_type_t keepalive;
+	char *pre_register_acl[SOFIA_MAX_ACL];
+	uint32_t pre_register_acl_count;
+	char *blind_auth_acl[SOFIA_MAX_ACL];
+	uint32_t blind_auth_acl_count;
 };
 
 
@@ -1156,8 +1160,9 @@ void write_csta_xml_chunk(switch_event_t *event, switch_stream_handle_t stream, 
 
 /*** 2600hz start ****/
 void sofia_reg_auth_challenge_ex(sofia_profile_t *profile, nua_handle_t *nh, sofia_dispatch_event_t *de, sofia_regtype_t regtype, const char *realm, int stale, long exptime, char *uuid_str);
-void sofia_reg_get_nonce_from_directory(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str);
-int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile);
+void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str);
+int sofia_check_acl(uint32_t acl_count, char** acl, sip_t const *sip, char *network_ip, sofia_profile_t *profile);
+int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile, char *network_ip);
 /*** 2600hz end ****/
 
 /* For Emacs:

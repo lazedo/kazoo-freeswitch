@@ -2031,7 +2031,10 @@ static void switch_xml_user_cache(const char *key, const char *user_name, const 
 	switch_xml_t lookup;
 	char *expires_lookup;
 
-	switch_snprintf(mega_key, sizeof(mega_key), "%s%s%s", key, user_name, domain_name);
+	const char *attr = switch_xml_attr(user, key);
+	if(!attr)
+		return;
+	switch_snprintf(mega_key, sizeof(mega_key), "%s%s%s", key, attr, domain_name);
 
 	switch_mutex_lock(CACHE_MUTEX);
 	if ((lookup = switch_core_hash_find(CACHE_HASH, mega_key))) {
@@ -2058,7 +2061,7 @@ SWITCH_DECLARE(switch_status_t) switch_xml_locate_user_merged(const char *key, c
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	char *kdup = NULL;
 	char *keys[10] = {0};
-	int i, nkeys;
+	int i, x, nkeys;
 
 	if (strchr(key, ':')) {
 		kdup = strdup(key);
@@ -2092,7 +2095,8 @@ SWITCH_DECLARE(switch_status_t) switch_xml_locate_user_merged(const char *key, c
 				} else {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "caching lookup for user %s@%s indefinitely\n", user_name, domain_name);
 				}
-				switch_xml_user_cache(keys[i], user_name, domain_name, x_user_dup, expires);
+				for(x=0; x < nkeys; x++)
+					switch_xml_user_cache(keys[x], user_name, domain_name, x_user_dup, expires);
 			}
 			*user = x_user_dup;
 			switch_xml_free(xml);
