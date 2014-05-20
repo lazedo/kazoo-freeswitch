@@ -5079,6 +5079,10 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 						if (switch_true(val)) {
 							sofia_set_pflag(profile, PFLAG_ENABLE_PRE_REGISTER);
 						}
+					} else if (!strcasecmp(var, "enable-presence-find-by-number-alias")) {
+						if (switch_true(val)) {
+							sofia_set_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS);
+						}
 					} else if (!strcasecmp(var, "apply-pre-register-acl")) {
 						if (profile->pre_register_acl_count < SOFIA_MAX_ACL) {
 							profile->pre_register_acl[profile->pre_register_acl_count++] = switch_core_strdup(profile->pool, val);
