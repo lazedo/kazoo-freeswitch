@@ -945,10 +945,17 @@ char *sofia_reg_find_reg_url(sofia_profile_t *profile, const char *user, const c
 	cbt.len = len;
 
 	if (host) {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+						user, user, host, host);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
 						user, host, host);
 	} else {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' or number_alias='%q'", user, user);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
 	}
 
 
@@ -979,10 +986,17 @@ switch_console_callback_match_t *sofia_reg_find_reg_url_multi(sofia_profile_t *p
 	}
 
 	if (host) {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+						user, user, host, host);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
 						user, host, host);
 	} else {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' or number_alias='%q'", user, user);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
 	}
 
 
@@ -1031,7 +1045,7 @@ void sofia_reg_auth_challenge(sofia_profile_t *profile, nua_handle_t *nh, sofia_
 	switch_uuid_get(&uuid);
 	switch_uuid_format(uuid_str, &uuid);
 
-       sofia_reg_auth_challenge_ex(profile, nh, de, regtype, realm, stale, exptime, uuid_str);
+    sofia_reg_auth_challenge_ex(profile, nh, de, regtype, realm, stale, exptime, uuid_str);
 
 }
 
@@ -1200,6 +1214,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
     char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
     char *registration_extra_headers = NULL;
 	switch_xml_t xml_local = NULL, xml_param, xml_uparams;
+	char *number_alias;
 
 	if (sofia_private_p) {
 		sofia_private = *sofia_private_p;
@@ -1714,6 +1729,14 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 		switch_goto_int(r, 0, end);
 	}
 
+	if (v_event && *v_event && (var = switch_event_get_header(*v_event, "number_alias"))) {
+		number_alias = var;
+	}
+	else
+		number_alias = (char *) to_user;
+
+
+
 	call_id = sip->sip_call_id->i_id;
 	switch_assert(call_id);
 
@@ -1816,12 +1839,12 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			sql = switch_mprintf("insert into sip_registrations "
 					"(call_id,sip_user,sip_host,presence_hosts,contact,status,rpid,expires,"
 					"user_agent,server_user,server_host,profile_name,hostname,network_ip,network_port,sip_username,sip_realm,"
-					"mwi_user,mwi_host, orig_server_host, orig_hostname, sub_host) "
-					"values ('%q','%q', '%q','%q','%q','%q', '%q', %ld, '%q', '%q', '%q', '%q', '%q', '%q', '%q','%q','%q','%q','%q','%q','%q','%q')", 
+					"mwi_user,mwi_host, orig_server_host, orig_hostname, sub_host, number_alias) "
+					"values ('%q','%q', '%q','%q','%q','%q', '%q', %ld, '%q', '%q', '%q', '%q', '%q', '%q', '%q','%q','%q','%q','%q','%q','%q','%q','%q')",
 					call_id, to_user, reg_host, profile->presence_hosts ? profile->presence_hosts : "", 
 					contact_str, reg_desc, rpid, (long) reg_time + (long) exptime + profile->sip_expires_late_margin,
 					agent, from_user, guess_ip4, profile->name, mod_sofia_globals.hostname, network_ip, network_port_c, username, realm, 
-								 mwi_user, mwi_host, guess_ip4, mod_sofia_globals.hostname, sub_host);
+								 mwi_user, mwi_host, guess_ip4, mod_sofia_globals.hostname, sub_host, number_alias);
 		} else {
 			sql = switch_mprintf("update sip_registrations set call_id='%q',"
 								 "sub_host='%q', network_ip='%q',network_port='%q',"
