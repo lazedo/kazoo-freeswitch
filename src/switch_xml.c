@@ -2033,7 +2033,8 @@ static void switch_xml_user_cache(const char *key, const char *user_name, const 
 
 	const char *attr = switch_xml_attr(user, key);
 	if(!attr)
-		return;
+		attr = user_name;
+
 	switch_snprintf(mega_key, sizeof(mega_key), "%s%s%s", key, attr, domain_name);
 
 	switch_mutex_lock(CACHE_MUTEX);
@@ -2075,7 +2076,13 @@ SWITCH_DECLARE(switch_status_t) switch_xml_locate_user_merged(const char *key, c
 		if ((status = switch_xml_locate_user_cache(keys[i], user_name, domain_name, &x_user)) == SWITCH_STATUS_SUCCESS) {
 			*user = x_user;
 			break;
-		} else if ((status = switch_xml_locate_user(keys[i], user_name, domain_name, ip, &xml, &domain, &x_user, &group, params)) == SWITCH_STATUS_SUCCESS) {
+		}
+	}
+	if(status == SWITCH_STATUS_SUCCESS)
+		return status;
+
+	for(i = 0; i < nkeys; i++) {
+		if ((status = switch_xml_locate_user(keys[i], user_name, domain_name, ip, &xml, &domain, &x_user, &group, params)) == SWITCH_STATUS_SUCCESS) {
 			const char *cacheable = NULL;
 
 			x_user_dup = switch_xml_dup(x_user);
