@@ -1993,7 +1993,8 @@ int sofia_glue_init_sql(sofia_profile_t *profile)
 		"   mwi_host         VARCHAR(255),\n"
 		"   orig_server_host VARCHAR(255),\n"
 		"   orig_hostname    VARCHAR(255),\n"
-		"   sub_host         VARCHAR(255)\n"
+		"   sub_host         VARCHAR(255),\n"
+		"   number_alias     VARCHAR(255)\n"
 		");\n";
 
 	char pres_sql[] =

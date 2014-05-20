@@ -5075,6 +5075,26 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 						} else {
 							profile->paid_type = PAID_DEFAULT;
 						}
+					} else if (!strcasecmp(var, "enable-pre-register")) {
+						if (switch_true(val)) {
+							sofia_set_pflag(profile, PFLAG_ENABLE_PRE_REGISTER);
+						}
+					} else if (!strcasecmp(var, "enable-presence-find-by-number-alias")) {
+						if (switch_true(val)) {
+							sofia_set_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS);
+						}
+					} else if (!strcasecmp(var, "apply-pre-register-acl")) {
+						if (profile->pre_register_acl_count < SOFIA_MAX_ACL) {
+							profile->pre_register_acl[profile->pre_register_acl_count++] = switch_core_strdup(profile->pool, val);
+						} else {
+							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Max pre-register acl records of %d reached\n", SOFIA_MAX_ACL);
+						}
+					} else if (!strcasecmp(var, "apply-blind-auth-acl")) {
+						if (profile->blind_auth_acl_count < SOFIA_MAX_ACL) {
+							profile->blind_auth_acl[profile->blind_auth_acl_count++] = switch_core_strdup(profile->pool, val);
+						} else {
+							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Max blind-auth acl records of %d reached\n", SOFIA_MAX_ACL);
+						}
 					}
 				}
 
@@ -8652,10 +8672,9 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 
 		if (sip && sip->sip_from) {
 			user = switch_core_session_sprintf(session, "%s@%s", sip->sip_from->a_url->url_user, sip->sip_from->a_url->url_host);
-			switch_ivr_set_user(session, user);
+			is_auth += sofia_set_user(session, user, sip, profile, network_ip);
 		}
 
-		is_auth++;
 	}
 
 	if (!is_auth &&
@@ -9841,6 +9860,153 @@ static void set_variable_sip_param(switch_channel_t *channel, char *header_type,
 		sh = sh_save;
 	}
 }
+
+/*** 2600hz start ****/
+/* we needed to send more properties on blind reg and also apply acl
+ */
+int sofia_check_acl(uint32_t acl_count, char** acl, sip_t const *sip, char *network_ip, sofia_profile_t *profile)
+{
+	sip_unknown_t *un;
+	int result = 1;
+	uint32_t x = 0;
+	int ok = 1;
+	char *last_acl = NULL;
+	const char *token = NULL;
+	int network_ip_is_proxy = 0;
+
+
+    if (!acl_count)
+	    return result;
+
+
+	for (x = 0; x < acl_count; x++) {
+		last_acl = acl[x];
+		if ((ok = switch_check_network_list_ip_token(network_ip, last_acl, &token))) {
+			break;
+		}
+	}
+
+	if (ok)
+		return result;
+
+    /* Check if network_ip is a proxy allowed to send us calls */
+	for (x = 0; x < profile->proxy_acl_count; x++) {
+		last_acl = profile->proxy_acl[x];
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "checking %s against acl %s\n", network_ip, last_acl);
+		if (switch_check_network_list_ip_token(network_ip, last_acl, &token)) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "%s is a proxy according to the %s acl\n", network_ip, last_acl);
+			network_ip_is_proxy = 1;
+			break;
+		}
+	}
+
+	/*
+	 * if network_ip is a proxy allowed to send calls, check for auth
+	 * ip header and see if it matches against the inbound acl
+	 */
+	if (network_ip_is_proxy) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "network ip is a proxy\n");
+			for (un = sip->sip_unknown; un; un = un->un_next) {
+				if (!strcasecmp(un->un_name, "X-AUTH-IP")) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "found auth ip [%s] header of [%s]\n", un->un_name, un->un_value);
+					if (!zstr(un->un_value)) {
+						for (x = 0; x < acl_count; x++) {
+							last_acl = acl[x];
+							if ((ok = switch_check_network_list_ip_token(un->un_value, last_acl, &token))) {
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+
+	if (!ok)
+		result = 0;
+
+	return result;
+
+}
+
+
+int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile, char *network_ip)
+{
+	switch_xml_t x_user = 0;
+	char *user, *domain;
+	switch_event_t *params = NULL;
+	sip_unknown_t *un;
+       int ret = 0;
+
+	char *prefix;
+
+	if (zstr(data)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ERROR GETTING *DATA : IS NULL ");
+		return 0;
+	}
+
+	user = switch_core_session_strdup(session, data);
+
+	if ((prefix = strchr(user, ' '))) {
+		*prefix++ = 0;
+	}
+
+	if (!(domain = strchr(user, '@'))) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "ERROR GETTING DOMAIN");
+		return 0;
+	}
+
+	*domain++ = '\0';
+
+	if(!sofia_check_acl(profile->blind_auth_acl_count, profile->blind_auth_acl, sip, network_ip, profile)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for blind-auth");
+	}
+
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "action", "sip_auth");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_profile", profile->name);
+
+	if (sip->sip_user_agent && !zstr(sip->sip_user_agent->g_string))
+           switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", sip->sip_user_agent->g_string);
+
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", sip->sip_from->a_url->url_user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", sip->sip_from->a_url->url_host);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-REGISTER");
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+
+	if (switch_xml_locate_user_merged("id", user, domain, NULL, &x_user, params) == SWITCH_STATUS_SUCCESS) {
+           switch_ivr_set_user_xml(session, prefix, user, domain, x_user);
+           ret = 1;
+	}
+
+
+	switch_event_destroy(&params);
+
+	if (x_user)
+           switch_xml_free(x_user);
+
+      return ret;
+}
+
+/*** 2600hz end ****/
+
 
 /* For Emacs:
  * Local Variables:
