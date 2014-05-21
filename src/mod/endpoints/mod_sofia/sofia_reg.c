@@ -1992,11 +1992,6 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 	        }
            }
 
-           if (user_xml) {
-        	   *user_xml = xml_local;
-           } else {
-        	   switch_xml_free(xml_local);
-           }
         }
 
         if (contact) {
@@ -2136,6 +2131,15 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 	if (auth_params) {
 		switch_event_destroy(&auth_params);
 	}
+
+	if(xml_local) {
+		if (user_xml) {
+			*user_xml = xml_local;
+		} else {
+			switch_xml_free(xml_local);
+			}
+	}
+
 
 	return (uint8_t) r;
 }
