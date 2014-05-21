@@ -4664,8 +4664,10 @@ void sofia_presence_handle_sip_i_message(int status,
 										 sofia_dispatch_event_t *de,
 										 tagi_t tags[])
 {
+	switch_event_t *v_event = NULL;
 
 	if (sip) {
+
 		sip_from_t const *from = sip->sip_from;
 		const char *from_user = NULL;
 		const char *from_host = NULL;
@@ -4679,15 +4681,15 @@ void sofia_presence_handle_sip_i_message(int status,
 		int network_port = 0;
 		switch_channel_t *channel = NULL;
 
-
 		if (!sofia_test_pflag(profile, PFLAG_ENABLE_CHAT)) {
 			goto end;
 		}
 
-
 		if (session) {
 			channel = switch_core_session_get_channel(session);
 		}
+
+		sofia_glue_get_addr(de->data->e_msg, network_ip, sizeof(network_ip), &network_port);
 
 		if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES) && sip){
 			sip_authorization_t const *authorization = NULL;
@@ -4695,7 +4697,6 @@ void sofia_presence_handle_sip_i_message(int status,
 			char keybuf[128] = "";
 			char *key;
 			size_t keylen;
-			switch_event_t *v_event = NULL;
 
 			key = keybuf;
 			keylen = sizeof(keybuf);
@@ -4707,17 +4708,14 @@ void sofia_presence_handle_sip_i_message(int status,
 			}
 
 			if (authorization) {
-				char network_ip[80];
-				int network_port;
-				sofia_glue_get_addr(de->data->e_msg, network_ip, sizeof(network_ip), &network_port);
 				auth_res = sofia_reg_parse_auth(profile, authorization, sip, de,
 												(char *) sip->sip_request->rq_method_name, key, keylen, network_ip, network_port, NULL, 0,
 												REG_INVITE, NULL, NULL, NULL, NULL);
+			} else if( sofia_xml_cached_user(profile, sip, &v_event, NULL)) {
+				auth_res = AUTH_OK;
+			} else if( sofia_xml_blind_auth(profile, sip, &v_event, NULL, network_ip )) {
+				auth_res = AUTH_OK;
 			} else if ( sofia_reg_handle_register(nua, profile, nh, sip, de, REG_INVITE, key, (uint32_t)keylen, &v_event, NULL, NULL, NULL)) {
-				if (v_event) {
-					switch_event_destroy(&v_event);
-				}
-
 				goto end;
 			}
 
@@ -4742,10 +4740,6 @@ void sofia_presence_handle_sip_i_message(int status,
 				goto end;
 			}
 		}
-
-
-		sofia_glue_get_addr(de->data->e_msg, network_ip, sizeof(network_ip), &network_port);
-
 
 		if (from) {
 			from_user = from->a_url->url_user;
@@ -4827,10 +4821,16 @@ void sofia_presence_handle_sip_i_message(int status,
 					switch_event_add_body(event, "%s", msg);
 				}
 
+				if(v_event) {
+					switch_event_header_t *hp;
+					for (hp = v_event->headers; hp; hp = hp->next) {
+						switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, hp->name, hp->value);
+					}
+				}
+
 				if (channel) {
 					switch_channel_event_set_data(channel, event);
 				}
-
 
 				if (sofia_test_pflag(profile, PFLAG_FIRE_MESSAGE_EVENTS)) {
 					if (switch_event_dup(&event_dup, event) == SWITCH_STATUS_SUCCESS) {
@@ -4847,9 +4847,9 @@ void sofia_presence_handle_sip_i_message(int status,
 					}
 				}
 
-
 			} else {
-				abort();
+				nua_respond(nh, SIP_503_SERVICE_UNAVAILABLE, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
+				goto end;
 			}
 
 			if (sofia_test_pflag(profile, PFLAG_IN_DIALOG_CHAT) && (tech_pvt = (private_object_t *) switch_core_hash_find(profile->chat_hash, hash_key))) {
@@ -4868,13 +4868,17 @@ void sofia_presence_handle_sip_i_message(int status,
 		}
 	}
 
- end:
-
 	if (sofia_test_pflag(profile, PFLAG_MESSAGES_RESPOND_200_OK)) {
 		nua_respond(nh, SIP_200_OK, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 	} else {
 		nua_respond(nh, SIP_202_ACCEPTED, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 	}
+
+ end:
+	if (v_event) {
+		switch_event_destroy(&v_event);
+	}
+
 
 }
 

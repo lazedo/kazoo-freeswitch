@@ -3737,6 +3737,36 @@ void globfree(glob_t *pglob)
 #pragma warning(pop)
 #endif
 
+/* 2600hz changes  start */
+
+SWITCH_DECLARE(switch_status_t) switch_xml_locate_cached_user(const char *key, const char *user_name, const char *domain_name, switch_xml_t *user)
+{
+	switch_xml_t x_user;
+	switch_status_t status = SWITCH_STATUS_FALSE;
+	char *kdup = NULL;
+	char *keys[10] = {0};
+	int i, nkeys;
+
+	if (strchr(key, ':')) {
+		kdup = strdup(key);
+		nkeys  = switch_split(kdup, ':', keys);
+	} else {
+		keys[0] = (char *)key;
+		nkeys = 1;
+	}
+
+	for(i = 0; i < nkeys; i++) {
+		if ((status = switch_xml_locate_user_cache(keys[i], user_name, domain_name, &x_user)) == SWITCH_STATUS_SUCCESS) {
+			*user = x_user;
+			break;
+		}
+	}
+	return status;
+}
+
+/* 2600hz changes  end */
+
+
 /* For Emacs:
  * Local Variables:
  * mode:c
