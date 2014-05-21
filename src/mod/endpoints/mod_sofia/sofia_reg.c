@@ -3501,8 +3501,8 @@ int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_even
     	return result;
     }
 
-	if(!sofia_check_acl(profile->blind_message_auth_acl_count, profile->blind_message_auth_acl, sip, ip, profile)) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for blind-message-auth");
+	if(!sofia_check_acl(profile->blind_auth_acl_count, profile->blind_auth_acl, sip, ip, profile)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for blind-auth");
 	}
 
 	if ((!sip) || (!sip->sip_from))

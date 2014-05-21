@@ -4015,7 +4015,6 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 
 					profile->pre_register_acl_count = 0;
 					profile->blind_auth_acl_count = 0;
-					profile->blind_message_auth_acl_count = 0;
 
 				} else {
 
@@ -4034,7 +4033,6 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 
 					profile->pre_register_acl_count = 0;
 					profile->blind_auth_acl_count = 0;
-					profile->blind_message_auth_acl_count = 0;
 
 					if (xprofiledomain) {
 						profile->domain_name = switch_core_strdup(profile->pool, xprofiledomain);
@@ -5097,11 +5095,11 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 						if (switch_true(val)) {
 							sofia_set_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS);
 						}
-					} else if (!strcasecmp(var, "enable-auth-message-cached-authentication")) {
+					} else if (!strcasecmp(var, "enable-message-cached-authentication")) {
 						if (switch_true(val)) {
 							sofia_set_pflag(profile, PFLAG_ENABLE_MESSAGE_AUTH_CACHED_AUTHENTICATION);
 						}
-					} else if (!strcasecmp(var, "enable-blind-auth-message")) {
+					} else if (!strcasecmp(var, "enable-message-blind-auth")) {
 						if (switch_true(val)) {
 							sofia_set_pflag(profile, PFLAG_ENABLE_MESSAGE_BLIND_AUTH);
 						}
@@ -5116,12 +5114,6 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 							profile->blind_auth_acl[profile->blind_auth_acl_count++] = switch_core_strdup(profile->pool, val);
 						} else {
 							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Max blind-auth acl records of %d reached\n", SOFIA_MAX_ACL);
-						}
-					} else if (!strcasecmp(var, "apply-blind-message-auth-acl")) {
-						if (profile->blind_message_auth_acl_count < SOFIA_MAX_ACL) {
-							profile->blind_message_auth_acl[profile->blind_message_auth_acl_count++] = switch_core_strdup(profile->pool, val);
-						} else {
-							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Max blind-message-auth acl records of %d reached\n", SOFIA_MAX_ACL);
 						}
 					}
 				}

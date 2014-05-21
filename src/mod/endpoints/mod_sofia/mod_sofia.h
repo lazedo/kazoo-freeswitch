@@ -726,8 +726,6 @@ struct sofia_profile {
 	uint32_t pre_register_acl_count;
 	char *blind_auth_acl[SOFIA_MAX_ACL];
 	uint32_t blind_auth_acl_count;
-	char *blind_message_auth_acl[SOFIA_MAX_ACL];
-	uint32_t blind_message_auth_acl_count;
 };
 
 
