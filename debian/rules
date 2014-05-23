@@ -29,39 +29,39 @@ show_vars= \
     echo;
 
 binary:
-    @$(call show_vars)
-    dh $@
+	@$(call show_vars)
+	dh $@
 binary-arch:
-    @$(call show_vars)
-    dh $@
+	@$(call show_vars)
+	dh $@
 binary-indep:
-    @$(call show_vars)
-    dh $@
+	@$(call show_vars)
+	dh $@
 build-arch:
-    @$(call show_vars)
-    dh $@
+	@$(call show_vars)
+	dh $@
 build-indep:
-    @$(call show_vars)
-    dh $@
+	@$(call show_vars)
+	dh $@
 build: debian/.stamp-bootstrap
-    @$(call show_vars)
-    dh $@
+	@$(call show_vars)
+	dh $@
 clean:
-    dh $@
+	dh $@
 
 override_dh_auto_clean:
-    dh_clean
+	dh_clean
 
 .stamp-bootstrap:
-    @$(call show_vars)
-    ./bootstrap.sh -j
-    touch $@
+	@$(call show_vars)
+	./bootstrap.sh -j
+	touch $@
 
 .stamp-configure: .stamp-bootstrap
-    @$(call show_vars)
-    touch noreg
-    cp debian/modules_.conf modules.conf
-    ./configure -C --enable-portable-binary --disable-dependency-tracking \
+	@$(call show_vars)
+	touch noreg
+	cp debian/modules_.conf modules.conf
+	./configure -C --enable-portable-binary --disable-dependency-tracking \
         --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) \
         --with-gnu-ld --with-erlang --with-openssl \
     --prefix=/usr \
@@ -83,53 +83,53 @@ override_dh_auto_clean:
     --with-pkgconfigdir=/usr/share/freeswitch/pkgconfig \
     --enable-zrtp
 
-    touch $@
+	touch $@
 
 override_dh_auto_configure: .stamp-configure
 
 .stamp-build: .stamp-configure
-    @$(call show_vars)
-    make
-    touch $@
+	@$(call show_vars)
+	make
+	touch $@
 
 override_dh_auto_build: .stamp-build
 
 override_dh_auto_test:
 
 override_dh_strip:
-    dh_strip -a -k
-    ./debian/util.sh create-dbg-pkgs
+	dh_strip -a -k
+	./debian/util.sh create-dbg-pkgs
 
 override_dh_auto_install:
-    dh_auto_install
+	dh_auto_install
 
 override_dh_installinit:
-    dh_installinit -pkazoo-freeswitch --name=freeswitch
+	dh_installinit -pkazoo-freeswitch --name=freeswitch
 
 override_dh_makeshlibs:
-    dh_makeshlibs
-    sed \
+	dh_makeshlibs
+	sed \
       -e '/^libfreeswitch 1/{s/kazoo-freeswitch/libfreeswitch1/g}' \
       -i debian/kazoo-freeswitch/DEBIAN/shlibs
 
 debian-bootstrap: debian/.stamp-bootstrap
 debian/.stamp-bootstrap:
-    (cd debian && ./kazoo-bootstrap.sh)
-    touch $@
+	(cd debian && ./kazoo-bootstrap.sh)
+	touch $@
 
 build-depends: debian/.stamp-build-depends
 debian/.stamp-build-depends:
-    ./debian/util.sh install-build-depends
-    touch $@
+	./debian/util.sh install-build-depends
+	touch $@
 
 binary-basetest:
-    @$(call show_vars)
-    echo "applications/mod_commands" > debian/modules.conf
-    (cd debian && ./kazoo-bootstrap.sh)
-    dh binary
+	@$(call show_vars)
+	echo "applications/mod_commands" > debian/modules.conf
+	(cd debian && ./kazoo-bootstrap.sh)
+	dh binary
 
 binary-quicktest:
-    @$(call show_vars)
-    echo "applications/mod_commands" > debian/modules.conf
-    (cd debian && ./kazoo-bootstrap.sh)
-    dh binary
+	@$(call show_vars)
+	echo "applications/mod_commands" > debian/modules.conf
+	(cd debian && ./kazoo-bootstrap.sh)
+	dh binary
