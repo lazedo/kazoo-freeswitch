@@ -392,9 +392,9 @@ sofia_transport_t sofia_glue_via2transport(const sip_via_t * via)
 		} else if (!strncasecmp(ptr, "sctp", 4)) {
 			return SOFIA_TRANSPORT_SCTP;
 		} else if (!strncasecmp(ptr, "wss", 3)) {
-			return SOFIA_TRANSPORT_WSS;
+			return SOFIA_TRANSPORT_UDP;
 		} else if (!strncasecmp(ptr, "ws", 2)) {
-			return SOFIA_TRANSPORT_WS;
+			return SOFIA_TRANSPORT_UDP;
 		}
 	}
 
@@ -414,10 +414,10 @@ const char *sofia_glue_transport2str(const sofia_transport_t tp)
 		return "sctp";
 
 	case SOFIA_TRANSPORT_WS:
-		return "ws";
+		return "udp";
 
 	case SOFIA_TRANSPORT_WSS:
-		return "wss";
+		return "udp";
 
 	default:
 		return "udp";
@@ -1993,7 +1993,8 @@ int sofia_glue_init_sql(sofia_profile_t *profile)
 		"   mwi_host         VARCHAR(255),\n"
 		"   orig_server_host VARCHAR(255),\n"
 		"   orig_hostname    VARCHAR(255),\n"
-		"   sub_host         VARCHAR(255)\n"
+		"   sub_host         VARCHAR(255),\n"
+		"   number_alias     VARCHAR(255)\n"
 		");\n";
 
 	char pres_sql[] =

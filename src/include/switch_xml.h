@@ -427,6 +427,10 @@ SWITCH_DECLARE(int) switch_xml_std_datetime_check(switch_xml_t xcond, int *offse
 
 SWITCH_DECLARE(switch_status_t) switch_xml_locate_language(switch_xml_t *root, switch_xml_t *node, switch_event_t *params, switch_xml_t *language, switch_xml_t *phrases, switch_xml_t *macros, const char *str_language);
 
+/* 2600hz changes  start */
+SWITCH_DECLARE(switch_status_t) switch_xml_locate_cached_user(const char *key, const char *user_name, const char *domain_name, switch_xml_t *user);
+/* 2600hz changes  end */
+
 SWITCH_END_EXTERN_C
 ///\}
 #endif // _SWITCH_XML_H
