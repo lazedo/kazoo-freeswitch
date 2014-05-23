@@ -111,6 +111,8 @@ struct globals_s {
 	char *kazoo_var_prefix;
 	int var_prefix_length;
 	uint32_t flags;
+	int send_all_headers;
+	int send_all_private_headers;
 } globals;
 typedef struct globals_s globals_t;
 
