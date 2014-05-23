@@ -92,6 +92,9 @@ typedef struct private_object private_object_t;
 #define MY_EVENT_RECOVERY_SEND "sofia::recovery_send"
 #define MY_EVENT_RECOVERY_RECOVERED "sofia::recovery_recovered"
 #define MY_EVENT_ERROR "sofia::error"
+#define MY_EVENT_TRANSFEROR "sofia::transferor"
+#define MY_EVENT_TRANSFEREE "sofia::transferee"
+#define MY_EVENT_REPLACED "sofia::replaced"
 
 #define MULTICAST_EVENT "multicast::event"
 #define SOFIA_REPLACES_HEADER "_sofia_replaces_"
@@ -275,6 +278,10 @@ typedef enum {
 	PFLAG_TLS_ALWAYS_NAT,
 	PFLAG_TCP_ALWAYS_NAT,
 	PFLAG_ENABLE_CHAT,
+	PFLAG_ENABLE_PRE_REGISTER,
+	PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS,
+	PFLAG_ENABLE_MESSAGE_AUTH_CACHED_AUTHENTICATION,
+	PFLAG_ENABLE_MESSAGE_BLIND_AUTH,
 	PFLAG_AUTH_SUBSCRIPTIONS,
 	/* No new flags below this line */
 	PFLAG_MAX
@@ -716,6 +723,10 @@ struct sofia_profile {
 	int tcp_pingpong;
 	int tcp_ping2pong;
 	ka_type_t keepalive;
+	char *pre_register_acl[SOFIA_MAX_ACL];
+	uint32_t pre_register_acl_count;
+	char *blind_auth_acl[SOFIA_MAX_ACL];
+	uint32_t blind_auth_acl_count;
 	int bind_attempts;
 	int bind_attempt_interval;
 };
@@ -1152,6 +1163,16 @@ void sofia_reg_check_socket(sofia_profile_t *profile, const char *call_id, const
 void sofia_reg_close_handles(sofia_profile_t *profile);
 
 void write_csta_xml_chunk(switch_event_t *event, switch_stream_handle_t stream, const char *csta_event, char *fwd_type);
+
+/*** 2600hz start ****/
+void sofia_reg_auth_challenge_ex(sofia_profile_t *profile, nua_handle_t *nh, sofia_dispatch_event_t *de, sofia_regtype_t regtype, const char *realm, int stale, long exptime, char *uuid_str);
+void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str);
+int sofia_check_acl(uint32_t acl_count, char** acl, sip_t const *sip, char *network_ip, sofia_profile_t *profile);
+int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile, char *network_ip);
+int sofia_xml_cached_user(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml);
+int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml, char *ip);
+/*** 2600hz end ****/
+
 /* For Emacs:
  * Local Variables:
  * mode:c
