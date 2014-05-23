@@ -945,10 +945,17 @@ char *sofia_reg_find_reg_url(sofia_profile_t *profile, const char *user, const c
 	cbt.len = len;
 
 	if (host) {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+						user, user, host, host);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
 						user, host, host);
 	} else {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' or number_alias='%q'", user, user);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
 	}
 
 
@@ -979,10 +986,17 @@ switch_console_callback_match_t *sofia_reg_find_reg_url_multi(sofia_profile_t *p
 	}
 
 	if (host) {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+						user, user, host, host);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
 						user, host, host);
 	} else {
-		sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
+		if (sofia_test_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS))
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q' or number_alias='%q'", user, user);
+		else
+			sql = switch_mprintf("select contact from sip_registrations where sip_user='%q'", user);
 	}
 
 
@@ -1027,16 +1041,24 @@ void sofia_reg_auth_challenge(sofia_profile_t *profile, nua_handle_t *nh, sofia_
 {
 	switch_uuid_t uuid;
 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+
+	switch_uuid_get(&uuid);
+	switch_uuid_format(uuid_str, &uuid);
+
+    sofia_reg_auth_challenge_ex(profile, nh, de, regtype, realm, stale, exptime, uuid_str);
+
+}
+
+
+void sofia_reg_auth_challenge_ex(sofia_profile_t *profile, nua_handle_t *nh, sofia_dispatch_event_t *de,
+							  sofia_regtype_t regtype, const char *realm, int stale, long exptime, char *uuid_str)
+{
 	char *sql, *auth_str;
 	msg_t *msg = NULL;
-
 
 	if (de && de->data) {
 		msg = de->data->e_msg;
 	}
-
-	switch_uuid_get(&uuid);
-	switch_uuid_format(uuid_str, &uuid);
 
 	sql = switch_mprintf("insert into sip_authentication (nonce,expires,profile_name,hostname, last_nc) "
 						 "values('%q', %ld, '%q', '%q', 0)", uuid_str,
@@ -1057,6 +1079,7 @@ void sofia_reg_auth_challenge(sofia_profile_t *profile, nua_handle_t *nh, sofia_
 
 	switch_safe_free(auth_str);
 }
+
 
 uint32_t sofia_reg_reg_count(sofia_profile_t *profile, const char *user, const char *host)
 {
@@ -1187,6 +1210,11 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 	char *sw_to_user;
 	char *sw_reg_host;
 	char *token_val = NULL;
+
+    char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+    char *registration_extra_headers = NULL;
+	switch_xml_t xml_local = NULL, xml_param, xml_uparams;
+	char *number_alias;
 
 	if (sofia_private_p) {
 		sofia_private = *sofia_private_p;
@@ -1429,7 +1457,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 		const char *username = "unknown";
 		const char *realm = reg_host;
 		if ((auth_res = sofia_reg_parse_auth(profile, authorization, sip, de, sip->sip_request->rq_method_name,
-											 key, keylen, network_ip, network_port, v_event, exptime, regtype, to_user, &auth_params, &reg_count, user_xml)) == AUTH_STALE) {
+											 key, keylen, network_ip, network_port, v_event, exptime, regtype, to_user, &auth_params, &reg_count, &xml_local)) == AUTH_STALE) {
 			stale = 1;
 		}
 
@@ -1653,17 +1681,20 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			realm = from_host;
 		}
 
-		sofia_reg_auth_challenge(profile, nh, de, regtype, realm, stale, exptime);
+        sofia_pre_register(profile, sip, realm, from_user, agent, network_ip, uuid_str);
+        sofia_reg_auth_challenge_ex(profile, nh, de, regtype, realm, stale, exptime, uuid_str);
 
 		if (profile->debug) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Send challenge for [%s@%s]\n", to_user, to_host);
 		}
 		/* Log line added to support Fail2Ban */
+		/* does this make sense ?
 		if (sofia_test_pflag(profile, PFLAG_LOG_AUTH_FAIL)) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "SIP auth challenge (%s) on sofia profile '%s' "
 							  "for [%s@%s] from ip %s\n", (regtype == REG_INVITE) ? "INVITE" : "REGISTER", 
 							  profile->name, to_user, to_host, network_ip);
 		}
+		*/
 
 		switch_goto_int(r, 1, end);
 	}
@@ -1698,6 +1729,14 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 	if (regtype != REG_REGISTER) {
 		switch_goto_int(r, 0, end);
 	}
+
+	if (v_event && *v_event && (var = switch_event_get_header(*v_event, "number_alias"))) {
+		number_alias = var;
+	}
+	else
+		number_alias = (char *) to_user;
+
+
 
 	call_id = sip->sip_call_id->i_id;
 	switch_assert(call_id);
@@ -1801,12 +1840,12 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			sql = switch_mprintf("insert into sip_registrations "
 					"(call_id,sip_user,sip_host,presence_hosts,contact,status,rpid,expires,"
 					"user_agent,server_user,server_host,profile_name,hostname,network_ip,network_port,sip_username,sip_realm,"
-					"mwi_user,mwi_host, orig_server_host, orig_hostname, sub_host) "
-					"values ('%q','%q', '%q','%q','%q','%q', '%q', %ld, '%q', '%q', '%q', '%q', '%q', '%q', '%q','%q','%q','%q','%q','%q','%q','%q')", 
+					"mwi_user,mwi_host, orig_server_host, orig_hostname, sub_host, number_alias) "
+					"values ('%q','%q', '%q','%q','%q','%q', '%q', %ld, '%q', '%q', '%q', '%q', '%q', '%q', '%q','%q','%q','%q','%q','%q','%q','%q','%q')",
 					call_id, to_user, reg_host, profile->presence_hosts ? profile->presence_hosts : "", 
 					contact_str, reg_desc, rpid, (long) reg_time + (long) exptime + profile->sip_expires_late_margin,
 					agent, from_user, guess_ip4, profile->name, mod_sofia_globals.hostname, network_ip, network_port_c, username, realm, 
-								 mwi_user, mwi_host, guess_ip4, mod_sofia_globals.hostname, sub_host);
+								 mwi_user, mwi_host, guess_ip4, mod_sofia_globals.hostname, sub_host, number_alias);
 		} else {
 			sql = switch_mprintf("update sip_registrations set call_id='%q',"
 								 "sub_host='%q', network_ip='%q',network_port='%q',"
@@ -1942,7 +1981,21 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 
 		s_event = NULL;
 
-		if (contact) {
+        //registration_extra_headers
+        if(xml_local) {
+           if ((xml_uparams = switch_xml_child(xml_local, "registration-headers"))) {
+               for (xml_param = switch_xml_child(xml_uparams, "header"); xml_param; xml_param = xml_param->next) {
+                    const char *var = switch_xml_attr_soft(xml_param, "name");
+                    const char *val = switch_xml_attr_soft(xml_param, "value");
+                    char *tmp = registration_extra_headers;
+                    registration_extra_headers = switch_mprintf("%s%s%s: %s", tmp, (tmp == NULL ? "" : "\n"), var, val);
+                    switch_safe_free(tmp);
+	        }
+           }
+
+        }
+
+        if (contact) {
 			if (exptime) {
 				int debounce_ok = debounce_check(profile, mwi_user, mwi_host);
 
@@ -2025,6 +2078,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			   also remove the parts in mod_sofia.h, sofia.c and sofia_reg.c that refer to reg_deny_binding_fetch_and_no_lookup */
 			nua_respond(nh, SIP_200_OK, TAG_IF(contact, SIPTAG_CONTACT(sip->sip_contact)), TAG_IF(path_val, SIPTAG_PATH_STR(path_val)),
 						TAG_IF(!zstr(expbuf), SIPTAG_EXPIRES_STR(expbuf)),
+                        TAG_IF(!zstr(registration_extra_headers), SIPTAG_HEADER_STR(registration_extra_headers)),
 						NUTAG_WITH_THIS_MSG(de->data->e_msg), SIPTAG_DATE_STR(date), TAG_END());
  
 		} else if ((contact_list = sofia_reg_find_reg_url_with_positive_expires_multi(profile, from_user, reg_host, reg_time, contact_str, exptime))) {
@@ -2040,6 +2094,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 
 			nua_respond(nh, SIP_200_OK, TAG_IF(path_val, SIPTAG_PATH_STR(path_val)),
 						TAG_IF(!zstr(expbuf), SIPTAG_EXPIRES_STR(expbuf)),
+                        TAG_IF(!zstr(registration_extra_headers), SIPTAG_HEADER_STR(registration_extra_headers)),
 						NUTAG_WITH_THIS_MSG(de->data->e_msg), SIPTAG_DATE_STR(date), TAG_NEXT(contact_tags));
 
 			switch_safe_free(contact_tags);
@@ -2049,6 +2104,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			/* respond without any contacts */
 			nua_respond(nh, SIP_200_OK, TAG_IF(path_val, SIPTAG_PATH_STR(path_val)),
 						TAG_IF(!zstr(expbuf), SIPTAG_EXPIRES_STR(expbuf)),
+                        TAG_IF(!zstr(registration_extra_headers), SIPTAG_HEADER_STR(registration_extra_headers)),
 						NUTAG_WITH_THIS_MSG(de->data->e_msg), SIPTAG_DATE_STR(date), TAG_END());
 		}
 
@@ -2071,10 +2127,20 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 	switch_safe_free(utmp);
 	switch_safe_free(path_val);
 	switch_safe_free(token_val);
+	switch_safe_free(registration_extra_headers);
 
 	if (auth_params) {
 		switch_event_destroy(&auth_params);
 	}
+
+	if(xml_local) {
+		if (user_xml) {
+			*user_xml = xml_local;
+		} else {
+			switch_xml_free(xml_local);
+			}
+	}
+
 
 	return (uint8_t) r;
 }
@@ -2714,6 +2780,11 @@ auth_res_t sofia_reg_parse_auth(sofia_profile_t *profile,
 				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
 				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
 			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
 		} else {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
 		}
@@ -3257,6 +3328,255 @@ switch_status_t sofia_reg_add_gateway(sofia_profile_t *profile, const char *key,
 
 	return status;
 }
+
+/* 2600hz changes start */
+
+void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str)
+{
+	switch_uuid_t uuid;
+	switch_event_t *params = NULL;
+	switch_xml_t user = NULL, param, uparams;
+	sip_unknown_t *un;
+
+	switch_uuid_get(&uuid);
+	switch_uuid_format(uuid_str, &uuid);
+
+    if(!sofia_test_pflag(profile, PFLAG_ENABLE_PRE_REGISTER)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia pre-register disabled");
+    	return;
+    }
+
+    if(!sofia_check_acl(profile->pre_register_acl_count, profile->pre_register_acl, sip, ip, profile)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for pre-register");
+    	return;
+
+    }
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "action", "sip_auth");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_profile", profile->name);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", user_agent);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", username);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "PRE-REGISTER");
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+
+	if (switch_xml_locate_user_merged("id", zstr(username) ? "nobody" : username, realm, ip, &user, params) == SWITCH_STATUS_SUCCESS) {
+           if ((uparams = switch_xml_child(user, "params"))) {
+		for (param = switch_xml_child(uparams, "param"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+
+			if (!strcasecmp(var, "nonce")) {
+                         switch_snprintf(uuid_str, SWITCH_UUID_FORMATTED_LENGTH, "%s", val);
+			}
+
+		}
+           }
+	}
+
+
+	switch_event_destroy(&params);
+	if (user)
+           switch_xml_free(user);
+
+}
+
+int sofia_xml_cached_user(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml)
+{
+	switch_event_t *params = NULL;
+	switch_xml_t xml_local = NULL, param, uparams;
+	sip_unknown_t *un;
+	int result = 0;
+
+	const char *user = NULL;
+	const char *realm = NULL;
+
+    if(!sofia_test_pflag(profile, PFLAG_ENABLE_MESSAGE_AUTH_CACHED_AUTHENTICATION)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia message-cached-authentication");
+    	return result;
+    }
+
+
+	if ((!sip) || (!sip->sip_from))
+		return result;
+	{
+		user = sip->sip_from->a_url->url_user;
+		realm = sip->sip_from->a_url->url_host;
+	}
+
+	if(switch_xml_locate_cached_user("id:number-alias", user, realm, &xml_local) != SWITCH_STATUS_SUCCESS)
+		return result;
+
+	result = 1;
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	if (sip->sip_user_agent) {
+		switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", sip->sip_user_agent->g_string);
+	}
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_authorized", "true");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-AUTH-CACHED");
+
+	if ((uparams = switch_xml_child(xml_local, "params"))) {
+		for (param = switch_xml_child(uparams, "param"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+
+	}
+
+	if ((uparams = switch_xml_child(xml_local, "variables"))) {
+		for (param = switch_xml_child(uparams, "variable"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+	}
+
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+	if(v_event != NULL)
+		*v_event = params;
+	else
+		switch_event_destroy(&params);
+
+	if(user_xml != NULL)
+		*user_xml = xml_local;
+	else
+        switch_xml_free(xml_local);
+
+	return result;
+}
+
+
+int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml, char *ip)
+{
+	switch_event_t *params = NULL;
+	switch_xml_t xml_local = NULL, param, uparams;
+	sip_unknown_t *un;
+	int result = 0;
+
+	const char *user = NULL;
+	const char *realm = NULL;
+
+    if(!sofia_test_pflag(profile, PFLAG_ENABLE_MESSAGE_BLIND_AUTH)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia message-blind-auth");
+    	return result;
+    }
+
+	if(!sofia_check_acl(profile->blind_auth_acl_count, profile->blind_auth_acl, sip, ip, profile)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for blind-auth");
+	}
+
+	if ((!sip) || (!sip->sip_from))
+		return result;
+	{
+		user = sip->sip_from->a_url->url_user;
+		realm = sip->sip_from->a_url->url_host;
+	}
+
+	if(switch_xml_locate_user_merged("id", user, realm, ip, &xml_local, NULL) != SWITCH_STATUS_SUCCESS)
+		return result;
+
+	result = 1;
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	if (sip->sip_user_agent) {
+		switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", sip->sip_user_agent->g_string);
+	}
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM,  "sip_authorized", "true");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-AUTH");
+
+	if ((uparams = switch_xml_child(xml_local, "params"))) {
+		for (param = switch_xml_child(uparams, "param"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+
+	}
+
+	if ((uparams = switch_xml_child(xml_local, "variables"))) {
+		for (param = switch_xml_child(uparams, "variable"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+	}
+
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+	if(v_event != NULL)
+		*v_event = params;
+	else
+		switch_event_destroy(&params);
+
+	if(user_xml != NULL)
+		*user_xml = xml_local;
+	else
+        switch_xml_free(xml_local);
+
+	return result;
+}
+/* 2600hz changes end */
 
 /* For Emacs:
  * Local Variables:
