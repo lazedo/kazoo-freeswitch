@@ -45,27 +45,7 @@ avoid_mods_squeeze=(
   languages/mod_managed
 )
 manual_pkgs=(
-freeswitch-all
-freeswitch
-libfreeswitch1
-freeswitch-meta-bare
-freeswitch-meta-default
-freeswitch-meta-vanilla
-freeswitch-meta-sorbet
-freeswitch-meta-all
-freeswitch-meta-codecs
-freeswitch-meta-conf
-freeswitch-meta-lang
-freeswitch-meta-mod-say
-freeswitch-all-dbg
-freeswitch-dbg
-libfreeswitch1-dbg
-libfreeswitch-dev
-freeswitch-doc
-freeswitch-init
-freeswitch-sysvinit
-freeswitch-systemd
-freeswitch-lang
+kazoo-freeswitch
 )
 
 err () {
@@ -270,7 +250,7 @@ list_freeswitch_all_dbg_replaces () {
 
 print_source_control () {
 cat <<EOF
-Source: freeswitch
+Source: kazoo-freeswitch
 Section: comm
 Priority: optional
 Maintainer: Travis Cross <tc@traviscross.com>
@@ -311,524 +291,23 @@ EOF
 
 print_core_control () {
 cat <<EOF
-Package: freeswitch-all
+Package: kazoo-freeswitch
 Architecture: any
-Provides: $(list_freeswitch_all_provides)
-Replaces: $(list_freeswitch_all_replaces)
-Conflicts: $(list_freeswitch_all_replaces)
-Depends: \${shlibs:Depends}, \${perl:Depends}, \${misc:Depends},
- freeswitch-music-default (>= 1.0.8),
- freeswitch-sounds-en-us-callie (>= 1.0.25) | freeswitch-sounds,
- $(debian_wrap "${mod_depends}")
-Recommends:
- $(debian_wrap "${mod_recommends}")
-Suggests: freeswitch-all-dbg,
- $(debian_wrap "${mod_suggests}")
+Provides: kazoo-freeswitch 
+Replaces: 
+Conflicts: 
+Depends: 
+ kazoo-prompts (>= 1.0.8),
+ kazoo-configs-freeswitch (>= 3.0.0),
+ esl-erlang (>= 1:15.b.3),
+ .
 Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
+ FreeSWITCH is a scalable open source cross-platform telephony
+ platform designed to route and interconnect popular communication
+ protocols using audio, video, text or any other form of media.
  .
  This package contains FreeSWITCH and all modules and extras.
 
-Package: freeswitch
-Architecture: any
-Depends: \${shlibs:Depends}, \${perl:Depends}, \${misc:Depends},
- libfreeswitch1 (= \${binary:Version})
-Recommends:
-Suggests: freeswitch-dbg
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This package contains the FreeSWITCH core.
-
-Package: libfreeswitch1
-Architecture: any
-Depends: \${shlibs:Depends}, \${misc:Depends}
-Recommends:
-Suggests: libfreeswitch1-dbg
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This package contains the FreeSWITCH core library.
-
-Package: freeswitch-meta-bare
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version})
-Recommends:
- freeswitch-doc (= \${binary:Version}),
- freeswitch-mod-commands (= \${binary:Version}),
- freeswitch-init (= \${binary:Version}),
- freeswitch-lang (= \${binary:Version}),
- freeswitch-music,
- freeswitch-sounds
-Suggests:
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the packages needed for a very
- bare FreeSWITCH install.
-
-Package: freeswitch-meta-default
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
- freeswitch-mod-commands (= \${binary:Version}),
- freeswitch-mod-conference (= \${binary:Version}),
- freeswitch-mod-db (= \${binary:Version}),
- freeswitch-mod-dptools (= \${binary:Version}),
- freeswitch-mod-fifo (= \${binary:Version}),
- freeswitch-mod-hash (= \${binary:Version}),
- freeswitch-mod-spandsp (= \${binary:Version}),
- freeswitch-mod-voicemail (= \${binary:Version}),
- freeswitch-mod-dialplan-xml (= \${binary:Version}),
- freeswitch-mod-loopback (= \${binary:Version}),
- freeswitch-mod-sofia (= \${binary:Version}),
- freeswitch-mod-local-stream (= \${binary:Version}),
- freeswitch-mod-native-file (= \${binary:Version}),
- freeswitch-mod-sndfile (= \${binary:Version}),
- freeswitch-mod-tone-stream (= \${binary:Version}),
- freeswitch-mod-lua (= \${binary:Version}),
- freeswitch-mod-console (= \${binary:Version}),
- freeswitch-mod-say-en (= \${binary:Version})
-Recommends:
- freeswitch-init (= \${binary:Version}),
- freeswitch-lang (= \${binary:Version}),
- freeswitch-meta-codecs (= \${binary:Version}),
- freeswitch-music,
- freeswitch-sounds
-Suggests:
- freeswitch-mod-cidlookup (= \${binary:Version}),
- freeswitch-mod-curl (= \${binary:Version}),
- freeswitch-mod-directory (= \${binary:Version}),
- freeswitch-mod-enum (= \${binary:Version}),
- freeswitch-mod-spy (= \${binary:Version}),
- freeswitch-mod-valet-parking (= \${binary:Version})
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the packages needed for a
- reasonably basic FreeSWITCH install.
-
-Package: freeswitch-meta-vanilla
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
- freeswitch-mod-console (= \${binary:Version}),
- freeswitch-mod-logfile (= \${binary:Version}),
- freeswitch-mod-enum (= \${binary:Version}),
- freeswitch-mod-cdr-csv (= \${binary:Version}),
- freeswitch-mod-event-socket (= \${binary:Version}),
- freeswitch-mod-sofia (= \${binary:Version}),
- freeswitch-mod-loopback (= \${binary:Version}),
- freeswitch-mod-commands (= \${binary:Version}),
- freeswitch-mod-conference (= \${binary:Version}),
- freeswitch-mod-db (= \${binary:Version}),
- freeswitch-mod-dptools (= \${binary:Version}),
- freeswitch-mod-expr (= \${binary:Version}),
- freeswitch-mod-fifo (= \${binary:Version}),
- freeswitch-mod-hash (= \${binary:Version}),
- freeswitch-mod-voicemail (= \${binary:Version}),
- freeswitch-mod-esf (= \${binary:Version}),
- freeswitch-mod-fsv (= \${binary:Version}),
- freeswitch-mod-cluechoo (= \${binary:Version}),
- freeswitch-mod-valet-parking (= \${binary:Version}),
- freeswitch-mod-httapi (= \${binary:Version}),
- freeswitch-mod-dialplan-xml (= \${binary:Version}),
- freeswitch-mod-dialplan-asterisk (= \${binary:Version}),
- freeswitch-mod-spandsp (= \${binary:Version}),
- freeswitch-mod-g723-1 (= \${binary:Version}),
- freeswitch-mod-g729 (= \${binary:Version}),
- freeswitch-mod-amr (= \${binary:Version}),
- freeswitch-mod-h26x (= \${binary:Version}),
- freeswitch-mod-sndfile (= \${binary:Version}),
- freeswitch-mod-native-file (= \${binary:Version}),
- freeswitch-mod-local-stream (= \${binary:Version}),
- freeswitch-mod-tone-stream (= \${binary:Version}),
- freeswitch-mod-lua (= \${binary:Version}),
- freeswitch-mod-say-en (= \${binary:Version}),
-Recommends:
- freeswitch-init (= \${binary:Version}),
- freeswitch-lang (= \${binary:Version}),
- freeswitch-music,
- freeswitch-sounds,
- freeswitch-conf-vanilla (= \${binary:Version}),
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the packages needed for
- running the FreeSWITCH vanilla example configuration.
-
-Package: freeswitch-meta-sorbet
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
-Recommends:
- freeswitch-init (= \${binary:Version}),
- freeswitch-lang (= \${binary:Version}),
- freeswitch-meta-codecs (= \${binary:Version}),
- freeswitch-music,
- freeswitch-sounds,
- freeswitch-mod-abstraction (= \${binary:Version}),
- freeswitch-mod-avmd (= \${binary:Version}),
- freeswitch-mod-blacklist (= \${binary:Version}),
- freeswitch-mod-callcenter (= \${binary:Version}),
- freeswitch-mod-cidlookup (= \${binary:Version}),
- freeswitch-mod-commands (= \${binary:Version}),
- freeswitch-mod-conference (= \${binary:Version}),
- freeswitch-mod-curl (= \${binary:Version}),
- freeswitch-mod-db (= \${binary:Version}),
- freeswitch-mod-directory (= \${binary:Version}),
- freeswitch-mod-distributor (= \${binary:Version}),
- freeswitch-mod-dptools (= \${binary:Version}),
- freeswitch-mod-easyroute (= \${binary:Version}),
- freeswitch-mod-enum (= \${binary:Version}),
- freeswitch-mod-esf (= \${binary:Version}),
- freeswitch-mod-esl (= \${binary:Version}),
- freeswitch-mod-expr (= \${binary:Version}),
- freeswitch-mod-fifo (= \${binary:Version}),
- freeswitch-mod-fsk (= \${binary:Version}),
- freeswitch-mod-fsv (= \${binary:Version}),
- freeswitch-mod-hash (= \${binary:Version}),
- freeswitch-mod-httapi (= \${binary:Version}),
- freeswitch-mod-http-cache (= \${binary:Version}),
- freeswitch-mod-lcr (= \${binary:Version}),
- freeswitch-mod-nibblebill (= \${binary:Version}),
- freeswitch-mod-oreka (= \${binary:Version}),
- freeswitch-mod-random (= \${binary:Version}),
- freeswitch-mod-redis (= \${binary:Version}),
- freeswitch-mod-rss (= \${binary:Version}),
- freeswitch-mod-sms (= \${binary:Version}),
- freeswitch-mod-snapshot (= \${binary:Version}),
- freeswitch-mod-snom (= \${binary:Version}),
- freeswitch-mod-sonar (= \${binary:Version}),
- freeswitch-mod-soundtouch (= \${binary:Version}),
- freeswitch-mod-spandsp (= \${binary:Version}),
- freeswitch-mod-spy (= \${binary:Version}),
- freeswitch-mod-stress (= \${binary:Version}),
- freeswitch-mod-valet-parking (= \${binary:Version}),
- freeswitch-mod-vmd (= \${binary:Version}),
- freeswitch-mod-voicemail (= \${binary:Version}),
- freeswitch-mod-voicemail-ivr (= \${binary:Version}),
- freeswitch-mod-flite (= \${binary:Version}),
- freeswitch-mod-pocketsphinx (= \${binary:Version}),
- freeswitch-mod-tts-commandline (= \${binary:Version}),
- freeswitch-mod-dialplan-xml (= \${binary:Version}),
- freeswitch-mod-html5 (= \${binary:Version}),
- freeswitch-mod-loopback (= \${binary:Version}),
- freeswitch-mod-rtmp (= \${binary:Version}),
- freeswitch-mod-skinny (= \${binary:Version}),
- freeswitch-mod-sofia (= \${binary:Version}),
- freeswitch-mod-cdr-csv (= \${binary:Version}),
- freeswitch-mod-cdr-sqlite (= \${binary:Version}),
- freeswitch-mod-event-socket (= \${binary:Version}),
- freeswitch-mod-json-cdr (= \${binary:Version}),
- freeswitch-mod-local-stream (= \${binary:Version}),
- freeswitch-mod-native-file (= \${binary:Version}),
- freeswitch-mod-shell-stream (= \${binary:Version}),
- freeswitch-mod-sndfile (= \${binary:Version}),
- freeswitch-mod-tone-stream (= \${binary:Version}),
- freeswitch-mod-lua (= \${binary:Version}),
- freeswitch-mod-console (= \${binary:Version}),
- freeswitch-mod-logfile (= \${binary:Version}),
- freeswitch-mod-syslog (= \${binary:Version}),
- freeswitch-mod-say-en (= \${binary:Version}),
- freeswitch-mod-posix-timer (= \${binary:Version}),
- freeswitch-mod-timerfd (= \${binary:Version}),
- freeswitch-mod-xml-cdr (= \${binary:Version}),
- freeswitch-mod-xml-curl (= \${binary:Version}),
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which recommends most packaged FreeSWITCH
- modules except a few which aren't recommended.
-
-Package: freeswitch-meta-all
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
-Recommends:
- freeswitch-init (= \${binary:Version}),
- freeswitch-lang (= \${binary:Version}),
- freeswitch-meta-codecs (= \${binary:Version}),
- freeswitch-meta-conf (= \${binary:Version}),
- freeswitch-meta-lang (= \${binary:Version}),
- freeswitch-meta-mod-say (= \${binary:Version}),
- freeswitch-music,
- freeswitch-sounds,
- freeswitch-mod-abstraction (= \${binary:Version}),
- freeswitch-mod-avmd (= \${binary:Version}),
- freeswitch-mod-blacklist (= \${binary:Version}),
- freeswitch-mod-callcenter (= \${binary:Version}),
- freeswitch-mod-cidlookup (= \${binary:Version}),
- freeswitch-mod-cluechoo (= \${binary:Version}),
- freeswitch-mod-commands (= \${binary:Version}),
- freeswitch-mod-conference (= \${binary:Version}),
- freeswitch-mod-curl (= \${binary:Version}),
- freeswitch-mod-db (= \${binary:Version}),
- freeswitch-mod-directory (= \${binary:Version}),
- freeswitch-mod-distributor (= \${binary:Version}),
- freeswitch-mod-dptools (= \${binary:Version}),
- freeswitch-mod-easyroute (= \${binary:Version}),
- freeswitch-mod-enum (= \${binary:Version}),
- freeswitch-mod-esf (= \${binary:Version}),
- freeswitch-mod-esl (= \${binary:Version}),
- freeswitch-mod-expr (= \${binary:Version}),
- freeswitch-mod-fifo (= \${binary:Version}),
- freeswitch-mod-fsk (= \${binary:Version}),
- freeswitch-mod-fsv (= \${binary:Version}),
- freeswitch-mod-hash (= \${binary:Version}),
- freeswitch-mod-httapi (= \${binary:Version}),
- freeswitch-mod-http-cache (= \${binary:Version}),
- freeswitch-mod-ladspa (= \${binary:Version}),
- freeswitch-mod-lcr (= \${binary:Version}),
- freeswitch-mod-memcache (= \${binary:Version}),
- freeswitch-mod-nibblebill (= \${binary:Version}),
- freeswitch-mod-oreka (= \${binary:Version}),
- freeswitch-mod-random (= \${binary:Version}),
- freeswitch-mod-redis (= \${binary:Version}),
- freeswitch-mod-rss (= \${binary:Version}),
- freeswitch-mod-sms (= \${binary:Version}),
- freeswitch-mod-snapshot (= \${binary:Version}),
- freeswitch-mod-snipe-hunt (= \${binary:Version}),
- freeswitch-mod-snom (= \${binary:Version}),
- freeswitch-mod-sonar (= \${binary:Version}),
- freeswitch-mod-soundtouch (= \${binary:Version}),
- freeswitch-mod-spandsp (= \${binary:Version}),
- freeswitch-mod-spy (= \${binary:Version}),
- freeswitch-mod-stress (= \${binary:Version}),
- freeswitch-mod-translate (= \${binary:Version}),
- freeswitch-mod-valet-parking (= \${binary:Version}),
- freeswitch-mod-vmd (= \${binary:Version}),
- freeswitch-mod-voicemail (= \${binary:Version}),
- freeswitch-mod-voicemail-ivr (= \${binary:Version}),
- freeswitch-mod-flite (= \${binary:Version}),
- freeswitch-mod-pocketsphinx (= \${binary:Version}),
- freeswitch-mod-tts-commandline (= \${binary:Version}),
- freeswitch-mod-unimrcp (= \${binary:Version}),
- freeswitch-mod-dialplan-asterisk (= \${binary:Version}),
- freeswitch-mod-dialplan-directory (= \${binary:Version}),
- freeswitch-mod-dialplan-xml (= \${binary:Version}),
- freeswitch-mod-ldap (= \${binary:Version}),
- freeswitch-mod-alsa (= \${binary:Version}),
- freeswitch-mod-dingaling (= \${binary:Version}),
- freeswitch-mod-html5 (= \${binary:Version}),
- freeswitch-mod-loopback (= \${binary:Version}),
- freeswitch-mod-portaudio (= \${binary:Version}),
- freeswitch-mod-rtmp (= \${binary:Version}),
- freeswitch-mod-skinny (= \${binary:Version}),
- freeswitch-mod-skypopen (= \${binary:Version}),
- freeswitch-mod-sofia (= \${binary:Version}),
- freeswitch-mod-cdr-csv (= \${binary:Version}),
- freeswitch-mod-cdr-mongodb (= \${binary:Version}),
- freeswitch-mod-cdr-pg-csv (= \${binary:Version}),
- freeswitch-mod-cdr-sqlite (= \${binary:Version}),
- freeswitch-mod-erlang-event (= \${binary:Version}),
- freeswitch-mod-event-multicast (= \${binary:Version}),
- freeswitch-mod-event-socket (= \${binary:Version}),
- freeswitch-mod-event-test (= \${binary:Version}),
- freeswitch-mod-event-zmq (= \${binary:Version}),
- freeswitch-mod-json-cdr (= \${binary:Version}),
- freeswitch-mod-radius-cdr (= \${binary:Version}),
- freeswitch-mod-snmp (= \${binary:Version}),
- freeswitch-mod-local-stream (= \${binary:Version}),
- freeswitch-mod-native-file (= \${binary:Version}),
- freeswitch-mod-portaudio-stream (= \${binary:Version}),
- freeswitch-mod-shell-stream (= \${binary:Version}),
- freeswitch-mod-sndfile (= \${binary:Version}),
- freeswitch-mod-tone-stream (= \${binary:Version}),
- freeswitch-mod-java (= \${binary:Version}),
- freeswitch-mod-lua (= \${binary:Version}),
- freeswitch-mod-perl (= \${binary:Version}),
- freeswitch-mod-python (= \${binary:Version}),
- freeswitch-mod-yaml (= \${binary:Version}),
- freeswitch-mod-console (= \${binary:Version}),
- freeswitch-mod-logfile (= \${binary:Version}),
- freeswitch-mod-syslog (= \${binary:Version}),
- freeswitch-mod-posix-timer (= \${binary:Version}),
- freeswitch-mod-timerfd (= \${binary:Version}),
- freeswitch-mod-xml-cdr (= \${binary:Version}),
- freeswitch-mod-xml-curl (= \${binary:Version}),
- freeswitch-mod-xml-rpc (= \${binary:Version}),
- freeswitch-mod-xml-scgi (= \${binary:Version}),
-Suggests:
- freeswitch-mod-vlc (= \${binary:Version}),
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which recommends or suggests all packaged
- FreeSWITCH modules.
-
-Package: freeswitch-meta-codecs
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version}),
- freeswitch-mod-amr (= \${binary:Version}),
- freeswitch-mod-amrwb (= \${binary:Version}),
- freeswitch-mod-b64 (= \${binary:Version}),
- freeswitch-mod-bv (= \${binary:Version}),
- freeswitch-mod-celt (= \${binary:Version}),
- freeswitch-mod-codec2 (= \${binary:Version}),
- freeswitch-mod-dahdi-codec (= \${binary:Version}),
- freeswitch-mod-g723-1 (= \${binary:Version}),
- freeswitch-mod-g729 (= \${binary:Version}),
- freeswitch-mod-h26x (= \${binary:Version}),
- freeswitch-mod-isac (= \${binary:Version}),
- freeswitch-mod-mp4v (= \${binary:Version}),
- freeswitch-mod-opus (= \${binary:Version}),
- freeswitch-mod-silk (= \${binary:Version}),
- freeswitch-mod-spandsp (= \${binary:Version}),
- freeswitch-mod-theora (= \${binary:Version}),
- freeswitch-mod-vp8 (= \${binary:Version})
-Suggests:
- freeswitch-mod-ilbc (= \${binary:Version}),
- freeswitch-mod-siren (= \${binary:Version})
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the packages needed to install
- most FreeSWITCH codecs.
-
-Package: freeswitch-meta-conf
-Architecture: all
-Depends: \${misc:Depends},
- freeswitch-conf-curl (= \${binary:Version}),
- freeswitch-conf-insideout (= \${binary:Version}),
- freeswitch-conf-sbc (= \${binary:Version}),
- freeswitch-conf-softphone (= \${binary:Version}),
- freeswitch-conf-vanilla (= \${binary:Version}),
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the available configuration
- examples for FreeSWITCH.
-
-Package: freeswitch-meta-lang
-Architecture: all
-Depends: \${misc:Depends},
- freeswitch-lang-de (= \${binary:Version}),
- freeswitch-lang-en (= \${binary:Version}),
- freeswitch-lang-es (= \${binary:Version}),
- freeswitch-lang-fr (= \${binary:Version}),
- freeswitch-lang-he (= \${binary:Version}),
- freeswitch-lang-pt (= \${binary:Version}),
- freeswitch-lang-ru (= \${binary:Version}),
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on all language files for
- FreeSWITCH.
-
-Package: freeswitch-meta-mod-say
-Architecture: any
-Depends: \${misc:Depends},
- freeswitch-mod-say-de (= \${binary:Version}),
- freeswitch-mod-say-en (= \${binary:Version}),
- freeswitch-mod-say-es (= \${binary:Version}),
- freeswitch-mod-say-fa (= \${binary:Version}),
- freeswitch-mod-say-fr (= \${binary:Version}),
- freeswitch-mod-say-he (= \${binary:Version}),
- freeswitch-mod-say-hr (= \${binary:Version}),
- freeswitch-mod-say-hu (= \${binary:Version}),
- freeswitch-mod-say-it (= \${binary:Version}),
- freeswitch-mod-say-ja (= \${binary:Version}),
- freeswitch-mod-say-nl (= \${binary:Version}),
- freeswitch-mod-say-pl (= \${binary:Version}),
- freeswitch-mod-say-pt (= \${binary:Version}),
- freeswitch-mod-say-ru (= \${binary:Version}),
- freeswitch-mod-say-th (= \${binary:Version}),
- freeswitch-mod-say-zh (= \${binary:Version}),
-Description: Cross-Platform Scalable Multi-Protocol Soft Switch
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on all mod_say languages for
- FreeSWITCH.
-
-Package: freeswitch-all-dbg
-Section: debug
-Priority: extra
-Architecture: any
-Provides: $(list_freeswitch_all_dbg_provides)
-Replaces: $(list_freeswitch_all_dbg_replaces)
-Breaks: $(list_freeswitch_all_dbg_replaces)
-Depends: \${misc:Depends}, freeswitch-all (= \${binary:Version})
-Description: debugging symbols for FreeSWITCH
- $(debian_wrap "${fs_description}")
- .
- This package contains debugging symbols for FreeSWITCH.
-
-Package: freeswitch-dbg
-Section: debug
-Priority: extra
-Architecture: any
-Depends: \${misc:Depends}, freeswitch (= \${binary:Version})
-Description: debugging symbols for FreeSWITCH
- $(debian_wrap "${fs_description}")
- .
- This package contains debugging symbols for FreeSWITCH.
-
-Package: libfreeswitch1-dbg
-Section: debug
-Priority: extra
-Architecture: any
-Depends: \${misc:Depends}, libfreeswitch1 (= \${binary:Version})
-Description: debugging symbols for FreeSWITCH
- $(debian_wrap "${fs_description}")
- .
- This package contains debugging symbols for libfreeswitch1.
-
-Package: libfreeswitch-dev
-Section: libdevel
-Architecture: any
-Depends: \${misc:Depends}, freeswitch
-Description: development libraries and header files for FreeSWITCH
- $(debian_wrap "${fs_description}")
- .
- This package contains include files for FreeSWITCH.
-
-Package: freeswitch-doc
-Section: doc
-Architecture: all
-Depends: \${misc:Depends}
-Description: documentation for FreeSWITCH
- $(debian_wrap "${fs_description}")
- .
- This package contains Doxygen-produce documentation for FreeSWITCH.
- It may be an empty package at the moment.
-
-Package: freeswitch-init
-Architecture: all
-Depends: \${misc:Depends},
- freeswitch-sysvinit (= \${binary:Version}),
- freeswitch-systemd (= \${binary:Version})
-Description: FreeSWITCH startup configuration
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the default system startup
- packages for FreeSWITCH.
-
-Package: freeswitch-sysvinit
-Architecture: all
-Depends: \${misc:Depends}, lsb-base (>= 3.0-6)
-Description: FreeSWITCH SysV init script
- $(debian_wrap "${fs_description}")
- .
- This package contains the SysV init script for FreeSWITCH.
-
-Package: freeswitch-systemd
-Architecture: all
-Depends: \${misc:Depends}
-Description: FreeSWITCH systemd configuration
- $(debian_wrap "${fs_description}")
- .
- This package contains the systemd configuration for FreeSWITCH.
-
-## misc
-
-## languages
-
-Package: freeswitch-lang
-Architecture: all
-Depends: \${misc:Depends},
- freeswitch-lang-en (= \${binary:Version})
-Description: Language files for FreeSWITCH
- $(debian_wrap "${fs_description}")
- .
- This is a metapackage which depends on the default language packages
- for FreeSWITCH.
 
 EOF
 }
@@ -1226,50 +705,24 @@ test -z "$modulelist_opt" || set_modules_${modulelist_opt/-/_}
 
 echo "Adding any new modules to control-modules..." >&2
 parse_dir=control-modules.parse
-map_fs_modules ':' 'genmodctl_new_cat' 'genmodctl_new_mod' >> control-modules
+##map_fs_modules ':' 'genmodctl_new_cat' 'genmodctl_new_mod' >> control-modules
 echo "Parsing control-modules..." >&2
-parse_mod_control
+##parse_mod_control
 echo "Displaying includes/excludes..." >&2
-map_modules 'mod_filter_show' '' ''
+##map_modules 'mod_filter_show' '' ''
 echo "Generating modules_.conf..." >&2
-genmodulesconf > modules_.conf
+##genmodulesconf > modules_.conf
 echo "Generating control-modules.gen as sanity check..." >&2
 (echo "# -*- mode:debian-control -*-"; \
   echo "##### Author: Travis Cross <tc@traviscross.com>"; echo; \
-  map_modules ':' 'genmodctl_cat' 'genmodctl_mod' \
+  ###map_modules ':' 'genmodctl_cat' 'genmodctl_mod' \
   ) > control-modules.gen
 
 echo "Accumulating dependencies from modules..." >&2
-map_modules 'mod_filter' '' 'accumulate_mod_deps'
+###map_modules 'mod_filter' '' 'accumulate_mod_deps'
 echo "Generating debian/..." >&2
 > control
-> freeswitch-all.install
-(print_edit_warning; print_mod_overrides "freeswitch-all") \
-  > freeswitch-all.lintian-overrides
 (print_edit_warning; print_source_control; print_core_control) >> control
-echo "Generating debian/ (conf)..." >&2
-(echo "### conf"; echo) >> control
-map_confs 'genconf'
-echo "Generating debian/ (lang)..." >&2
-(echo "### lang"; echo) >> control
-map_langs 'genlang'
-echo "Generating debian/ (modules)..." >&2
-(echo "### modules"; echo) >> control
-map_modules "mod_filter" \
-  "gencontrol_per_cat" \
-  "gencontrol_per_mod geninstall_per_mod genoverrides_per_mod"
-echo "Generating debian/ (-all package)..." >&2
-grep -e '^Package:' control | grep -v '^freeswitch-all$' | while xread l; do
-  m="${l#*: }"
-  conf_merge freeswitch-all.install $m.install
-done
-for x in postinst postrm preinst prerm; do
-  cp -a freeswitch.$x freeswitch-all.$x
-done
-cp -a freeswitch-doc.docs freeswitch-all.docs
-#cp -a freeswitch-systemd.freeswitch.service freeswitch-all.freeswitch.service
-cp -a freeswitch-sysvinit.freeswitch.default freeswitch-all.freeswitch.default
-cp -a freeswitch-sysvinit.freeswitch.init freeswitch-all.freeswitch.init
 
 echo "Generating additional lintian overrides..." >&2
 grep -e '^Package:' control | while xread l; do
@@ -1282,11 +735,6 @@ grep -e '^Package:' control | while xread l; do
   if ! grep -e 'new-package-should-close-itp-bug' $f >/dev/null; then
     print_itp_override "$m" >> $f
   fi
-done
-for p in freeswitch libfreeswitch1; do
-  f=$p.lintian-overrides
-  [ -s $f ] || print_edit_warning >> $f
-  print_gpl_openssl_override "$p" >> $f
 done
 
 echo "Cleaning up..." >&2

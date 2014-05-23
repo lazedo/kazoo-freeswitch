@@ -114,7 +114,7 @@ override_dh_makeshlibs:
 
 debian-bootstrap: debian/.stamp-bootstrap
 debian/.stamp-bootstrap:
-    (cd debian && ./bootstrap.sh)
+    (cd debian && ./kazoo-bootstrap.sh)
     touch $@
 
 build-depends: debian/.stamp-build-depends
@@ -125,11 +125,11 @@ debian/.stamp-build-depends:
 binary-basetest:
     @$(call show_vars)
     echo "applications/mod_commands" > debian/modules.conf
-    (cd debian && ./bootstrap.sh)
+    (cd debian && ./kazoo-bootstrap.sh)
     dh binary
 
 binary-quicktest:
     @$(call show_vars)
     echo "applications/mod_commands" > debian/modules.conf
-    (cd debian && ./bootstrap.sh)
+    (cd debian && ./kazoo-bootstrap.sh)
     dh binary
