@@ -280,6 +280,8 @@ typedef enum {
 	PFLAG_ENABLE_CHAT,
 	PFLAG_ENABLE_PRE_REGISTER,
 	PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS,
+	PFLAG_ENABLE_MESSAGE_AUTH_CACHED_AUTHENTICATION,
+	PFLAG_ENABLE_MESSAGE_BLIND_AUTH,
 	/* No new flags below this line */
 	PFLAG_MAX
 } PFLAGS;
@@ -1164,6 +1166,8 @@ void sofia_reg_auth_challenge_ex(sofia_profile_t *profile, nua_handle_t *nh, sof
 void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str);
 int sofia_check_acl(uint32_t acl_count, char** acl, sip_t const *sip, char *network_ip, sofia_profile_t *profile);
 int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile, char *network_ip);
+int sofia_xml_cached_user(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml);
+int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml, char *ip);
 /*** 2600hz end ****/
 
 /* For Emacs:

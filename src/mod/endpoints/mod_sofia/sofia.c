@@ -4007,6 +4007,15 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 					/* lib default */
 					profile->tls_verify_depth = 2;
 					profile->tls_verify_date = SWITCH_TRUE;
+
+					profile->acl_count = 0;
+					profile->nat_acl_count = 0;
+					profile->reg_acl_count = 0;
+					profile->proxy_acl_count = 0;
+
+					profile->pre_register_acl_count = 0;
+					profile->blind_auth_acl_count = 0;
+
 				} else {
 
 					/* you could change profile->foo here if it was a minor change like context or dialplan ... */
@@ -4021,6 +4030,9 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 					profile->ob_failed_calls = 0;
 					profile->shutdown_type = "false";
 					profile->rtpip_index = 0;
+
+					profile->pre_register_acl_count = 0;
+					profile->blind_auth_acl_count = 0;
 
 					if (xprofiledomain) {
 						profile->domain_name = switch_core_strdup(profile->pool, xprofiledomain);
@@ -5082,6 +5094,14 @@ switch_status_t config_sofia(sofia_config_t reload, char *profile_name)
 					} else if (!strcasecmp(var, "enable-presence-find-by-number-alias")) {
 						if (switch_true(val)) {
 							sofia_set_pflag(profile, PFLAG_ENABLE_PRESENCE_FIND_BY_NUMBER_ALIAS);
+						}
+					} else if (!strcasecmp(var, "enable-message-cached-authentication")) {
+						if (switch_true(val)) {
+							sofia_set_pflag(profile, PFLAG_ENABLE_MESSAGE_AUTH_CACHED_AUTHENTICATION);
+						}
+					} else if (!strcasecmp(var, "enable-message-blind-auth")) {
+						if (switch_true(val)) {
+							sofia_set_pflag(profile, PFLAG_ENABLE_MESSAGE_BLIND_AUTH);
 						}
 					} else if (!strcasecmp(var, "apply-pre-register-acl")) {
 						if (profile->pre_register_acl_count < SOFIA_MAX_ACL) {

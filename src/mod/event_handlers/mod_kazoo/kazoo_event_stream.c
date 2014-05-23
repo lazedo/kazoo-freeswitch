@@ -46,6 +46,15 @@ static char *my_dup(const char *s)
 #define DUP(str) my_dup(str)
 #endif
 
+static const char* private_headers[] = {"sip_h_", "P-", "X-"};
+
+static int is_private_header(const char *name) {
+	for(int i=0; i < 3; i++)
+		if(!strncmp(name, private_headers[i], strlen(private_headers[i]) ))
+			return 1;
+	return 0;
+}
+
 static switch_status_t kazoo_event_dup(switch_event_t **clone, switch_event_t *event, switch_event_t *filter) {
 	switch_event_header_t *header;
 
@@ -66,7 +75,10 @@ static switch_status_t kazoo_event_dup(switch_event_t **clone, switch_event_t *e
 		/* TODO: switch_event_get_header_ptr is not the most efficient way to check for existence... */
 		if (strncmp(header->name, globals.kazoo_var_prefix, globals.var_prefix_length)
 			&& filter 
-			&& !switch_event_get_header_ptr(filter, header->name)) 
+			&& !switch_event_get_header_ptr(filter, header->name)
+			&& (!globals.send_all_headers)
+			&& (!(globals.send_all_private_headers && is_private_header(header->name)))
+			)
 		{
 			continue;
 		}

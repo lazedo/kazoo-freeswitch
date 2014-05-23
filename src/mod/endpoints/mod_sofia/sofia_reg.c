@@ -3328,6 +3328,8 @@ switch_status_t sofia_reg_add_gateway(sofia_profile_t *profile, const char *key,
 	return status;
 }
 
+/* 2600hz changes start */
+
 void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str)
 {
 	switch_uuid_t uuid;
@@ -3395,6 +3397,185 @@ void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *
            switch_xml_free(user);
 
 }
+
+int sofia_xml_cached_user(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml)
+{
+	switch_event_t *params = NULL;
+	switch_xml_t xml_local = NULL, param, uparams;
+	sip_unknown_t *un;
+	int result = 0;
+
+	const char *user = NULL;
+	const char *realm = NULL;
+
+    if(!sofia_test_pflag(profile, PFLAG_ENABLE_MESSAGE_AUTH_CACHED_AUTHENTICATION)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia message-cached-authentication");
+    	return result;
+    }
+
+
+	if ((!sip) || (!sip->sip_from))
+		return result;
+	{
+		user = sip->sip_from->a_url->url_user;
+		realm = sip->sip_from->a_url->url_host;
+	}
+
+	if(switch_xml_locate_cached_user("id:number-alias", user, realm, &xml_local) != SWITCH_STATUS_SUCCESS)
+		return result;
+
+	result = 1;
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	if (sip->sip_user_agent) {
+		switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", sip->sip_user_agent->g_string);
+	}
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_authorized", "true");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-AUTH-CACHED");
+
+	if ((uparams = switch_xml_child(xml_local, "params"))) {
+		for (param = switch_xml_child(uparams, "param"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+
+	}
+
+	if ((uparams = switch_xml_child(xml_local, "variables"))) {
+		for (param = switch_xml_child(uparams, "variable"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+	}
+
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+	if(v_event != NULL)
+		*v_event = params;
+	else
+		switch_event_destroy(&params);
+
+	if(user_xml != NULL)
+		*user_xml = xml_local;
+	else
+        switch_xml_free(xml_local);
+
+	return result;
+}
+
+
+int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml, char *ip)
+{
+	switch_event_t *params = NULL;
+	switch_xml_t xml_local = NULL, param, uparams;
+	sip_unknown_t *un;
+	int result = 0;
+
+	const char *user = NULL;
+	const char *realm = NULL;
+
+    if(!sofia_test_pflag(profile, PFLAG_ENABLE_MESSAGE_BLIND_AUTH)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia message-blind-auth");
+    	return result;
+    }
+
+	if(!sofia_check_acl(profile->blind_auth_acl_count, profile->blind_auth_acl, sip, ip, profile)) {
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "acl failed for blind-auth");
+	}
+
+	if ((!sip) || (!sip->sip_from))
+		return result;
+	{
+		user = sip->sip_from->a_url->url_user;
+		realm = sip->sip_from->a_url->url_host;
+	}
+
+	if(switch_xml_locate_user_merged("id", user, realm, ip, &xml_local, NULL) != SWITCH_STATUS_SUCCESS)
+		return result;
+
+	result = 1;
+
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	if (sip->sip_user_agent) {
+		switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", sip->sip_user_agent->g_string);
+	}
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM,  "sip_authorized", "true");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-AUTH");
+
+	if ((uparams = switch_xml_child(xml_local, "params"))) {
+		for (param = switch_xml_child(uparams, "param"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+
+	}
+
+	if ((uparams = switch_xml_child(xml_local, "variables"))) {
+		for (param = switch_xml_child(uparams, "variable"); param; param = param->next) {
+			const char *var = switch_xml_attr_soft(param, "name");
+			const char *val = switch_xml_attr_soft(param, "value");
+			if (!zstr(var) && !zstr(val) )
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, var, val);
+		}
+	}
+
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+	if(v_event != NULL)
+		*v_event = params;
+	else
+		switch_event_destroy(&params);
+
+	if(user_xml != NULL)
+		*user_xml = xml_local;
+	else
+        switch_xml_free(xml_local);
+
+	return result;
+}
+/* 2600hz changes end */
 
 /* For Emacs:
  * Local Variables:

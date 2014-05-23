@@ -332,6 +332,7 @@ static int read_cookie_from_file(char *filename) {
 static switch_status_t config(void) {
 	char *cf = "kazoo.conf";
 	switch_xml_t cfg, xml, child, param;
+	globals.send_all_headers = globals.send_all_private_headers = 0;
 
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
@@ -366,6 +367,12 @@ static switch_status_t config(void) {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Invalid compatibility release '%s' specified\n", val);
 				} else if (!strcmp(var, "nat-map")) {
 					globals.nat_map = switch_true(val);
+				} else if (!strcmp(var, "send-all-headers")) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-headers: %s\n", val);
+					globals.send_all_headers = switch_true(val);
+				} else if (!strcmp(var, "send-all-private-headers")) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-private-headers: %s\n", val);
+					globals.send_all_private_headers = switch_true(val);
 				}
 			}
 		}
