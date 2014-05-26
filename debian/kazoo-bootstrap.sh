@@ -296,7 +296,7 @@ Architecture: any
 Provides: kazoo-freeswitch 
 Replaces: 
 Conflicts: 
-Depends: 
+Depends: \${shlibs:Depends}, \${perl:Depends}, \${misc:Depends},
  kazoo-prompts (>= 1.0.8),
  kazoo-configs-freeswitch (>= 3.0.0),
  esl-erlang (>= 1:15.b.3),
@@ -705,21 +705,21 @@ test -z "$modulelist_opt" || set_modules_${modulelist_opt/-/_}
 
 echo "Adding any new modules to control-modules..." >&2
 parse_dir=control-modules.parse
-##map_fs_modules ':' 'genmodctl_new_cat' 'genmodctl_new_mod' >> control-modules
+map_fs_modules ':' 'genmodctl_new_cat' 'genmodctl_new_mod' >> control-modules
 echo "Parsing control-modules..." >&2
-##parse_mod_control
+parse_mod_control
 echo "Displaying includes/excludes..." >&2
-##map_modules 'mod_filter_show' '' ''
+map_modules 'mod_filter_show' '' ''
 echo "Generating modules_.conf..." >&2
-##genmodulesconf > modules_.conf
+genmodulesconf > modules_.conf
 echo "Generating control-modules.gen as sanity check..." >&2
 (echo "# -*- mode:debian-control -*-"; \
   echo "##### Author: Travis Cross <tc@traviscross.com>"; echo; \
-  ###map_modules ':' 'genmodctl_cat' 'genmodctl_mod' \
+  map_modules ':' 'genmodctl_cat' 'genmodctl_mod' \
   ) > control-modules.gen
 
 echo "Accumulating dependencies from modules..." >&2
-###map_modules 'mod_filter' '' 'accumulate_mod_deps'
+map_modules 'mod_filter' '' 'accumulate_mod_deps'
 echo "Generating debian/..." >&2
 > control
 (print_edit_warning; print_source_control; print_core_control) >> control
