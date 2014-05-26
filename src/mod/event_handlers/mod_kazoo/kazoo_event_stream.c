@@ -46,10 +46,10 @@ static char *my_dup(const char *s)
 #define DUP(str) my_dup(str)
 #endif
 
-static const char* private_headers[] = {"sip_h_", "P-", "X-"};
+static const char* private_headers[] = {"variable_sip_h_", "sip_h_", "P-", "X-"};
 
 static int is_private_header(const char *name) {
-	for(int i=0; i < 3; i++)
+	for(int i=0; i < 4; i++)
 		if(!strncmp(name, private_headers[i], strlen(private_headers[i]) ))
 			return 1;
 	return 0;
