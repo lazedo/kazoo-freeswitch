@@ -112,6 +112,10 @@ override_dh_makeshlibs:
       -e '/^libfreeswitch 1/{s/kazoo-freeswitch/libfreeswitch1/g}' \
       -i debian/kazoo-freeswitch/DEBIAN/shlibs
 
+override_dh_gencontrol:
+	sed -i 's/libfreeswitch1,//g' debian/kazoo-freeswitch.substvars
+	dh_gencontrol
+
 debian-bootstrap: debian/.stamp-bootstrap
 debian/.stamp-bootstrap:
 	(cd debian && ./kazoo-bootstrap.sh)
