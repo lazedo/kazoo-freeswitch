@@ -74,9 +74,9 @@ create_dbg_pkgs () {
     rm -rf $x-dbg
     mkdir -p $x-dbg/usr/lib
     mv $x/usr/lib/debug $x-dbg/usr/lib/
+    rm -rf $x/usr/include
+    rm -rf $x/etc/kazoo
   done
-  rm -rf $x/usr/include
-  rm -rf $x/etc/kazoo
 }
 
 cwget () {
