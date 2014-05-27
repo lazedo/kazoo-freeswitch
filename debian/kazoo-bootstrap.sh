@@ -298,7 +298,7 @@ Replaces:
 Conflicts: 
 Depends: \${shlibs:Depends}, \${perl:Depends}, \${misc:Depends},
  kazoo-prompts (>= 1.0.8),
- kazoo-configs-freeswitch (>= 3.0.0),
+ kazoo-configs-freeswitch (>= 3.0),
  esl-erlang (>= 1:15.b.3),
  .
 Description: Cross-Platform Scalable Multi-Protocol Soft Switch
