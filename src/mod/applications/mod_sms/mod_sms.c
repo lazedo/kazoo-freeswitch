@@ -32,6 +32,7 @@
 #include <switch.h>
 #define SMS_CHAT_PROTO "GLOBAL_SMS"
 #define MY_EVENT_SEND_MESSAGE "SMS::SEND_MESSAGE"
+#define MY_EVENT_SEND_MESSAGE_REPORT "SMS::SEND_MESSAGE_DELIVERY_REPORT"
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_sms_shutdown);
@@ -45,20 +46,40 @@ static void event_handler(switch_event_t *event)
 	const char *dest_proto = switch_event_get_header(event, "dest_proto");
 	const char *check_failure = switch_event_get_header(event, "Delivery-Failure");
 	const char *check_nonblocking = switch_event_get_header(event, "Nonblocking-Delivery");
+	switch_event_t *report = NULL;
 
 	switch_event_add_header(event, SWITCH_STACK_BOTTOM, "skip_global_process", "true");
+
+	if (switch_event_dup(&report, event) == SWITCH_STATUS_SUCCESS) {
+		report->event_id = SWITCH_EVENT_CUSTOM;
+		report->flags |= EF_UNIQ_HEADERS;
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Name", MY_EVENT_SEND_MESSAGE_REPORT);
+	}
+
+
 
 	if (switch_true(check_failure)) {
 
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Delivery Failure\n");
 		DUMP_EVENT(event);
-
+		if(report) {
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Delivery-Status", "Failure");
+		switch_event_fire(&report);
+		}
 		return;
 	} else if ( check_failure && switch_false(check_failure) ) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "SMS Delivery Success\n");
+		if(report) {
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Delivery-Status", "Success");
+		switch_event_fire(&report);
+		}
 		return;
 	} else if ( check_nonblocking && switch_true(check_nonblocking) ) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "SMS Delivery assumed successful due to being sent in non-blocking manner\n");
+		if(report) {
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Delivery-Status", "Accepted");
+		switch_event_fire(&report);
+		}
 		return;
 	}
 
@@ -318,6 +339,13 @@ static switch_event_t *chatplan_hunt(switch_event_t *event)
 	const char *context;
 	const char *from;
 	const char *to;
+	const char *msg_id = NULL;
+	char message_buffer[50];
+
+	if (!(msg_id = switch_event_get_header(event, "MESSAGE-ID"))) {
+		msg_id = switch_uuid_str(message_buffer, sizeof(message_buffer));
+		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM,"MESSAGE-ID",msg_id);
+	}
 
 	if (!(context = switch_event_get_header(event, "context"))) {
 		context = "default";
