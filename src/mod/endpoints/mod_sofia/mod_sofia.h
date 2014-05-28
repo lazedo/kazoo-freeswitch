@@ -1163,7 +1163,7 @@ void write_csta_xml_chunk(switch_event_t *event, switch_stream_handle_t stream, 
 
 /*** 2600hz start ****/
 void sofia_reg_auth_challenge_ex(sofia_profile_t *profile, nua_handle_t *nh, sofia_dispatch_event_t *de, sofia_regtype_t regtype, const char *realm, int stale, long exptime, char *uuid_str);
-void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str);
+void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str, long exptime);
 int sofia_check_acl(uint32_t acl_count, char** acl, sip_t const *sip, char *network_ip, sofia_profile_t *profile);
 int sofia_set_user(switch_core_session_t *session, const char *data, sip_t const *sip, sofia_profile_t *profile, char *network_ip);
 int sofia_xml_cached_user(sofia_profile_t *profile, sip_t const *sip, switch_event_t **v_event, switch_xml_t *user_xml);

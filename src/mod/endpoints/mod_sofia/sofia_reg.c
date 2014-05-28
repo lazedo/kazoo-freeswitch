@@ -1680,7 +1680,7 @@ uint8_t sofia_reg_handle_register_token(nua_t *nua, sofia_profile_t *profile, nu
 			realm = from_host;
 		}
 
-        sofia_pre_register(profile, sip, realm, from_user, agent, network_ip, uuid_str);
+        sofia_pre_register(profile, sip, realm, from_user, agent, network_ip, uuid_str,exptime);
         sofia_reg_auth_challenge_ex(profile, nh, de, regtype, realm, stale, exptime, uuid_str);
 
 		if (profile->debug) {
@@ -3330,7 +3330,7 @@ switch_status_t sofia_reg_add_gateway(sofia_profile_t *profile, const char *key,
 
 /* 2600hz changes start */
 
-void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str)
+void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *realm, const char *username, const char *user_agent, char *ip, char *uuid_str, long exptime)
 {
 	switch_uuid_t uuid;
 	switch_event_t *params = NULL;
@@ -3359,6 +3359,7 @@ void sofia_pre_register(sofia_profile_t *profile, sip_t const *sip, const char *
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", username);
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
 	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "PRE-REGISTER");
+	switch_event_add_header(params, SWITCH_STACK_BOTTOM, "expires", "%ld", (long) exptime);
 
 	for (un = sip->sip_unknown; un; un = un->un_next) {
 		if (!strncasecmp(un->un_name, "X-", 2)) {
