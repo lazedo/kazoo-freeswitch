@@ -3496,7 +3496,7 @@ int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_even
 
 	const char *user = NULL;
 	const char *realm = NULL;
-	const char *user_agent;
+	const char *user_agent = NULL;
 
     if(!sofia_test_pflag(profile, PFLAG_ENABLE_MESSAGE_BLIND_AUTH)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia message-blind-auth");
