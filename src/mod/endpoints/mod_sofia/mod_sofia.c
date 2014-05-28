@@ -2708,9 +2708,9 @@ static switch_status_t cmd_status(char **argv, int argc, switch_stream_handle_t 
 					if (zstr(user)) {
 						sqlextra = switch_mprintf("(sip_host='%q')", host);
 					} else if (zstr(host)) {
-						sqlextra = switch_mprintf("(sip_user='%q')", user);
+						sqlextra = switch_mprintf("(sip_user='%q' or number_alias='%q')", user, user);
 					} else {
-						sqlextra = switch_mprintf("(sip_user='%q' and sip_host='%q')", user, host);
+						sqlextra = switch_mprintf("((sip_user='%q' or number_alias='%q') and sip_host='%q')", user, user, host);
 					}
 
 					sql = switch_mprintf("select call_id,sip_user,sip_host,contact,status,"
@@ -3012,9 +3012,9 @@ static switch_status_t cmd_xml_status(char **argv, int argc, switch_stream_handl
 					if (zstr(user)) {
 						sqlextra = switch_mprintf("(sip_host='%q')", host);
 					} else if (zstr(host)) {
-						sqlextra = switch_mprintf("(sip_user='%q')", user);
+						sqlextra = switch_mprintf("(sip_user='%q' or number_alias='%q')", user, user);
 					} else {
-						sqlextra = switch_mprintf("(sip_user='%q' and sip_host='%q')", user, host);
+						sqlextra = switch_mprintf("((sip_user='%q' or number_alias='%q') and sip_host='%q')", user, user, host);
 					}
 
 					sql = switch_mprintf("select call_id,sip_user,sip_host,contact,status,"
@@ -3475,8 +3475,8 @@ SWITCH_STANDARD_API(sofia_count_reg_function)
 
 			} else {
 				sql = switch_mprintf("select count(*) "
-									 "from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
-									 user, domain, domain);
+									 "from sip_registrations where (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+									 user, user, domain, domain);
 			}
 			switch_assert(sql);
 			sofia_glue_execute_sql_callback(profile, profile->dbh_mutex, sql, sql2str_callback, &cb);
@@ -3564,8 +3564,8 @@ SWITCH_STANDARD_API(sofia_username_of_function)
 			switch_assert(!zstr(user));
 
 			sql = switch_mprintf("select sip_username "
-									"from sip_registrations where sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
-									user, domain, domain);
+									"from sip_registrations where (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+									user, user, domain, domain);
 
 			switch_assert(sql);
 
@@ -3613,12 +3613,12 @@ static void select_from_profile(sofia_profile_t *profile,
 
 	if (exclude_contact) {
 		sql = switch_mprintf("select contact, profile_name, '%q' "
-							 "from sip_registrations where profile_name='%q' and sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%') "
-							 "and contact not like '%%%s%%'", (concat != NULL) ? concat : "", profile->name, user, domain, domain, exclude_contact);
+							 "from sip_registrations where profile_name='%q' and (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%') "
+							 "and contact not like '%%%s%%'", (concat != NULL) ? concat : "", profile->name, user, user, domain, domain, exclude_contact);
 	} else {
 		sql = switch_mprintf("select contact, profile_name, '%q' "
-							 "from sip_registrations where profile_name='%q' and sip_user='%q' and (sip_host='%q' or presence_hosts like '%%%q%%')",
-							 (concat != NULL) ? concat : "", profile->name, user, domain, domain);
+							 "from sip_registrations where profile_name='%q' and (sip_user='%q' or number_alias='%q') and (sip_host='%q' or presence_hosts like '%%%q%%')",
+							 (concat != NULL) ? concat : "", profile->name, user, user, domain, domain);
 	}
 
 	switch_assert(sql);
