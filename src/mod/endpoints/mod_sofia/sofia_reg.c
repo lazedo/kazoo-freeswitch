@@ -3495,6 +3495,7 @@ int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_even
 
 	const char *user = NULL;
 	const char *realm = NULL;
+	const char *user_agent;
 
     if(!sofia_test_pflag(profile, PFLAG_ENABLE_MESSAGE_BLIND_AUTH)) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "sofia message-blind-auth");
@@ -3512,9 +3513,43 @@ int sofia_xml_blind_auth(sofia_profile_t *profile, sip_t const *sip, switch_even
 		realm = sip->sip_from->a_url->url_host;
 	}
 
-	if(switch_xml_locate_user_merged("id", user, realm, ip, &xml_local, NULL) != SWITCH_STATUS_SUCCESS)
-		return result;
+	if (sip->sip_user_agent) {
+		user_agent = sip->sip_user_agent->g_string;
+	}
 
+	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
+	switch_assert(params);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "action", "sip_auth");
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_profile", profile->name);
+	if(user_agent)
+		switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_user_agent", user_agent);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_username", user);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_realm", realm);
+	switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, "sip_auth_method", "BLIND-AUTH");
+
+	for (un = sip->sip_unknown; un; un = un->un_next) {
+		if (!strncasecmp(un->un_name, "X-", 2)) {
+			if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			}
+		} else if (!strncasecmp(un->un_name, "P-", 2)) {
+                         if (!zstr(un->un_value)) {
+				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "adding %s => %s to xml_curl request\n", un->un_name, un->un_value);
+				switch_event_add_header_string(params, SWITCH_STACK_BOTTOM, un->un_name, un->un_value);
+			    }
+		} else {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG10, "skipping %s => %s from xml_curl request\n", un->un_name, un->un_value);
+		}
+	}
+
+	if(switch_xml_locate_user_merged("id", user, realm, ip, &xml_local, params) != SWITCH_STATUS_SUCCESS)
+	{
+		switch_event_destroy(&params);
+		return result;
+	}
+
+	switch_event_destroy(&params);
 	result = 1;
 
 	switch_event_create(&params, SWITCH_EVENT_REQUEST_PARAMS);
