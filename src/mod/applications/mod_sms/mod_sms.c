@@ -32,7 +32,7 @@
 #include <switch.h>
 #define SMS_CHAT_PROTO "GLOBAL_SMS"
 #define MY_EVENT_SEND_MESSAGE "SMS::SEND_MESSAGE"
-#define MY_EVENT_SEND_MESSAGE_REPORT "SMS::SEND_MESSAGE_DELIVERY_REPORT"
+#define MY_EVENT_DELIVERY_REPORT "SMS::DELIVERY_REPORT"
 
 /* Prototypes */
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_sms_shutdown);
@@ -53,7 +53,7 @@ static void event_handler(switch_event_t *event)
 	if (switch_event_dup(&report, event) == SWITCH_STATUS_SUCCESS) {
 		report->event_id = SWITCH_EVENT_CUSTOM;
 		report->flags |= EF_UNIQ_HEADERS;
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Name", MY_EVENT_SEND_MESSAGE_REPORT);
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Name", MY_EVENT_DELIVERY_REPORT);
 	}
 
 
