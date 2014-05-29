@@ -41,51 +41,63 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_sms_load);
 SWITCH_MODULE_DEFINITION(mod_sms, mod_sms_load, mod_sms_shutdown, NULL);
 
 
+static void send_report(switch_event_t *event, const char * Status) {
+	switch_event_t *report = NULL;
+	int i;
+
+	const char *headers[] = {
+			 "MESSAGE-ID"
+			,"sip_profile"
+			,"proto"
+			,"to"
+			,"to_sip_ip"
+			,"to_sip_port"
+			,"from"
+			,"from_full"
+			,"dest_proto"
+			,"Delivery-Result-Code"
+			,"Delivery-Failure"
+			,"Delivery-Status"
+	};
+
+	if (switch_event_create_subclass(&report, SWITCH_EVENT_CUSTOM, MY_EVENT_DELIVERY_REPORT) == SWITCH_STATUS_SUCCESS) {
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Status", Status);
+		for(i = 0; i < 12; i++) {
+			const char * value = switch_event_get_header(event, headers[i]);
+			if(value != NULL)
+				switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, headers[i], value);
+		}
+		switch_event_fire(&report);
+	}
+}
+
 static void event_handler(switch_event_t *event) 
 {
 	const char *dest_proto = switch_event_get_header(event, "dest_proto");
 	const char *check_failure = switch_event_get_header(event, "Delivery-Failure");
 	const char *check_nonblocking = switch_event_get_header(event, "Nonblocking-Delivery");
-	switch_event_t *report = NULL;
 
 	switch_event_add_header(event, SWITCH_STACK_BOTTOM, "skip_global_process", "true");
-
-	if (switch_event_dup(&report, event) == SWITCH_STATUS_SUCCESS) {
-		report->event_id = SWITCH_EVENT_CUSTOM;
-		report->flags |= EF_UNIQ_HEADERS;
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Name", switch_event_name(report->event_id));
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Subclass", MY_EVENT_DELIVERY_REPORT);
-	}
-
-
 
 	if (switch_true(check_failure)) {
 
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Delivery Failure\n");
 		DUMP_EVENT(event);
-		if(report) {
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Delivery-Status", "Failure");
-		switch_event_fire(&report);
-		}
+		send_report(event, "Failure");
 		return;
 	} else if ( check_failure && switch_false(check_failure) ) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "SMS Delivery Success\n");
-		if(report) {
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Delivery-Status", "Success");
-		switch_event_fire(&report);
-		}
+		send_report(event, "Success");
 		return;
 	} else if ( check_nonblocking && switch_true(check_nonblocking) ) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "SMS Delivery assumed successful due to being sent in non-blocking manner\n");
-		if(report) {
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Delivery-Status", "Accepted");
-		switch_event_fire(&report);
-		}
+		send_report(event, "Accepted");
 		return;
 	}
 
 	switch_core_chat_send(dest_proto, event);
 }
+
 
 typedef enum {
 	BREAK_ON_TRUE,
