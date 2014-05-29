@@ -4802,7 +4802,7 @@ void sofia_presence_handle_sip_i_message(int status,
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "to_proto", proto);
 
 				if(msg_id)
-				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "MESSAGE-ID", msg_id);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Message-ID", msg_id);
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from", from_addr);
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from_user", from_user);
