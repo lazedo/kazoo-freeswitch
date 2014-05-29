@@ -340,7 +340,7 @@ static switch_event_t *chatplan_hunt(switch_event_t *event)
 	const char *from;
 	const char *to;
 	const char *msg_id = NULL;
-	char message_buffer[50];
+	char message_buffer[SWITCH_UUID_FORMATTED_LENGTH + 1];
 
 	if (!(msg_id = switch_event_get_header(event, "MESSAGE-ID"))) {
 		msg_id = switch_uuid_str(message_buffer, sizeof(message_buffer));
