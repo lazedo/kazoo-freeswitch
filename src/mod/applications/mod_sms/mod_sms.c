@@ -53,7 +53,8 @@ static void event_handler(switch_event_t *event)
 	if (switch_event_dup(&report, event) == SWITCH_STATUS_SUCCESS) {
 		report->event_id = SWITCH_EVENT_CUSTOM;
 		report->flags |= EF_UNIQ_HEADERS;
-		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Name", MY_EVENT_DELIVERY_REPORT);
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Name", switch_event_name(report->event_id));
+		switch_event_add_header_string(report, SWITCH_STACK_BOTTOM, "Event-Subclass", MY_EVENT_DELIVERY_REPORT);
 	}
 
 
