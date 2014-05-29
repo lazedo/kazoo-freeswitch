@@ -46,7 +46,7 @@ static void send_report(switch_event_t *event, const char * Status) {
 	int i;
 
 	const char *headers[] = {
-			 "MESSAGE-ID"
+			 "Message-ID"
 			,"sip_profile"
 			,"proto"
 			,"to"
@@ -354,9 +354,9 @@ static switch_event_t *chatplan_hunt(switch_event_t *event)
 	const char *msg_id = NULL;
 	char message_buffer[SWITCH_UUID_FORMATTED_LENGTH + 1];
 
-	if (!(msg_id = switch_event_get_header(event, "MESSAGE-ID"))) {
+	if (!(msg_id = switch_event_get_header(event, "Message-ID"))) {
 		msg_id = switch_uuid_str(message_buffer, sizeof(message_buffer));
-		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM,"MESSAGE-ID",msg_id);
+		switch_event_add_header_string(event, SWITCH_STACK_BOTTOM,"Message-ID",msg_id);
 	}
 
 	if (!(context = switch_event_get_header(event, "context"))) {
