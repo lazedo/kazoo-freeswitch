@@ -4671,6 +4671,7 @@ void sofia_presence_handle_sip_i_message(int status,
 		sip_from_t const *from = sip->sip_from;
 		const char *from_user = NULL;
 		const char *from_host = NULL;
+		const char *msg_id = NULL;
 		sip_to_t const *to = sip->sip_to;
 		const char *to_user = NULL;
 		const char *to_host = NULL;
@@ -4688,6 +4689,9 @@ void sofia_presence_handle_sip_i_message(int status,
 		if (session) {
 			channel = switch_core_session_get_channel(session);
 		}
+
+		if(sip->sip_call_id)
+			msg_id = sip->sip_call_id->i_id;
 
 		sofia_glue_get_addr(de->data->e_msg, network_ip, sizeof(network_ip), &network_port);
 
@@ -4796,6 +4800,9 @@ void sofia_presence_handle_sip_i_message(int status,
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", SOFIA_CHAT_PROTO);
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "to_proto", proto);
+
+				if(msg_id)
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "MESSAGE-ID", msg_id);
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from", from_addr);
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from_user", from_user);
