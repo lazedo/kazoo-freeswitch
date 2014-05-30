@@ -4666,8 +4666,12 @@ void sofia_presence_handle_sip_i_message(int status,
 {
 	switch_event_t *v_event = NULL;
 
-	if (sip) {
+	switch_uuid_t uuid;
+	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
 
+
+
+	if (sip) {
 		sip_from_t const *from = sip->sip_from;
 		const char *from_user = NULL;
 		const char *from_host = NULL;
@@ -4681,6 +4685,9 @@ void sofia_presence_handle_sip_i_message(int status,
 		char network_ip[80];
 		int network_port = 0;
 		switch_channel_t *channel = NULL;
+
+		switch_uuid_get(&uuid);
+		switch_uuid_format(uuid_str, &uuid);
 
 		if (!sofia_test_pflag(profile, PFLAG_ENABLE_CHAT)) {
 			goto end;
@@ -4795,14 +4802,20 @@ void sofia_presence_handle_sip_i_message(int status,
 				sofia_presence_set_hash_key(hash_key, sizeof(hash_key), sip);
 			}
 
-			if (switch_event_create(&event, SWITCH_EVENT_MESSAGE) == SWITCH_STATUS_SUCCESS) {
+			if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, "KZ::MESSAGE") == SWITCH_STATUS_SUCCESS) {
+				event->flags |= EF_UNIQ_HEADERS;
+
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "login", profile->url);
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "proto", SOFIA_CHAT_PROTO);
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "to_proto", proto);
 
-				if(msg_id)
-				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Message-ID", msg_id);
+				if(msg_id) {
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Message-ID", msg_id);
+				}
+
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID", uuid_str);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Call-ID", uuid_str);
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from", from_addr);
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from_user", from_user);
@@ -4831,6 +4844,12 @@ void sofia_presence_handle_sip_i_message(int status,
 				if(v_event) {
 					switch_event_header_t *hp;
 					for (hp = v_event->headers; hp; hp = hp->next) {
+						if (!strcmp(hp->name, "Event-Subclass")) {
+							continue;
+						}
+						if (!strcmp(hp->name, "Event-Name")) {
+							continue;
+						}
 						switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, hp->name, hp->value);
 					}
 				}
@@ -4875,11 +4894,15 @@ void sofia_presence_handle_sip_i_message(int status,
 		}
 	}
 
+//	nua_respond(nh, SIP_100_TRYING, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
+
+
 	if (sofia_test_pflag(profile, PFLAG_MESSAGES_RESPOND_200_OK)) {
 		nua_respond(nh, SIP_200_OK, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 	} else {
 		nua_respond(nh, SIP_202_ACCEPTED, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 	}
+
 
  end:
 	if (v_event) {
