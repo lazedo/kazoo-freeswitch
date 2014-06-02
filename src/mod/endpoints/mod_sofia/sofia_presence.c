@@ -4687,11 +4687,18 @@ void sofia_presence_handle_sip_i_message(int status,
 		const char *to_host = NULL;
 		sip_payload_t *payload = sip->sip_payload;
 		char *msg = NULL;
-		const char *us;
+		const char *us = NULL;
 		char network_ip[80];
 		int network_port = 0;
 		switch_channel_t *channel = NULL;
 		int network_ip_is_proxy = 0;
+		const char *bounce = NULL;
+
+		bounce = sofia_glue_get_unknown_header(sip, "X-Kazoo-Bounce");
+
+		for (un = sip->sip_unknown; un; un = un->un_next) {
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Privatew Heade %s:%s\n",un->un_name, un->un_value);
+		}
 
 		switch_uuid_get(&uuid);
 		switch_uuid_format(uuid_str, &uuid);
@@ -4717,6 +4724,10 @@ void sofia_presence_handle_sip_i_message(int status,
 
 			key = keybuf;
 			keylen = sizeof(keybuf);
+
+			if(bounce != NULL) {
+				auth_res = AUTH_OK;
+			} else {
 
 			if (sip->sip_authorization) {
 				authorization = sip->sip_authorization;
@@ -4858,13 +4869,18 @@ void sofia_presence_handle_sip_i_message(int status,
 				}
 
 			}
+			}
 		}
 
-		if ((us = sofia_glue_get_unknown_header(sip, "X-FS-Sending-Message")) && !strcmp(us, switch_core_get_uuid())) {
+
+		if (
+				(us = sofia_glue_get_unknown_header(sip, "X-FS-Sending-Message")) && !strcmp(us, switch_core_get_uuid())
+				&& bounce == NULL) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Not sending message to ourselves!\n");
 			nua_respond(nh, SIP_503_SERVICE_UNAVAILABLE, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 			return;
 		}
+
 
 		if (sip->sip_content_type && sip->sip_content_type->c_subtype) {
 			if (strstr(sip->sip_content_type->c_subtype, "composing")) {
