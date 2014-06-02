@@ -4696,10 +4696,6 @@ void sofia_presence_handle_sip_i_message(int status,
 
 		bounce = sofia_glue_get_unknown_header(sip, "X-Kazoo-Bounce");
 
-		for (un = sip->sip_unknown; un; un = un->un_next) {
-			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Privatew Heade %s:%s\n",un->un_name, un->un_value);
-		}
-
 		switch_uuid_get(&uuid);
 		switch_uuid_format(uuid_str, &uuid);
 
