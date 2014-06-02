@@ -4691,6 +4691,7 @@ void sofia_presence_handle_sip_i_message(int status,
 		char network_ip[80];
 		int network_port = 0;
 		switch_channel_t *channel = NULL;
+		int network_ip_is_proxy = 0;
 
 		switch_uuid_get(&uuid);
 		switch_uuid_format(uuid_str, &uuid);
@@ -4760,7 +4761,6 @@ void sofia_presence_handle_sip_i_message(int status,
 						auth_res = AUTH_OK;
 					}
 				} else {
-					int network_ip_is_proxy = 0;
 					/* Check if network_ip is a proxy allowed to send us calls */
 					if (profile->proxy_acl_count) {
 						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "%d acls to check for proxy\n", profile->proxy_acl_count);
@@ -4937,17 +4937,19 @@ void sofia_presence_handle_sip_i_message(int status,
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID", uuid_str);
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Call-ID", uuid_str);
 
-				/*
 				if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES) && auth_res == AUTH_OK) {
-					switch_channel_set_variable(channel, "sip_authorized", "true");
-					if (!zstr(sip_acl_authed_by)) {
-						switch_channel_set_variable(channel, "sip_acl_authed_by", sip_acl_authed_by);
-					}
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_authorized", "true");
 					if (!zstr(sip_acl_token)) {
-						switch_channel_set_variable(channel, "sip_acl_token", sip_acl_token);
+						switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_acl_token", sip_acl_token);
 					}
 				}
-				*/
+
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_received_ip", network_ip);
+				if(network_ip_is_proxy) {
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_proxied_ip", proxied_client_ip);
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_h_X-AUTH-IP", proxied_client_ip);
+				}
+
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from", from_addr);
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from_user", from_user);
