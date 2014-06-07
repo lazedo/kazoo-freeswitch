@@ -4908,12 +4908,13 @@ void sofia_presence_handle_sip_i_message(int status,
 			switch_event_t *event, *event_dup;
 			char *to_addr;
 			char *from_addr;
-			char *p;
+			//char *p;
 			char *full_from;
 			char proto[512] = SOFIA_CHAT_PROTO;
 
 			full_from = sip_header_as_string(nh->nh_home, (void *) sip->sip_from);
 
+			/*
 			if ((p = strchr(to_user, '+'))) {
 				switch_copy_string(proto, to_user, sizeof(proto));
 				p = strchr(proto, '+');
@@ -4927,6 +4928,9 @@ void sofia_presence_handle_sip_i_message(int status,
 			} else {
 				to_addr = switch_mprintf("%s@%s", to_user, to_host);
 			}
+			*/
+
+			to_addr = switch_mprintf("%s@%s", to_user, to_host);
 
 			from_addr = switch_mprintf("%s@%s", from_user, from_host);
 
