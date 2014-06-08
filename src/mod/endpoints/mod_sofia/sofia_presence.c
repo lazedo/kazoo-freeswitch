@@ -103,7 +103,7 @@ switch_status_t sofia_presence_chat_send(switch_event_t *message_event)
 {
 	char *prof = NULL, *user = NULL, *host = NULL;
 	sofia_profile_t *profile = NULL;
-	char *ffrom = NULL;
+//	char *ffrom = NULL;
 	nua_handle_t *msg_nh;
 	char *contact = NULL;
 	char *dup = NULL;
@@ -128,7 +128,8 @@ switch_status_t sofia_presence_chat_send(switch_event_t *message_event)
 	const char *from_full;
 	char header[256] = "";
 	char *route_uri = NULL;
-	const char *network_ip = NULL, *network_port = NULL, *from_proto;
+	const char *network_ip = NULL, *network_port = NULL;
+//	const char *from_proto;
 	char *extra_headers = NULL;
 	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
 	int mstatus = 0, sanity = 0;
@@ -136,7 +137,7 @@ switch_status_t sofia_presence_chat_send(switch_event_t *message_event)
 	int is_blocking = 0;
 
 	proto = switch_event_get_header(message_event, "proto");
-	from_proto = switch_event_get_header(message_event, "from_proto");
+	//from_proto = switch_event_get_header(message_event, "from_proto");
 	from = switch_event_get_header(message_event, "from");
 	to = switch_event_get_header(message_event, "to");
 	//subject = switch_event_get_header(message_event, "subject");
@@ -230,6 +231,9 @@ switch_status_t sofia_presence_chat_send(switch_event_t *message_event)
 
 	}
 
+	from = from_full;
+
+	/*
 	if (!strcasecmp(proto, SOFIA_CHAT_PROTO)) {
 		from = from_full;
 	} else {
@@ -265,6 +269,7 @@ switch_status_t sofia_presence_chat_send(switch_event_t *message_event)
 		from = ffrom;
 		switch_safe_free(fp);
 	}
+	*/
 
 	if (!list) {
 		switch_event_t *event;
@@ -395,7 +400,7 @@ switch_status_t sofia_presence_chat_send(switch_event_t *message_event)
 
 	switch_safe_free(contact);
 	switch_safe_free(route_uri);
-	switch_safe_free(ffrom);
+//	switch_safe_free(ffrom);
 	switch_safe_free(dup);
 
 	if (profile) {
