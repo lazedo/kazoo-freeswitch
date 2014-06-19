@@ -45,7 +45,7 @@ SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_pref_kazoo_var_prefix, globals.kazoo_var_p
 static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
 	switch_sockaddr_t *sa;
 	uint16_t port;
-	char ipbuf[25];
+	char ipbuf[25] = "";
 	const char *ip_addr;
 	ei_node_t *ei_node;
 
@@ -169,7 +169,7 @@ static switch_status_t handle_node_api_event_stream(ei_event_stream_t *event_str
 	if (event_stream->connected == SWITCH_FALSE) {
 		switch_sockaddr_t *sa;
 		uint16_t port;
-		char ipbuf[25];
+		char ipbuf[25] = "";
 		const char *ip_addr;
 
 		switch_socket_addr_get(&sa, SWITCH_TRUE, event_stream->acceptor);
@@ -284,7 +284,7 @@ static switch_status_t api_erlang_node_command(switch_stream_handle_t *stream, c
 
 static int read_cookie_from_file(char *filename) {
 	int fd;
-	char cookie[MAXATOMLEN + 1];
+	char cookie[MAXATOMLEN + 1] = "";
 	char *end;
 	struct stat buf;
 	ssize_t res;
@@ -424,7 +424,7 @@ static switch_status_t config(void) {
 	if (zstr(globals.ei_cookie)) {
 		int res;
 		char *home_dir = getenv("HOME");
-		char path_buf[1024];
+		char path_buf[1024] = "";
 
 		if (!zstr(home_dir)) {
 			/* $HOME/.erlang.cookie */
@@ -453,7 +453,7 @@ static switch_status_t config(void) {
 static switch_status_t create_acceptor() {
 	switch_sockaddr_t *sa;
 	uint16_t port;
-    char ipbuf[25];
+    char ipbuf[25] = "";
     const char *ip_addr;
 
 	/* if the config has specified an erlang release compatibility then pass that along to the erlang interface */

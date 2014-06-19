@@ -110,6 +110,7 @@ static void destroy_node_handler(ei_node_t *ei_node) {
 
 	switch_mutex_lock(ei_node->event_streams_mutex);
 	remove_event_streams(&ei_node->event_streams);
+	ei_node->event_streams = NULL;
 	switch_mutex_unlock(ei_node->event_streams_mutex);
 
 	remove_xml_clients(ei_node);
@@ -131,6 +132,8 @@ static void destroy_node_handler(ei_node_t *ei_node) {
 	close_socketfd(&ei_node->nodefd);
 
 	switch_mutex_destroy(ei_node->event_streams_mutex);
+
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
 
 	switch_core_destroy_memory_pool(&ei_node->pool);
 }
@@ -303,7 +306,9 @@ static void log_sendmsg_request(char *uuid, switch_event_t *event)
 			}
 		}
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|transfered call to xferext extension\n", uuid);
-	}
+	} else {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "log|%s|unexpected call command %s\n", uuid, cmd);
+    }
 }
 
 static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
@@ -314,22 +319,26 @@ static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
 	}
 
 	if (ei_decode_list_header(buf->buff, &buf->index, &propslist_length)) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode list\n");
 		return SWITCH_STATUS_FALSE;
 	}
 
 	while (!ei_decode_tuple_header(buf->buff, &buf->index, &arity)) {
-		char key[1024];
+		char key[1024] = "";
 		char *value;
 
 		if (arity != 2) {
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected tuple arity %d\n", arity);
 			return SWITCH_STATUS_FALSE;
 		}
 
 		if (ei_decode_string_or_binary_limited(buf->buff, &buf->index, sizeof(key), key)) {
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode key\n");
 			return SWITCH_STATUS_FALSE;
 		}
 
 		if (ei_decode_string_or_binary(buf->buff, &buf->index, &value)) {
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode value for key %s\n", key);
 			return SWITCH_STATUS_FALSE;
 		}
 
@@ -407,13 +416,14 @@ static switch_status_t handle_request_link(ei_node_t *ei_node, erlang_pid *pid, 
 }
 
 static switch_status_t handle_request_nixevent(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char event_name[MAXATOMLEN + 1];
+	char event_name[MAXATOMLEN + 1] = "";
 	switch_event_types_t event_type;
 	ei_event_stream_t *event_stream;
 	int custom = 0, length = 0;
 
 	if (ei_decode_list_header(buf->buff, &buf->index, &length)
 		|| length == 0) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode list\n");
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -426,6 +436,7 @@ static switch_status_t handle_request_nixevent(ei_node_t *ei_node, erlang_pid *p
 	for (int i = 1; i <= length; i++) {
 		if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)) {
 			switch_mutex_unlock(ei_node->event_streams_mutex);
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode event name\n");
 			return erlang_response_badarg(rbuf);
 		}
 
@@ -448,6 +459,7 @@ static switch_status_t handle_request_nixevent(ei_node_t *ei_node, erlang_pid *p
 			}
 		} else {
 			switch_mutex_unlock(ei_node->event_streams_mutex);
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected event name %s\n", event_name);
 			return erlang_response_badarg(rbuf);
 		}
 	}
@@ -457,19 +469,21 @@ static switch_status_t handle_request_nixevent(ei_node_t *ei_node, erlang_pid *p
 }
 
 static switch_status_t handle_request_sendevent(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char event_name[MAXATOMLEN + 1];
-	char subclass_name[MAXATOMLEN + 1];
+	char event_name[MAXATOMLEN + 1] = "";
+	char subclass_name[MAXATOMLEN + 1] = "";
 	switch_event_types_t event_type;
 	switch_event_t *event = NULL;
 
 	if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)
 		|| switch_name_event(event_name, &event_type) != SWITCH_STATUS_SUCCESS)
 	{
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected event name %s\n", event_name);
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (!strncasecmp(event_name, "CUSTOM", MAXATOMLEN)) {
 		if(ei_decode_atom(buf->buff, &buf->index, subclass_name)) {
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode subclass name\n");
 			return erlang_response_badarg(rbuf);
 		}
 		switch_event_create_subclass(&event, event_type, subclass_name);
@@ -492,22 +506,24 @@ static switch_status_t handle_request_sendevent(ei_node_t *ei_node, erlang_pid *
 static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
 	switch_core_session_t *session;
 	switch_event_t *event = NULL;
-	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1] = "";
 
 	if (ei_decode_string_or_binary_limited(buf->buff, &buf->index, sizeof(uuid_str), uuid_str)) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode uuid\n");
 		return erlang_response_badarg(rbuf);
 	}
 
-	switch_event_create(&event, SWITCH_EVENT_SEND_MESSAGE);
+	switch_event_create(&event, SWITCH_EVENT_COMMAND);
 	if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "log|%s|failed to build command event\n", uuid_str);
 		return erlang_response_badarg(rbuf);
 	}
-
-	log_sendmsg_request(uuid_str, event);
 
 	if (zstr_buf(uuid_str) || !(session = switch_core_session_locate(uuid_str))) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to locate session %s\n", uuid_str);
 		return erlang_response_badarg(rbuf);
 	}
+	log_sendmsg_request(uuid_str, event);
 	switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
 	switch_core_session_rwunlock(session);
 
@@ -515,11 +531,12 @@ static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pi
 }
 
 static switch_status_t handle_request_bind(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char section_str[MAXATOMLEN + 1];
+	char section_str[MAXATOMLEN + 1] = "";
 	switch_xml_section_t section;
 
 	if (ei_decode_atom_safe(buf->buff, &buf->index, section_str)
-		|| !(section = switch_xml_parse_section_string(section_str))) {
+		|| !(section = switch_xml_parse_section_string(section_str))) { 
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to parse section name %s\n", section_str);
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -540,6 +557,7 @@ static switch_status_t handle_request_bind(ei_node_t *ei_node, erlang_pid *pid, 
 		add_fetch_handler(ei_node, pid, globals.channels_fetch_binding);
 		break;
 	default:
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected section name %s\n", section_str);
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -572,17 +590,19 @@ static switch_status_t handle_request_bgapi(ei_node_t *ei_node, erlang_pid *pid,
 	switch_thread_t *thread;
 	switch_threadattr_t *thd_attr = NULL;
 	switch_uuid_t uuid;
-	char cmd[MAXATOMLEN + 1];
+	char cmd[MAXATOMLEN + 1] = "";
 
 	if (ei_decode_atom_safe(buf->buff, &buf->index, cmd)) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode command\n");
 		return erlang_response_badarg(rbuf);
 	}
 
 	switch_core_new_memory_pool(&pool);
 	acs = switch_core_alloc(pool, sizeof(*acs));
-
+	memset(acs, 0, sizeof(*acs));
 	if (ei_decode_string_or_binary(buf->buff, &buf->index, &acs->arg)) {
 		switch_core_destroy_memory_pool(&pool);
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode arguments\n");
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -613,14 +633,16 @@ static switch_status_t handle_request_bgapi(ei_node_t *ei_node, erlang_pid *pid,
 }
 
 static switch_status_t handle_request_api(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char cmd[MAXATOMLEN + 1];
+	char cmd[MAXATOMLEN + 1] = "";
 	char *arg;
 
 	if (ei_decode_atom_safe(buf->buff, &buf->index, cmd)) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode command\n");
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (ei_decode_string_or_binary(buf->buff, &buf->index, &arg)) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode arguments\n");
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -647,12 +669,13 @@ static switch_status_t handle_request_api(ei_node_t *ei_node, erlang_pid *pid, e
 }
 
 static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char event_name[MAXATOMLEN + 1];
+	char event_name[MAXATOMLEN + 1] = "";
 	switch_event_types_t event_type;
 	ei_event_stream_t *event_stream;
 	int custom = 0, length = 0;
 
 	if (ei_decode_list_header(buf->buff, &buf->index, &length) || !length) {
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode list\n");
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -666,6 +689,7 @@ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid,
 	for (int i = 1; i <= length; i++) {
 		if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)) {
 			switch_mutex_unlock(ei_node->event_streams_mutex);
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to decode event name\n");
 			return erlang_response_badarg(rbuf);
 		}
 
@@ -688,6 +712,7 @@ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid,
 			}
 		} else {
 			switch_mutex_unlock(ei_node->event_streams_mutex);
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected event name %s\n", event_name);
 			return erlang_response_badarg(rbuf);
 		}
 	}
@@ -706,8 +731,8 @@ static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid,
 }
 
 static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char section_str[MAXATOMLEN + 1];
-	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+	char section_str[MAXATOMLEN + 1] = "";
+	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1] = "";
 	char *xml_str;
 	switch_xml_section_t section;
 	switch_status_t result;
@@ -725,13 +750,13 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
 	}
 
 	if (ei_decode_string_or_binary(buf->buff, &buf->index, &xml_str)) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without XML\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply %s without XML\n", uuid_str);
 		return erlang_response_badarg(rbuf);
 	}
 
 	if (zstr(xml_str)) {
 		switch_safe_free(xml_str);
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring an empty fetch reply\n");
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring an empty fetch reply %s\n", uuid_str);
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -752,7 +777,7 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
 		result = fetch_reply(uuid_str, xml_str, globals.channels_fetch_binding);
 		break;
 	default:
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply for an unknown configuration section: %s\n", section_str);
+		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply %s for an unknown configuration section: %s\n", uuid_str, section_str);
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -765,7 +790,7 @@ static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid
 }
 
 static switch_status_t handle_kazoo_request(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
-	char atom[MAXATOMLEN + 1];
+	char atom[MAXATOMLEN + 1] = "";
 	int type, size, arity = 0, request;
 
 	/* ...{_, _}} | ...atom()} = Buf */
@@ -815,12 +840,13 @@ static switch_status_t handle_kazoo_request(ei_node_t *ei_node, erlang_pid *pid,
 	case REQUEST_FETCH_REPLY:
 		return handle_request_fetch_reply(ei_node, pid, buf, rbuf);
 	default:
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected Kazoo request %s\n", atom);
 		return erlang_response_notimplemented(rbuf);
 	}
 }
 
 static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *msg, ei_x_buff *buf) {
-	char atom[MAXATOMLEN + 1];
+	char atom[MAXATOMLEN + 1] = "";
 	int version, type, size, arity;
 
 	buf->index = 0;
@@ -887,6 +913,7 @@ static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *
 
 		if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
 			ei_x_free(&send_msg->buf);
+	        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to push gen_call response into queue\n");
 			switch_safe_free(send_msg);
 		}
 
@@ -900,7 +927,7 @@ static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *
 /* fake enough of the net_kernel module to be able to respond to net_adm:ping */
 static switch_status_t handle_net_kernel_request(ei_node_t *ei_node, erlang_msg *msg, ei_x_buff *buf) {
 	int version, size, type, arity;
-	char atom[MAXATOMLEN + 1];
+	char atom[MAXATOMLEN + 1] = "";
 	ei_send_msg_t *send_msg;
 	erlang_ref ref;
 
@@ -986,6 +1013,7 @@ static switch_status_t handle_net_kernel_request(ei_node_t *ei_node, erlang_msg 
 
 	if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
 		ei_x_free(&send_msg->buf);
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to push gen_call response into queue\n");
 		switch_safe_free(send_msg);
 	}
 
@@ -1049,6 +1077,11 @@ static void *SWITCH_THREAD_FUNC receive_handler(switch_thread_t *thread, void *o
 		if (switch_queue_pop_timeout(ei_node->received_msgs, &pop, 500000) == SWITCH_STATUS_SUCCESS) {
 			ei_received_msg_t *received_msg = (ei_received_msg_t *) pop;
 			handle_erl_msg(ei_node, &received_msg->msg, &received_msg->buf);
+			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Handled erlang message from %s <%d.%d.%d>\n"
+							  ,received_msg->msg.from.node
+							  ,received_msg->msg.from.creation
+							  ,received_msg->msg.from.num
+							  ,received_msg->msg.from.serial);
 			ei_x_free(&received_msg->buf);
 			switch_safe_free(received_msg);
 		}
@@ -1107,6 +1140,7 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 		case ERL_MSG:
 			if (switch_queue_trypush(ei_node->received_msgs, received_msg) != SWITCH_STATUS_SUCCESS) {
 				ei_x_free(&received_msg->buf);
+	            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to push recieved message into worker queue\n");
 				switch_safe_free(received_msg);
 			}
 			received_msg = NULL;
@@ -1151,8 +1185,6 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 	}
 
 	remove_from_ei_nodes(ei_node);
-
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
 
 	destroy_node_handler(ei_node);
 
