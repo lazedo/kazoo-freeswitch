@@ -154,7 +154,7 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void 
 	ei_event_binding_t *event_binding;
 	switch_sockaddr_t *sa;
 	uint16_t port;
-    char ipbuf[25];
+    char ipbuf[25] = "";
     const char *ip_addr;
 	void *pop;
 
@@ -244,8 +244,6 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void 
 		}
 	}
 
-	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutting down erlang event stream %p\n", (void *)event_stream);
-
 	/* unbind from the system events */
 	event_binding = event_stream->bindings;
 	while(event_binding != NULL) {
@@ -270,8 +268,9 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void 
 	event_stream->connected = SWITCH_FALSE;
 	close_socket(&event_stream->socket);
 	switch_mutex_unlock(event_stream->socket_mutex);
-
 	switch_mutex_destroy(event_stream->socket_mutex);
+
+	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutting down erlang event stream %p\n", (void *)event_stream);
 	
 	/* clean up the memory */
 	switch_core_destroy_memory_pool(&event_stream->pool);
@@ -451,6 +450,7 @@ switch_status_t add_event_binding(ei_event_stream_t *event_stream, const switch_
 	}
 
 	/* prepare the event binding struct */
+	memset(event_binding, 0, sizeof(*event_binding));
 	event_binding->type = event_type;
 	if (!subclass_name || zstr(subclass_name)) {
 		event_binding->subclass_name = NULL;
