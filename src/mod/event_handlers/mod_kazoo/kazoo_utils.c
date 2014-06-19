@@ -173,8 +173,8 @@ switch_socket_t *create_socket(switch_memory_pool_t *pool) {
 switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei_cnode_s *ei_cnode) {
     struct hostent *nodehost;
     char hostname[EI_MAXHOSTNAMELEN + 1] = "";
-    char nodename[MAXNODELEN + 1];
-    char cnodename[EI_MAXALIVELEN + 1];
+    char nodename[MAXNODELEN + 1] = "";
+    char cnodename[EI_MAXALIVELEN + 1] = "";
     //EI_MAX_COOKIE_SIZE+1
     char *atsign;
 
@@ -237,7 +237,7 @@ switch_status_t ei_compare_pids(const erlang_pid *pid1, const erlang_pid *pid2) 
 }
 
 void ei_link(ei_node_t *ei_node, erlang_pid * from, erlang_pid * to) {
-    char msgbuf[2048];
+    char msgbuf[2048] = "";
     char *s;
     int index = 0;
 
