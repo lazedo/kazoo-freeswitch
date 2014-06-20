@@ -520,7 +520,7 @@ static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pi
 	}
 
 	if (zstr_buf(uuid_str) || !(session = switch_core_session_locate(uuid_str))) {
-	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to locate session %s\n", uuid_str);
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Session %s is no longer present on this switch\n", uuid_str);
 		return erlang_response_badarg(rbuf);
 	}
 	log_sendmsg_request(uuid_str, event);
