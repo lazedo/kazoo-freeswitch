@@ -333,6 +333,7 @@ static switch_status_t config(void) {
 	char *cf = "kazoo.conf";
 	switch_xml_t cfg, xml, child, param;
 	globals.send_all_headers = globals.send_all_private_headers = 0;
+	globals.connection_timeout = 500;
 
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
@@ -373,6 +374,9 @@ static switch_status_t config(void) {
 				} else if (!strcmp(var, "send-all-private-headers")) {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-private-headers: %s\n", val);
 					globals.send_all_private_headers = switch_true(val);
+				} else if (!strcmp(var, "connection-timeout")) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set connection-timeout: %s\n", val);
+					globals.connection_timeout = atoi(val);
 				}
 			}
 		}
@@ -678,7 +682,7 @@ SWITCH_MODULE_RUNTIME_FUNCTION(mod_kazoo_runtime) {
 		errno = 0;
 
 		/* wait here for an erlang node to connect, timming out to check if our module is still running every now-and-again */
-		if ((nodefd = ei_accept_tmo(&globals.ei_cnode, (int) os_socket, &conn, 500)) == ERL_ERROR) {
+		if ((nodefd = ei_accept_tmo(&globals.ei_cnode, (int) os_socket, &conn, globals.connection_timeout)) == ERL_ERROR) {
 			if (erl_errno == ETIMEDOUT) {
 				continue;
 			} else if (errno) {
