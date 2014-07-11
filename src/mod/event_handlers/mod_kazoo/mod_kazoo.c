@@ -334,6 +334,7 @@ static switch_status_t config(void) {
 	switch_xml_t cfg, xml, child, param;
 	globals.send_all_headers = globals.send_all_private_headers = 0;
 	globals.connection_timeout = 500;
+	globals.receive_timeout = 5;
 
 	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
@@ -377,6 +378,9 @@ static switch_status_t config(void) {
 				} else if (!strcmp(var, "connection-timeout")) {
 					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set connection-timeout: %s\n", val);
 					globals.connection_timeout = atoi(val);
+				} else if (!strcmp(var, "receive-timeout")) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-timeout: %s\n", val);
+					globals.receive_timeout = atoi(val);
 				}
 			}
 		}

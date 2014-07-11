@@ -106,6 +106,7 @@ struct globals_s {
 	switch_bool_t ei_shortname;
 	int ei_compat_rel;
 	int connection_timeout;
+	int receive_timeout;
 	char *ip;
 	char *ei_cookie;
 	char *ei_nodename;
