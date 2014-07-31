@@ -9480,11 +9480,18 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 					}
 
 					if ((os = switch_core_session_locate(olu))) {
+						switch_channel_t *a_channel = switch_core_session_get_channel(os);
 						switch_core_session_get_real_read_impl(os, &read_impl);
 						switch_core_session_rwunlock(os);
 
 						codec_str = switch_core_session_sprintf(session, "set:absolute_codec_string=%s@%di,", read_impl.iananame,
 															   read_impl.microseconds_per_packet / 1000);
+
+						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
+						    switch_channel_event_set_data(a_channel, event);
+							switch_event_fire(&event);
+						}
+
 					}
 
 					if (!zstr(bridge_uuid) && switch_channel_test_flag(b_channel, CF_LEG_HOLDING)) {
@@ -9505,6 +9512,12 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 							switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
 							switch_event_fire(&event);
 						}
+						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
+							switch_channel_event_set_data(channel, event);
+							switch_event_fire(&event);
+						}
+
+
 					} else {
 						switch_caller_profile_t *bcp = switch_channel_get_caller_profile(b_channel);
 
@@ -9544,6 +9557,7 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 				} else {
     			    switch_event_t *event = NULL;
 					if (!zstr(bridge_uuid)) {
+						switch_core_session_t *os;
 						switch_channel_mark_hold(b_channel, SWITCH_FALSE);
                         tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,intercept:%s,park", bridge_uuid);
                         if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
@@ -9551,6 +9565,20 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
                             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
                             switch_event_fire(&event);
                         }
+						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
+							switch_channel_event_set_data(channel, event);
+							switch_event_fire(&event);
+						}
+						if ((os = switch_core_session_locate(bridge_uuid))) {
+							switch_channel_t *a_channel = switch_core_session_get_channel(os);
+							switch_core_session_rwunlock(os);
+
+							if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
+							    switch_channel_event_set_data(a_channel, event);
+								switch_event_fire(&event);
+							}
+						}
+
 					} else {
 						const char *b_app = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_VARIABLE);
 						const char *b_data = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_DATA_VARIABLE);
@@ -9566,6 +9594,11 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
                             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
                             switch_event_fire(&event);
                         }
+						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
+							switch_channel_event_set_data(channel, event);
+							switch_event_fire(&event);
+						}
+
 
 						switch_channel_hangup(b_channel, SWITCH_CAUSE_ATTENDED_TRANSFER);
 					}
