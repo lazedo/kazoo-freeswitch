@@ -9489,9 +9489,6 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 
 					if (!zstr(bridge_uuid) && switch_channel_test_flag(b_channel, CF_LEG_HOLDING)) {
 						const char *b_call_id = switch_channel_get_variable(b_channel, "sip_call_id");
-
-						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "B-LEG HOLDING SETTING CF_SLA_INTERCEPT\n");
-
 						if (b_call_id) {
 							char *sql = switch_mprintf("update sip_dialogs set call_info_state='idle' where call_id='%q'", b_call_id);
 							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_CRIT, "SQL: %s\n", sql);
@@ -9541,15 +9538,12 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 							switch_channel_set_originatee_caller_profile(tech_pvt->channel, cp);
 						}
 
-						tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool,
-																						   "%sanswer,sofia_sla:%s", codec_str, b_private->uuid);
+						tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "%sanswer,sofia_sla:%s", codec_str, b_private->uuid);
 					}
 				} else {
     			    switch_event_t *event = NULL;
 					if (!zstr(bridge_uuid)) {
 						switch_channel_mark_hold(b_channel, SWITCH_FALSE);
-						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "B-LEG NO CALLINFO SET MARK-HOLD\n");
-
                         tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,intercept:%s", bridge_uuid);
                         if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
                             switch_channel_event_set_data(b_channel, event);
@@ -9560,8 +9554,6 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 					} else {
 						const char *b_app = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_VARIABLE);
 						const char *b_data = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_DATA_VARIABLE);
-
-						switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "B-LEG NO CALLINFO SET MARK-HOLD\n");
 
 						if (b_data && b_app) {
 							tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,%s:%s", b_app, b_data);
@@ -9574,7 +9566,6 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
                             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
                             switch_event_fire(&event);
                         }
-
 
 						switch_channel_hangup(b_channel, SWITCH_CAUSE_ATTENDED_TRANSFER);
 					}
