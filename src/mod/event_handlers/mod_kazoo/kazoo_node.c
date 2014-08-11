@@ -365,9 +365,7 @@ static switch_status_t erlang_response_badarg(ei_x_buff * rbuf) {
 
 static switch_status_t erlang_response_baduuid(ei_x_buff * rbuf) {
 	if (rbuf) {
-		ei_x_encode_tuple_header(rbuf, 2);
-		ei_x_encode_atom(rbuf, "error");
-		ei_x_encode_atom(rbuf, "baduuid");
+		ei_x_format_wo_ver(rbuf, "{~a,~a}", "error", "baduuid");
 	}
 
 	return SWITCH_STATUS_NOTFOUND;
@@ -477,7 +475,7 @@ static switch_status_t handle_request_sendevent(ei_node_t *ei_node, erlang_pid *
 	if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)
 		|| switch_name_event(event_name, &event_type) != SWITCH_STATUS_SUCCESS)
 	{
-	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected event name %s\n", event_name);
+	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected event name '%s'\n", event_name);
 		return erlang_response_badarg(rbuf);
 	}
 
@@ -521,7 +519,7 @@ static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pi
 
 	if (zstr_buf(uuid_str) || !(session = switch_core_session_locate(uuid_str))) {
 	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Session %s is no longer present on this switch\n", uuid_str);
-		return erlang_response_badarg(rbuf);
+		return erlang_response_baduuid(rbuf);
 	}
 	log_sendmsg_request(uuid_str, event);
 	switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
@@ -535,7 +533,7 @@ static switch_status_t handle_request_bind(ei_node_t *ei_node, erlang_pid *pid, 
 	switch_xml_section_t section;
 
 	if (ei_decode_atom_safe(buf->buff, &buf->index, section_str)
-		|| !(section = switch_xml_parse_section_string(section_str))) { 
+		|| !(section = switch_xml_parse_section_string(section_str))) {
 	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to parse section name %s\n", section_str);
 		return erlang_response_badarg(rbuf);
 	}
@@ -660,6 +658,7 @@ static switch_status_t handle_request_api(ei_node_t *ei_node, erlang_pid *pid, e
 		}
 
 		_ei_x_encode_string(rbuf, reply);
+
 		switch_safe_free(reply);
 	}
 
@@ -1244,7 +1243,7 @@ switch_status_t new_kazoo_node(int nodefd, ErlConnect *conn) {
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "New erlang connection from node %s (%s:%d)\n", ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "New erlang connection to node %s (%s:%d)\n", ei_node->peer_nodename, ei_node->local_ip, ei_node->local_port);
-	
+
 	for(i = 0; i < globals.num_worker_threads; i++) {
 		switch_threadattr_create(&thd_attr, ei_node->pool);
 		switch_threadattr_detach_set(thd_attr, 1);
