@@ -940,7 +940,7 @@ fi
 
 # Tested and fixed lot of modules, but some are untested.  Will be added back when the core team decide it ready
 # Untested modules : mod_osp mod_soundtouch mod_sangoma_codec mod_dingaling mod_opal mod_skypopen mod_h323 mod_khomp 
-#                    mod_unimrcp mod_cepstral mod_erlang_event mod_snmp mod_perl mod_java mod_managed
+#                    mod_unimrcp mod_cepstral mod_erlang_event mod_kazoo mod_snmp mod_perl mod_java mod_managed
 #
 #saved_CFLAGS="$CFLAGS"
 #AC_CACHE_CHECK([whether compiler supports -Wunused-but-set-variable], [ac_cv_gcc_unused_but_set_variable], [
@@ -1525,6 +1525,7 @@ AC_CONFIG_FILES([Makefile
 		src/mod/event_handlers/mod_cdr_pg_csv/Makefile
 		src/mod/event_handlers/mod_cdr_sqlite/Makefile
 		src/mod/event_handlers/mod_erlang_event/Makefile
+		src/mod/event_handlers/mod_kazoo/Makefile
 		src/mod/event_handlers/mod_event_multicast/Makefile
 		src/mod/event_handlers/mod_event_socket/Makefile
 		src/mod/event_handlers/mod_event_test/Makefile

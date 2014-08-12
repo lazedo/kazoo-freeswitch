@@ -2,36 +2,31 @@
 # -*- mode:makefile -*-
 ##### Author: Travis Cross <tc@traviscross.com>
 
-export DH_VERBOSE=1
-export VERBOSE=1
-export V=1
+#export DH_VERBOSE=1
 
 FS_CC?=gcc
 FS_CXX?=g++
-FS_CPPFLAGS?=-D_FORTIFY_SOURCE=2
-FS_CFLAGS?=-g3 -O2 -fPIC -fstack-protector --param=ssp-buffer-size=4
+FS_CFLAGS?=-g3 -O2 -fPIC
+FS_CPPFLAGS?=
 FS_CXXFLAGS?=$(FS_CFLAGS)
-FS_LDFLAGS?=-Wl,-z,relro
 export PATH?=/usr/lib/ccache:/usr/sbin:/usr/bin:/sbin:/bin
-export CC:=$(FS_CC)
-export CXX:=$(FS_CXX)
-export CPPFLAGS:=$(FS_CPPFLAGS)
-export CFLAGS:=$(FS_CFLAGS)
-export CXXFLAGS:=$(FS_CXXFLAGS)
-export LDFLAGS:=$(FS_LDFLAGS)
+export CC=$(FS_CC)
+export CXX=$(FS_CXX)
+export CFLAGS=$(FS_CFLAGS)
+export CPPFLAGS=$(FS_CPPFLAGS)
+export CXXFLAGS=$(FS_CXXFLAGS)
 
 show_vars= \
-	echo; \
-	echo "Making target $@"; \
-	echo "PATH='$(PATH)'"; \
-	echo "CC='$(CC)'"; \
-	echo "CXX='$(CXX)'"; \
-	echo "CPPFLAGS='$(CPPFLAGS)'"; \
-	echo "CFLAGS='$(CFLAGS)'"; \
-	echo "CXXFLAGS='$(CXXFLAGS)'"; \
-	echo "LDFLAGS='$(LDFLAGS)'"; \
-	echo "CCACHE_DIR='$(CCACHE_DIR)'"; \
-	echo;
+    echo; \
+    echo "Making target $@"; \
+    echo "PATH='$(PATH)'"; \
+    echo "CC='$(CC)'"; \
+    echo "CXX='$(CXX)'"; \
+    echo "CFLAGS='$(CFLAGS)'"; \
+    echo "CPPFLAGS='$(CPPFLAGS)'"; \
+    echo "CXXFLAGS='$(CXXFLAGS)'"; \
+    echo "CCACHE_DIR='$(CCACHE_DIR)'"; \
+    echo;
 
 binary:
 	@$(call show_vars)
@@ -67,24 +62,27 @@ override_dh_auto_clean:
 	touch noreg
 	cp debian/modules_.conf modules.conf
 	./configure -C --enable-portable-binary --disable-dependency-tracking \
-		--host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) \
-		--with-gnu-ld --with-python --with-erlang --with-openssl \
-		--enable-core-odbc-support --enable-zrtp \
-		--enable-core-pgsql-support \
-		--prefix=/usr --localstatedir=/var \
-		--sysconfdir=/etc/freeswitch \
-		--with-modinstdir=/usr/lib/freeswitch/mod \
-		--with-rundir=/var/run/freeswitch \
-		--with-logfiledir=/var/log/freeswitch \
-		--with-dbdir=/var/lib/freeswitch/db \
-		--with-htdocsdir=/usr/share/freeswitch/htdocs \
-		--with-soundsdir=/usr/share/freeswitch/sounds \
-		--with-storagedir=/var/lib/freeswitch/storage \
-		--with-grammardir=/usr/share/freeswitch/grammar \
-		--with-certsdir=/etc/freeswitch/tls \
-		--with-scriptdir=/usr/share/freeswitch/scripts \
-		--with-recordingsdir=/var/lib/freeswitch/recordings \
-		--enable-static-v8 --disable-parallel-build-v8
+        --host=$(DEB_HOST_GNU_TYPE) --build=$(DEB_BUILD_GNU_TYPE) \
+        --with-gnu-ld --with-erlang --with-openssl \
+    --prefix=/usr \
+    --sysconfdir=/etc/kazoo/freeswitch \
+    --libdir=/usr/lib \
+    --libexecdir=/usr/lib/freeswitch \
+    --sharedstatedir=/usr/share/freeswitch \
+    --localstatedir=/var/lib/freeswitch \
+    --with-logfiledir=/var/log/freeswitch \
+    --with-modinstdir=/usr/lib/freeswitch/mod \
+    --with-rundir=/var/run/freeswitch \
+    --with-dbdir=/var/lib/freeswitch/db \
+    --with-soundsdir=/usr/share/freeswitch/sounds \
+    --enable-core-libedit-support \
+    --with-grammardir=/usr/share/freeswitch/grammar \
+    --with-scriptdir=/usr/share/freeswitch/scripts \
+    --with-recordingsdir=/var/lib/freeswitch/recordings \
+    --with-certsdir=/etc/kazoo/freeswitch/certs \
+    --with-pkgconfigdir=/usr/share/freeswitch/pkgconfig \
+    --enable-zrtp
+
 	touch $@
 
 override_dh_auto_configure: .stamp-configure
@@ -104,23 +102,23 @@ override_dh_strip:
 
 override_dh_auto_install:
 	dh_auto_install
-	mkdir -p debian/tmp/lib/systemd/system
-	install -m0644 debian/freeswitch-systemd.freeswitch.service debian/tmp/lib/systemd/system/freeswitch.service
-	rm -f debian/tmp/usr/share/freeswitch/grammar/model/communicator/COPYING
 
 override_dh_installinit:
-	dh_installinit -pfreeswitch-sysvinit --name=freeswitch
-	dh_installinit -pfreeswitch-all --name=freeswitch
+	dh_installinit -pkazoo-freeswitch --name=freeswitch
 
 override_dh_makeshlibs:
 	dh_makeshlibs
 	sed \
-	  -e '/^libfreeswitch 1/{s/freeswitch-all/libfreeswitch1/g}' \
-	  -i debian/freeswitch-all/DEBIAN/shlibs
+      -e '/^libfreeswitch 1/{s/kazoo-freeswitch/libfreeswitch1/g}' \
+      -i debian/kazoo-freeswitch/DEBIAN/shlibs
+
+override_dh_gencontrol:
+	sed -i 's/libfreeswitch1,//g' debian/kazoo-freeswitch.substvars
+	dh_gencontrol
 
 debian-bootstrap: debian/.stamp-bootstrap
 debian/.stamp-bootstrap:
-	(cd debian && ./bootstrap.sh)
+	(cd debian && ./kazoo-bootstrap.sh)
 	touch $@
 
 build-depends: debian/.stamp-build-depends
@@ -131,11 +129,11 @@ debian/.stamp-build-depends:
 binary-basetest:
 	@$(call show_vars)
 	echo "applications/mod_commands" > debian/modules.conf
-	(cd debian && ./bootstrap.sh)
+	(cd debian && ./kazoo-bootstrap.sh)
 	dh binary
 
 binary-quicktest:
 	@$(call show_vars)
 	echo "applications/mod_commands" > debian/modules.conf
-	(cd debian && ./bootstrap.sh)
+	(cd debian && ./kazoo-bootstrap.sh)
 	dh binary

@@ -65,14 +65,17 @@ find_suite () {
 
 #### debian/rules helpers
 
-create_dbg_pkgs () {
+create_dbg_pkgs () {  
   for x in $ddir/*; do
     test ! -d $x && continue
     test "$x" = "tmp" -o "$x" = "source" && continue
     test ! "$x" = "${x%-dbg}" && continue
     test ! -d $x/usr/lib/debug && continue
+    rm -rf $x-dbg
     mkdir -p $x-dbg/usr/lib
     mv $x/usr/lib/debug $x-dbg/usr/lib/
+    rm -rf $x/usr/include
+    rm -rf $x/etc/kazoo
   done
 }
 
@@ -100,6 +103,7 @@ getlibs () {
   # get pinned libraries
   getlib http://downloads.mongodb.org/cxx-driver/mongodb-linux-x86_64-v1.8-latest.tgz
   getlib http://files.freeswitch.org/downloads/libs/json-c-0.9.tar.gz
+  getlib http://files.freeswitch.org/downloads/libs/libmemcached-0.32.tar.gz
   getlib http://files.freeswitch.org/downloads/libs/soundtouch-1.7.1.tar.gz
   getlib http://files.freeswitch.org/downloads/libs/flite-1.5.4-current.tar.bz2
   getlib http://files.freeswitch.org/downloads/libs/sphinxbase-0.7.tar.gz
@@ -114,7 +118,6 @@ getlibs () {
   getlib http://files.freeswitch.org/downloads/libs/lame-3.98.4.tar.gz
   getlib http://files.freeswitch.org/downloads/libs/libshout-2.2.2.tar.gz
   getlib http://files.freeswitch.org/downloads/libs/mpg123-1.13.2.tar.gz
-  getlib http://files.freeswitch.org/downloads/libs/v8-3.24.14.tar.bz2
   # cleanup mongo
   (
     cd mongo-cxx-driver-v1.8
@@ -135,7 +138,7 @@ check_repo_clean () {
 }
 
 get_last_release_ver () {
-  grep -m1 -e '^AC_INIT' configure.ac \
+  grep -m1 -e '^AC_INIT' configure.in \
     | cut -d, -f2 \
     | sed -e 's/\[//' -e 's/\]//' -e 's/ //g'
 }
@@ -184,7 +187,7 @@ create_orig () {
       (cd libs && getlibs)
       git add -f libs
     fi
-    ./build/set-fs-version.sh "$uver" "$hrev" && git add configure.ac
+    ./build/set-fs-version.sh "$uver" "$hrev" && git add configure.in
     echo "$uver" > .version && git add -f .version
     git commit --allow-empty -m "nightly v$uver"
     git archive -v \
@@ -208,13 +211,12 @@ EOF
 create_dsc () {
   {
     set -e
-    local OPTIND OPTARG modules_conf="" modules_list="" speed="normal" suite_postfix="" suite_postfix_p=false zl=9
-    while getopts 'f:m:s:u:z:' o "$@"; do
+    local OPTIND OPTARG modules_conf="" modules_list="" speed="normal" zl=9
+    while getopts 'f:m:s:z:' o "$@"; do
       case "$o" in
         f) modules_conf="$OPTARG";;
         m) modules_list="$OPTARG";;
         s) speed="$OPTARG";;
-        u) suite_postfix="$OPTARG"; suite_postfix_p=true; ;;
         z) zl="$OPTARG";;
       esac
     done
@@ -223,7 +225,6 @@ create_dsc () {
     local suite="$(find_suite $distro)"
     local orig_ver="$(echo "$orig" | sed -e 's/^.*_//' -e 's/\.orig\.tar.*$//')"
     local dver="${orig_ver}-1~${distro}+1"
-    $suite_postfix_p && { suite="${distro}${suite_postfix}"; }
     [ -x "$(which dch)" ] \
       || err "package devscripts isn't installed"
     if [ -n "$modules_conf" ]; then
@@ -295,15 +296,12 @@ build_debs () {
     }
     if ! [ -d $cow_img ]; then
       announce "Creating base $distro-$arch image..."
-      local x=30
-      while ! cow --create; do
-        [ $x -lt 1 ] && break; sleep 120; x=$((x-1))
-      done
+      cow --create
     fi
     announce "Updating base $distro-$arch image..."
-    local x=30
-    while ! cow --update --override-config; do
-      [ $x -lt 1 ] && break; sleep 120; x=$((x-1))
+    local x=5
+    while ! cow --update; do
+      [ $x -lt 1 ] && break; sleep 60; x=$((x-1))
     done
     announce "Building $distro-$arch DEBs from $dsc..."
     if $debug_hook; then
@@ -322,46 +320,33 @@ build_debs () {
 
 build_all () {
   local OPTIND OPTARG
-  local orig_opts="" dsc_opts="" deb_opts="" modlist=""
-  local archs="" distros="" orig="" depinst=false par=false
-  while getopts 'a:bc:df:ijl:m:no:s:u:v:z:' o "$@"; do
+  local orig_opts="" dsc_opts="" deb_opts=""
+  local archs="" distros="" orig="" par=false
+  while getopts 'a:bc:df:jm:no:s:v:z:' o "$@"; do
     case "$o" in
       a) archs="$archs $OPTARG";;
       b) orig_opts="$orig_opts -b";;
       c) distros="$distros $OPTARG";;
       d) deb_opts="$deb_opts -d";;
       f) dsc_opts="$dsc_opts -f$OPTARG";;
-      i) depinst=true;;
       j) par=true;;
-      l) modlist="$OPTARG";;
       m) orig_opts="$orig_opts -m$OPTARG"; dsc_opts="$dsc_opts -m$OPTARG";;
       n) orig_opts="$orig_opts -n";;
       o) orig="$OPTARG";;
       s) dsc_opts="$dsc_opts -s$OPTARG";;
-      u) dsc_opts="$dsc_opts -u$OPTARG";;
       v) orig_opts="$orig_opts -v$OPTARG";;
       z) orig_opts="$orig_opts -z$OPTARG"; dsc_opts="$dsc_opts -z$OPTARG";;
     esac
   done
   shift $(($OPTIND-1))
   [ -n "$archs" ] || archs="amd64 i386"
-  [ -n "$distros" ] || distros="sid jessie wheezy"
-  ! $depinst || aptitude install -y \
-    rsync git less cowbuilder ccache \
-    devscripts equivs build-essential
-  [ -n "$orig" ] || orig="$(create_orig $orig_opts HEAD | tail -n1)"
-  if [ -n "$modlist" ]; then
-    local modtmp="$(mktemp /tmp/modules-XXXXXXXXXX.conf)"
-    > $modtmp
-    for m in "$modlist"; do printf '%s\n' "$m" >> $modtmp; done
-    dsc_opts="$dsc_opts -f${modtmp}"; fi
+  [ -n "$distros" ] || distros="sid jessie wheezy squeeze"
   [ -n "$orig" ] || orig="$(create_orig $orig_opts HEAD | tail -n1)"
   mkdir -p ../log
   > ../log/changes
   echo; echo; echo; echo
   trap 'echo "Killing children...">&2; for x in $(jobs -p); do kill $x; done' EXIT
   if [ "${orig:0:2}" = ".." ]; then
-    echo "true" > ../log/builds-ok
     for distro in $distros; do
       echo "Creating $distro dsc..." >&2
       local dsc="$(create_dsc $dsc_opts $distro $orig 2>../log/$distro | tail -n1)"
@@ -375,8 +360,6 @@ build_all () {
             echo "Done building $distro-$arch debs." >&2
             if [ "${changes:0:2}" = ".." ]; then
               echo "$changes" >> ../log/changes
-            else
-              echo "false" > ../log/builds-ok
             fi
           } &
           $par || wait
@@ -386,10 +369,8 @@ build_all () {
     done
     ! $par || wait
   fi
-  [ -z "$modlist" ] || rm -f $modtmp
   trap - EXIT
   cat ../log/changes
-  test "$(cat ../log/builds-ok)" = true || exit 1
 }
 
 usage () {
@@ -414,9 +395,7 @@ commands:
     -d Enable cowbuilder debug hook
     -f <modules.conf>
       Build only modules listed in this file
-    -i Auto install build deps on host system
     -j Build debs in parallel
-    -l <modules>
     -m [ quicktest | non-dfsg ]
       Choose custom list of modules to build
     -n Nightly build
@@ -424,8 +403,6 @@ commands:
       Specify existing .orig.tar.xz file
     -s [ paranoid | reckless ]
       Set FS bootstrap/build -j flags
-    -u <suite-postfix>
-      Specify a custom suite postfix
     -v Set version
     -z Set compression level
 
@@ -447,8 +424,6 @@ commands:
       Choose custom list of modules to build
     -s [ paranoid | reckless ]
       Set FS bootstrap/build -j flags
-    -u <suite-postfix>
-      Specify a custom suite postfix
     -z Set compression level
 
   create-orig <treeish>

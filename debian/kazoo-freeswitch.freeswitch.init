@@ -4,8 +4,6 @@
 # Provides: freeswitch
 # Required-Start: $network $remote_fs $local_fs
 # Required-Stop: $network $remote_fs $local_fs
-# Should-Start: postgresql mysql memcached mongodb
-# Should-Stop: postgresql mysql memcached mongodb
 # Default-Start: 2 3 4 5
 # Default-Stop: 0 1 6
 # Short-Description: FreeSWITCH Softswitch
@@ -38,6 +36,8 @@ do_start() {
     echo "Please review /usr/share/doc/$NAME/README.Debian">&2
     return 3
   fi
+
+  epmd -daemon
 
   # Directory in /var/run may disappear on reboot (e.g. when tmpfs used for /var/run).
   mkdir -p $RUNDIR
