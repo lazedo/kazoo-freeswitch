@@ -355,11 +355,9 @@ static switch_status_t erlang_response_badarg(ei_x_buff * rbuf) {
 }
 
 static switch_status_t erlang_response_baduuid(ei_x_buff * rbuf) {
-        if (rbuf) {
-                ei_x_encode_tuple_header(rbuf, 2);
-                ei_x_encode_atom(rbuf, "error");
-                ei_x_encode_atom(rbuf, "baduuid");
-        }
+	if (rbuf) {
+		ei_x_format_wo_ver(rbuf, "{~a,~a}", "error", "baduuid");
+	}
 
         return SWITCH_STATUS_NOTFOUND;
 }
@@ -506,7 +504,7 @@ static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pi
         log_sendmsg_request(uuid_str, event);
 
         if (zstr_buf(uuid_str) || !(session = switch_core_session_locate(uuid_str))) {
-                return erlang_response_badarg(rbuf);
+                return erlang_response_baduuid(rbuf);
         }
         switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
         switch_core_session_rwunlock(session);
