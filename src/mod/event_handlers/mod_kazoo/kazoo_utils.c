@@ -436,14 +436,6 @@ switch_hash_t *create_default_filter() {
         switch_core_hash_insert(filter, "variable_domain_name", "1");
         switch_core_hash_insert(filter, "variable_effective_caller_id_name", "1");
         switch_core_hash_insert(filter, "variable_effective_caller_id_number", "1");
-        switch_core_hash_insert(filter, "variable_fax_bad_rows", "1");
-        switch_core_hash_insert(filter, "variable_fax_document_total_pages", "1");
-        switch_core_hash_insert(filter, "variable_fax_document_transferred_pages", "1");
-        switch_core_hash_insert(filter, "variable_fax_ecm_used", "1");
-        switch_core_hash_insert(filter, "variable_fax_result_code", "1");
-        switch_core_hash_insert(filter, "variable_fax_result_text", "1");
-        switch_core_hash_insert(filter, "variable_fax_success", "1");
-        switch_core_hash_insert(filter, "variable_fax_transfer_rate", "1");
         switch_core_hash_insert(filter, "variable_holding_uuid", "1");
         switch_core_hash_insert(filter, "variable_hold_music", "1");
         switch_core_hash_insert(filter, "variable_media_group_id", "1");
@@ -537,6 +529,61 @@ switch_hash_t *create_default_filter() {
         switch_core_hash_insert(filter, "RTMP-Page-URL", "1");
         switch_core_hash_insert(filter, "User", "1");
         switch_core_hash_insert(filter, "Domain", "1");
+
+        /* Fax headers */
+       	switch_core_hash_insert(filter, "variable_fax_bad_rows", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_document_total_pages", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_document_transferred_pages", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_ecm_used", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_result_code", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_result_text", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_success", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_transfer_rate", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_local_station_id", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_remote_station_id", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_remote_country", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_remote_vendor", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_remote_model", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_image_resolution", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_file_image_resolution", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_image_size", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_image_pixel_size", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_file_image_pixel_size", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_longest_bad_row_run", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_encoding", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_encoding_name", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_header", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_ident", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_timezone", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_doc_id", "undefined");
+       	switch_core_hash_insert(filter, "variable_fax_doc_database", "undefined");
+
+
+       	/* Secure headers */
+       	switch_core_hash_insert(filter, "variable_sdp_secure_savp_only", "undefined");
+       	switch_core_hash_insert(filter, "variable_rtp_has_crypto", "undefined");
+       	switch_core_hash_insert(filter, "variable_rtp_secure_media", "undefined");
+       	switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed", "undefined");
+       	switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed_audio", "undefined");
+       	switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed_video", "undefined");
+       	switch_core_hash_insert(filter, "variable_zrtp_secure_media", "undefined");
+       	switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed", "undefined");
+       	switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed_audio", "undefined");
+       	switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed_video", "undefined");
+       	switch_core_hash_insert(filter, "sdp_secure_savp_only", "undefined");
+       	switch_core_hash_insert(filter, "rtp_has_crypto", "undefined");
+       	switch_core_hash_insert(filter, "rtp_secure_media", "undefined");
+       	switch_core_hash_insert(filter, "rtp_secure_media_confirmed", "undefined");
+       	switch_core_hash_insert(filter, "rtp_secure_media_confirmed_audio", "undefined");
+       	switch_core_hash_insert(filter, "rtp_secure_media_confirmed_video", "undefined");
+       	switch_core_hash_insert(filter, "zrtp_secure_media", "undefined");
+       	switch_core_hash_insert(filter, "zrtp_secure_media_confirmed", "undefined");
+       	switch_core_hash_insert(filter, "zrtp_secure_media_confirmed_audio", "undefined");
+       	switch_core_hash_insert(filter, "zrtp_secure_media_confirmed_video", "undefined");
+
+       	/* Device Redirect headers */
+       	switch_core_hash_insert(filter, "variable_last_bridge_hangup_cause", "undefined");
+       	switch_core_hash_insert(filter, "variable_sip_redirected_by", "undefined");
 
         return filter;
 }

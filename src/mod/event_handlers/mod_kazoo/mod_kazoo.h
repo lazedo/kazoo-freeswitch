@@ -113,6 +113,8 @@ struct globals_s {
         uint32_t flags;
         int send_all_headers;
         int send_all_private_headers;
+    	int connection_timeout;
+    	int receive_timeout;
 } globals;
 typedef struct globals_s globals_t;
 
