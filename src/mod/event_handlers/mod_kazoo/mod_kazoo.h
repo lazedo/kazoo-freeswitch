@@ -115,6 +115,7 @@ struct globals_s {
         int send_all_private_headers;
     	int connection_timeout;
     	int receive_timeout;
+    	int pre_allocated_msg_size;
 } globals;
 typedef struct globals_s globals_t;
 
