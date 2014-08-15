@@ -1080,9 +1080,18 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 
 		if (!received_msg) {
 			switch_malloc(received_msg, sizeof(*received_msg));
-
 			/* create a new buf for the erlang message and a rbuf for the reply */
-			ei_x_new(&received_msg->buf);
+			if(globals.pre_allocated_msg_size > 0) {
+				received_msg->buf.buff = malloc(globals.pre_allocated_msg_size);
+				received_msg->buf.buffsz = globals.pre_allocated_msg_size;
+				received_msg->buf.index = 0;
+				if(received_msg->buf.buff == NULL) {
+					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not pre-allocate memory for mod_kazoo message\n");
+					goto exit;
+				}
+			} else {
+				ei_x_new(&received_msg->buf);
+			}
 		}
 
 		if (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS) {
@@ -1144,6 +1153,8 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 			break;
 		}
 	}
+
+exit:
 
     if (received_msg) {
 		ei_x_free(&received_msg->buf);
