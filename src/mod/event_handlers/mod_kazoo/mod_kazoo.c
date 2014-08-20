@@ -337,9 +337,8 @@ static switch_status_t config(void) {
         switch_xml_t cfg, xml, child, param;
         globals.send_all_headers = globals.send_all_private_headers = 0;
         globals.connection_timeout = 500;
-        globals.receive_timeout = 5;
+        globals.receive_timeout = 200;
         globals.pre_allocated_msg_size = 0;
-
 
         if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
                 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
