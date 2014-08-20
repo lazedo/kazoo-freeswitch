@@ -336,6 +336,9 @@ static switch_status_t config(void) {
         char *cf = "kazoo.conf";
         switch_xml_t cfg, xml, child, param;
         globals.send_all_headers = globals.send_all_private_headers = 0;
+        globals.connection_timeout = 500;
+        globals.receive_timeout = 200;
+        globals.pre_allocated_msg_size = 0;
 
         if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
                 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
@@ -376,6 +379,14 @@ static switch_status_t config(void) {
                                 } else if (!strcmp(var, "send-all-private-headers")) {
                                         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-private-headers: %s\n", val);
                                         globals.send_all_private_headers = switch_true(val);
+                                } else if (!strcmp(var, "connection-timeout")) {
+                                                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set connection-timeout: %s\n", val);
+                                                        globals.connection_timeout = atoi(val);
+                                } else if (!strcmp(var, "receive-timeout")) {
+                                                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-timeout: %s\n", val);
+                                                        globals.receive_timeout = atoi(val);
+                                } else if (!strcmp(var, "pre_allocated_msg_size")) {
+                                                globals.pre_allocated_msg_size = atoi(val);
                                 }
                         }
                 }
@@ -473,7 +484,7 @@ static switch_status_t create_acceptor() {
         switch_socket_addr_get(&sa, SWITCH_FALSE, globals.acceptor);
 
         port = switch_sockaddr_get_port(sa);
-    ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
+        ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
 
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Erlang connection acceptor listening on %s:%u\n", ip_addr, port);
 
@@ -682,7 +693,7 @@ SWITCH_MODULE_RUNTIME_FUNCTION(mod_kazoo_runtime) {
                 errno = 0;
 
                 /* wait here for an erlang node to connect, timming out to check if our module is still running every now-and-again */
-                if ((nodefd = ei_accept_tmo(&globals.ei_cnode, (int) os_socket, &conn, 500)) == ERL_ERROR) {
+                if ((nodefd = ei_accept_tmo(&globals.ei_cnode, (int) os_socket, &conn, globals.connection_timeout)) == ERL_ERROR) {
                         if (erl_errno == ETIMEDOUT) {
                                 continue;
                         } else if (errno) {

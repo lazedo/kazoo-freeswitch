@@ -4698,6 +4698,15 @@ void sofia_presence_handle_sip_i_message(int status,
 										 tagi_t tags[])
 {
 	switch_event_t *v_event = NULL;
+	char *acl_context = NULL;
+	switch_uuid_t uuid;
+	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
+	char acl_token[512] = "";
+	char sip_acl_authed_by[512] = "";
+	char sip_acl_token[512] = "";
+	sip_unknown_t *un;
+	char proxied_client_ip[80];
+	auth_res_t auth_res = AUTH_FORBIDDEN;
 
 	if (sip) {
 
@@ -4709,29 +4718,33 @@ void sofia_presence_handle_sip_i_message(int status,
 		const char *to_host = NULL;
 		sip_payload_t *payload = sip->sip_payload;
 		char *msg = NULL;
-		const char *us;
+		const char *us = NULL;
 		char network_ip[80];
 		int network_port = 0;
 		switch_channel_t *channel = NULL;
+		int network_ip_is_proxy = 0;
+		const char *bounce = NULL;
+		const char *msg_id = NULL;
+
+		bounce = sofia_glue_get_unknown_header(sip, "X-Kazoo-Bounce");
+		switch_uuid_get(&uuid);
+		switch_uuid_format(uuid_str, &uuid);
 
 		if (!sofia_test_pflag(profile, PFLAG_ENABLE_CHAT)) {
 			goto end;
 		}
-
-		if (!sofia_test_pflag(profile, PFLAG_ENABLE_CHAT)) {
-			goto end;
-		}
-
 
 		if (session) {
 			channel = switch_core_session_get_channel(session);
 		}
 
+		if(sip->sip_call_id)
+			msg_id = sip->sip_call_id->i_id;
+
 		sofia_glue_get_addr(de->data->e_msg, network_ip, sizeof(network_ip), &network_port);
 
 		if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES) && sip){
 			sip_authorization_t const *authorization = NULL;
-			auth_res_t auth_res = AUTH_FORBIDDEN;
 			char keybuf[128] = "";
 			char *key;
 			size_t keylen;
@@ -4739,12 +4752,121 @@ void sofia_presence_handle_sip_i_message(int status,
 			key = keybuf;
 			keylen = sizeof(keybuf);
 
+			if(bounce != NULL) {
+				auth_res = AUTH_OK;
+			} else {
+
 			if (sip->sip_authorization) {
 				authorization = sip->sip_authorization;
 			} else if (sip->sip_proxy_authorization) {
 				authorization = sip->sip_proxy_authorization;
 			}
 
+
+			if (profile->acl_count) {
+				uint32_t x = 0;
+				int ok = 1;
+				char *last_acl = NULL;
+				const char *token = NULL;
+
+				for (x = 0; x < profile->acl_count; x++) {
+					last_acl = profile->acl[x];
+					if ((ok = switch_check_network_list_ip_token(network_ip, last_acl, &token))) {
+
+						if (profile->acl_pass_context[x]) {
+							acl_context = profile->acl_pass_context[x];
+						}
+
+						break;
+					}
+
+					if (profile->acl_fail_context[x]) {
+						acl_context = profile->acl_fail_context[x];
+					} else {
+						acl_context = NULL;
+					}
+				}
+
+				if (ok) {
+					if (token) {
+						switch_set_string(acl_token, token);
+					}
+					if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES)) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Approved by acl \"%s[%s]\". Access Granted.\n",
+										  network_ip, switch_str_nil(last_acl), acl_token);
+						switch_set_string(sip_acl_authed_by, last_acl);
+						switch_set_string(sip_acl_token, acl_token);
+						auth_res = AUTH_OK;
+					}
+				} else {
+					/* Check if network_ip is a proxy allowed to send us calls */
+					if (profile->proxy_acl_count) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "%d acls to check for proxy\n", profile->proxy_acl_count);
+					}
+
+					for (x = 0; x < profile->proxy_acl_count; x++) {
+						last_acl = profile->proxy_acl[x];
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "checking %s against acl %s\n", network_ip, last_acl);
+						if (switch_check_network_list_ip_token(network_ip, last_acl, &token)) {
+							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "%s is a proxy according to the %s acl\n", network_ip, last_acl);
+							network_ip_is_proxy = 1;
+							break;
+						}
+					}
+					/*
+					 * if network_ip is a proxy allowed to send calls, check for auth
+					 * ip header and see if it matches against the inbound acl
+					 */
+					if (network_ip_is_proxy) {
+						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "network ip is a proxy\n");
+
+						for (un = sip->sip_unknown; un; un = un->un_next) {
+							if (!strcasecmp(un->un_name, "X-AUTH-IP")) {
+								switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "found auth ip [%s] header of [%s]\n", un->un_name, un->un_value);
+								if (!zstr(un->un_value)) {
+									for (x = 0; x < profile->acl_count; x++) {
+										last_acl = profile->acl[x];
+										if ((ok = switch_check_network_list_ip_token(un->un_value, last_acl, &token))) {
+											switch_copy_string(proxied_client_ip, un->un_value, sizeof(proxied_client_ip));
+											break;
+										}
+									}
+								}
+							}
+						}
+					}
+
+					if (!ok) {
+
+						if (!sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES)) {
+							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "IP %s Rejected by acl \"%s\"\n", network_ip, switch_str_nil(last_acl));
+
+							if (!acl_context) {
+								nua_respond(nh, SIP_403_FORBIDDEN, TAG_END());
+								goto end;
+							}
+						} else {
+							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Rejected by acl \"%s\". Falling back to Digest auth.\n",
+											  network_ip, switch_str_nil(last_acl));
+						}
+					} else {
+						if (token) {
+							switch_set_string(acl_token, token);
+						}
+						if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES)) {
+							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Approved by acl \"%s[%s]\". Access Granted.\n",
+											  proxied_client_ip, switch_str_nil(last_acl), acl_token);
+							switch_set_string(sip_acl_authed_by, last_acl);
+							switch_set_string(sip_acl_token, acl_token);
+
+							auth_res = AUTH_OK;
+
+						}
+					}
+				}
+			}
+
+			if(auth_res != AUTH_OK) {
 			if (authorization) {
 				auth_res = sofia_reg_parse_auth(profile, authorization, sip, de,
 												(char *) sip->sip_request->rq_method_name, key, keylen, network_ip, network_port, NULL, 0,
@@ -4761,13 +4883,22 @@ void sofia_presence_handle_sip_i_message(int status,
 				nua_respond(nh, SIP_401_UNAUTHORIZED, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 				goto end;
 			}
+			}
 
 			if (channel) {
 				switch_channel_set_variable(channel, "sip_authorized", "true");
+				if (!zstr(sip_acl_authed_by)) {
+					switch_channel_set_variable(channel, "sip_acl_authed_by", sip_acl_authed_by);
+				}
+
+				if (!zstr(sip_acl_token)) {
+					switch_channel_set_variable(channel, "sip_acl_token", sip_acl_token);
+				}
+
+			}
 			}
 		}
-
-		if ((us = sofia_glue_get_unknown_header(sip, "X-FS-Sending-Message")) && !strcmp(us, switch_core_get_uuid())) {
+		if ((us = sofia_glue_get_unknown_header(sip, "X-FS-Sending-Message")) && !strcmp(us, switch_core_get_uuid()) && bounce == NULL) {
 			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Not sending message to ourselves!\n");
 			nua_respond(nh, SIP_503_SERVICE_UNAVAILABLE, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
 			return;
@@ -4850,6 +4981,35 @@ void sofia_presence_handle_sip_i_message(int status,
 					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "type", sip->sip_content_type->c_type);
 				} else {
 					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "type", "text/plain");
+				}
+
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from_full", full_from);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_profile", profile->name);
+
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_from_uri", from_addr);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_from_user", from_user);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_from_host", from_host);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_to_uri", to_addr);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_to_user", to_user);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_to_host", to_host);
+				if(msg_id) {
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Message-ID", msg_id);
+				}
+
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Unique-ID", uuid_str);
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Call-ID", uuid_str);
+
+				if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES) && auth_res == AUTH_OK) {
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_authorized", "true");
+					if (!zstr(sip_acl_token)) {
+						switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "sip_acl_token", sip_acl_token);
+					}
+				}
+
+				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_received_ip", network_ip);
+				if(network_ip_is_proxy) {
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_proxied_ip", proxied_client_ip);
+					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_h_X-AUTH-IP", proxied_client_ip);
 				}
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "from_full", full_from);
