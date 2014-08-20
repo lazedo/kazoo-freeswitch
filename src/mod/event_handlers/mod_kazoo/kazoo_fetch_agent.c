@@ -49,7 +49,6 @@ struct ei_xml_client_s {
 	ei_node_t *ei_node;
 	fetch_handler_t *fetch_handlers;
 	struct ei_xml_client_s *next;
-	uint32_t flags;
 };
 typedef struct ei_xml_client_s ei_xml_client_t;
 
@@ -63,7 +62,6 @@ struct ei_xml_agent_s {
 	switch_mutex_t *replies_mutex;
 	switch_thread_cond_t *new_reply;
 	xml_fetch_reply_t *replies;
-	uint32_t flags;
 };
 typedef struct ei_xml_agent_s ei_xml_agent_t;
 
@@ -138,14 +136,12 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 
 	now = switch_micro_time_now();
 
-	/* read-lock the agent */
-	switch_thread_rwlock_rdlock(agent->lock);
-
-	if (!switch_test_flag(&globals, LFLAG_RUNNING)
-		|| !switch_test_flag(agent, LFLAG_RUNNING)) {
-        switch_thread_rwlock_unlock(agent->lock);
+	if (!switch_test_flag(&globals, LFLAG_RUNNING)) {
 		return xml;
 	}
+
+	/* read-lock the agent */
+	switch_thread_rwlock_rdlock(agent->lock);
 
 	/* serialize access to current, used to round-robin requests */
 	/* TODO: check globals for round-robin boolean or loop all clients */
@@ -161,7 +157,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 	switch_mutex_unlock(agent->current_client_mutex);
 
 	/* no client, no work required */
-	if (!client || !client->fetch_handlers || !switch_test_flag(client, LFLAG_RUNNING)) {
+	if (!client || !client->fetch_handlers) {
 		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "No %s XML erlang handler currently available\n"
 						  ,section);
 		switch_thread_rwlock_unlock(agent->lock);
@@ -185,10 +181,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 	switch_mutex_unlock(agent->replies_mutex);
 
 	fetch_handler = client->fetch_handlers;
-	while (fetch_handler != NULL
-		   && switch_test_flag(&globals, LFLAG_RUNNING)
-		   && switch_test_flag(agent, LFLAG_RUNNING)
-		   && switch_test_flag(client, LFLAG_RUNNING)) {
+	while (fetch_handler != NULL) {
 		ei_send_msg_t *send_msg;
 
 		switch_malloc(send_msg, sizeof(*send_msg));
@@ -241,8 +234,7 @@ static switch_xml_t fetch_handler(const char *section, const char *tag_name, con
 		switch_time_t timeout;
 
 		timeout = switch_micro_time_now() + 3000000;
-		while (switch_micro_time_now() < timeout
-			   && switch_test_flag(&globals, LFLAG_RUNNING)) {
+		while (switch_micro_time_now() < timeout) {
 			/* unlock the replies list and go to sleep, calculate a three second timeout before we started the loop
 			 * plus 100ms to add a little hysteresis between the timeout and the while loop */
 			switch_thread_cond_timedwait(agent->new_reply, agent->replies_mutex, (timeout - switch_micro_time_now() + 100000));
@@ -333,7 +325,6 @@ static switch_status_t bind_fetch_agent(switch_xml_section_t section, switch_xml
 	switch_mutex_init(&agent->replies_mutex, SWITCH_MUTEX_DEFAULT, pool);
 	switch_thread_cond_create(&agent->new_reply, pool);
 	agent->replies = NULL;
-	switch_set_flag(agent, LFLAG_RUNNING);
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Bound to %s XML requests\n"
 					  ,xml_section_to_string(section));
@@ -348,14 +339,13 @@ static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
 	/* get a pointer to our user_data */
 	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(*binding);
 
-    switch_clear_flag(agent, LFLAG_RUNNING);
-
 	/* unbind from the switch */
 	switch_xml_unbind_search_function(binding);
 
 	/* LOCK ALL THE THINGS */
 	switch_thread_rwlock_wrlock(agent->lock);
 	switch_mutex_lock(agent->current_client_mutex);
+	switch_mutex_lock(agent->replies_mutex);
 
 	/* cleanly destroy each client */
 	client = agent->clients;
@@ -389,17 +379,7 @@ static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
 	/* release the locks! */
 	switch_thread_rwlock_unlock(agent->lock);
 	switch_mutex_unlock(agent->current_client_mutex);
-
-    while (1) {
-        switch_mutex_lock(agent->replies_mutex);
-        if (!agent->replies) {
-            switch_mutex_unlock(agent->replies_mutex);
-            break;
-        }
-        switch_mutex_unlock(agent->replies_mutex);
-        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Waiting for XML agents to terminate\n");
-        switch_yield(500000);
-    }
+	switch_mutex_unlock(agent->replies_mutex);
 
 	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Unbound from %s XML requests\n"
 					  ,xml_section_to_string(agent->section));
@@ -437,8 +417,6 @@ static switch_status_t remove_xml_client(ei_node_t *ei_node, switch_xml_binding_
 
 	if (found) {
 		fetch_handler_t *fetch_handler;
-
-	    switch_clear_flag(client, LFLAG_RUNNING);
 
 		if (!prev) {
 			agent->clients = client->next;
@@ -485,8 +463,6 @@ static ei_xml_client_t *add_xml_client(ei_node_t *ei_node, ei_xml_agent_t *agent
 	client->ei_node = ei_node;
 	client->fetch_handlers = NULL;
 	client->next = NULL;
-
-	switch_set_flag(client, LFLAG_RUNNING);
 
 	if (agent->clients) {
 		client->next = agent->clients;
@@ -573,9 +549,7 @@ static switch_status_t handle_api_command_stream(ei_node_t *ei_node, switch_stre
 	/* read-lock the agent */
 	switch_thread_rwlock_rdlock(agent->lock);
 	client = agent->clients;
-	while (client != NULL
-           && switch_test_flag(&globals, LFLAG_RUNNING)
-           && switch_test_flag(agent, LFLAG_RUNNING)) {
+	while (client != NULL) {
 		if (client->ei_node == ei_node) {
 			fetch_handler_t *fetch_handler;
 			fetch_handler = client->fetch_handlers;
@@ -694,9 +668,7 @@ switch_status_t fetch_reply(char *uuid_str, char *xml_str, switch_xml_binding_t 
 
     switch_mutex_lock(agent->replies_mutex);
 	reply = agent->replies;
-	while (reply != NULL
-           && switch_test_flag(&globals, LFLAG_RUNNING)
-           && switch_test_flag(agent, LFLAG_RUNNING)) {
+	while (reply != NULL) {
 		if (!strncmp(reply->uuid_str, uuid_str, SWITCH_UUID_FORMATTED_LENGTH)) {
 			if (!reply->xml_str) {
 				reply->xml_str = xml_str;

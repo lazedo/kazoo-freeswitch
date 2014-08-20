@@ -46,16 +46,16 @@
  * */
 
 #define put8(s,n) do { \
-	(s)[0] = (char)((n) & 0xff); \
-	(s) += 1; \
+        (s)[0] = (char)((n) & 0xff); \
+        (s) += 1; \
 } while (0)
 
 #define put32be(s,n) do {  \
-	(s)[0] = ((n) >>  24) & 0xff; \
-	(s)[1] = ((n) >>  16) & 0xff; \
-	(s)[2] = ((n) >>  8) & 0xff;  \
-	(s)[3] = (n) & 0xff; \
-	(s) += 4; \
+        (s)[0] = ((n) >>  24) & 0xff; \
+        (s)[1] = ((n) >>  16) & 0xff; \
+        (s)[2] = ((n) >>  8) & 0xff;  \
+        (s)[3] = (n) & 0xff; \
+        (s) += 4; \
 } while (0)
 
 #ifdef EI_DEBUG
@@ -102,8 +102,8 @@ void ei_encode_switch_event_headers(ei_x_buff *ebuf, switch_event_t *event) {
     ei_x_encode_list_header(ebuf, i + 1);
 
     if (uuid) {
-		char *unique_id = switch_event_get_header(event, "unique-id");
-		ei_x_encode_binary(ebuf, unique_id, strlen(unique_id));
+                char *unique_id = switch_event_get_header(event, "unique-id");
+                ei_x_encode_binary(ebuf, unique_id, strlen(unique_id));
     } else {
         ei_x_encode_atom(ebuf, "undefined");
     }
@@ -125,56 +125,56 @@ void ei_encode_switch_event_headers(ei_x_buff *ebuf, switch_event_t *event) {
 }
 
 void close_socket(switch_socket_t ** sock) {
-	if (*sock) {
-		switch_socket_shutdown(*sock, SWITCH_SHUTDOWN_READWRITE);
-		switch_socket_close(*sock);
-		*sock = NULL;
-	}
+        if (*sock) {
+                switch_socket_shutdown(*sock, SWITCH_SHUTDOWN_READWRITE);
+                switch_socket_close(*sock);
+                *sock = NULL;
+        }
 }
 
 void close_socketfd(int *sockfd) {
-	if (*sockfd) {
-		shutdown(*sockfd, SHUT_RDWR);
-        close(*sockfd);
-    }
+        if (*sockfd) {
+                shutdown(*sockfd, SHUT_RDWR);
+                close(*sockfd);
+        }
 }
 
 switch_socket_t *create_socket(switch_memory_pool_t *pool) {
-	switch_sockaddr_t *sa;
-	switch_socket_t *socket;
+        switch_sockaddr_t *sa;
+        switch_socket_t *socket;
 
-	if(switch_sockaddr_info_get(&sa, globals.ip, SWITCH_UNSPEC, 0, 0, pool)) {
-		return NULL;
-	}
+        if(switch_sockaddr_info_get(&sa, globals.ip, SWITCH_UNSPEC, 0, 0, pool)) {
+                return NULL;
+        }
 
-	if (switch_socket_create(&socket, switch_sockaddr_get_family(sa), SOCK_STREAM, SWITCH_PROTO_TCP, pool)) {
-		return NULL;
-	}
+        if (switch_socket_create(&socket, switch_sockaddr_get_family(sa), SOCK_STREAM, SWITCH_PROTO_TCP, pool)) {
+                return NULL;
+        }
 
-	if (switch_socket_opt_set(socket, SWITCH_SO_REUSEADDR, 1)) {
-		return NULL;
-	}
+        if (switch_socket_opt_set(socket, SWITCH_SO_REUSEADDR, 1)) {
+                return NULL;
+        }
 
-	if (switch_socket_bind(socket, sa)) {
-		return NULL;
-	}
+        if (switch_socket_bind(socket, sa)) {
+                return NULL;
+        }
 
-	if (switch_socket_listen(socket, 5)){
-		return NULL;
-	}
+        if (switch_socket_listen(socket, 5)){
+                return NULL;
+        }
 
-	//	if (globals.nat_map && switch_nat_get_type()) {
-	//		switch_nat_add_mapping(port, SWITCH_NAT_TCP, NULL, SWITCH_FALSE);
-	//	}
+        //	if (globals.nat_map && switch_nat_get_type()) {
+        //		switch_nat_add_mapping(port, SWITCH_NAT_TCP, NULL, SWITCH_FALSE);
+        //	}
 
-	return socket;
+        return socket;
 }
 
 switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei_cnode_s *ei_cnode) {
     struct hostent *nodehost;
     char hostname[EI_MAXHOSTNAMELEN + 1] = "";
-    char nodename[MAXNODELEN + 1] = "";
-    char cnodename[EI_MAXALIVELEN + 1] = "";
+    char nodename[MAXNODELEN + 1];
+    char cnodename[EI_MAXALIVELEN + 1];
     //EI_MAX_COOKIE_SIZE+1
     char *atsign;
 
@@ -195,26 +195,15 @@ switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei
             gethostname(hostname, EI_MAXHOSTNAMELEN);
         }
 
-/*		else {
-            if (!(_res.options & RES_INIT)) {
-                // init the resolver
-                res_init();
-            }
-            if (_res.dnsrch[0] && !zstr_buf(_res.dnsrch[0])) {
-                strncat(hostname, ".", 1);
-                strncat(hostname, _res.dnsrch[0], EI_MAXHOSTNAMELEN - strlen(hostname));
-            }
-}
-*/
         snprintf(nodename, MAXNODELEN + 1, "%s@%s", globals.ei_nodename, hostname);
     }
 
-	if (globals.ei_shortname) {
-		char *off;
-		if ((off = strchr(nodename, '.'))) {
-			*off = '\0';
-		}
-	}
+        if (globals.ei_shortname) {
+                char *off;
+                if ((off = strchr(nodename, '.'))) {
+                        *off = '\0';
+                }
+        }
 
     /* init the ec stuff */
     if (ei_connect_xinit(ei_cnode, hostname, cnodename, nodename, (Erl_IpAddr) ip_addr, globals.ei_cookie, 0) < 0) {
@@ -227,9 +216,9 @@ switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei
 
 switch_status_t ei_compare_pids(const erlang_pid *pid1, const erlang_pid *pid2) {
     if ((!strcmp(pid1->node, pid2->node))
-		&& pid1->creation == pid2->creation
-		&& pid1->num == pid2->num
-		&& pid1->serial == pid2->serial) {
+                && pid1->creation == pid2->creation
+                && pid1->num == pid2->num
+                && pid1->serial == pid2->serial) {
         return SWITCH_STATUS_SUCCESS;
     } else {
         return SWITCH_STATUS_FALSE;
@@ -237,7 +226,7 @@ switch_status_t ei_compare_pids(const erlang_pid *pid1, const erlang_pid *pid2) 
 }
 
 void ei_link(ei_node_t *ei_node, erlang_pid * from, erlang_pid * to) {
-    char msgbuf[2048] = "";
+    char msgbuf[2048];
     char *s;
     int index = 0;
 
@@ -270,7 +259,7 @@ int ei_helper_send(ei_node_t *ei_node, erlang_pid *to, ei_x_buff *buf) {
 
     if (ei_node->nodefd) {
 #ifdef EI_DEBUG
-		ei_x_print_msg(buf, to, 1);
+                ei_x_print_msg(buf, to, 1);
 #endif
         ret = ei_send(ei_node->nodefd, to, buf->buff, buf->index);
     }
@@ -283,15 +272,15 @@ int ei_decode_atom_safe(char *buf, int *index, char *dst) {
 
     ei_get_type(buf, index, &type, &size);
 
-	if (type != ERL_ATOM_EXT) {
+        if (type != ERL_ATOM_EXT) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected erlang term type %d (size %d), needed atom\n", type, size);
         return -1;
-	} else if (size > MAXATOMLEN) {
+        } else if (size > MAXATOMLEN) {
         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Requested decoding of atom with size %d into a buffer of size %d\n", size, MAXATOMLEN);
         return -1;
-	} else {
-		return ei_decode_atom(buf, index, dst);
-	}
+        } else {
+                return ei_decode_atom(buf, index, dst);
+        }
 }
 
 int ei_decode_string_or_binary(char *buf, int *index, char **dst) {
@@ -305,14 +294,14 @@ int ei_decode_string_or_binary(char *buf, int *index, char **dst) {
         return -1;
     }
 
-	*dst = malloc(size + 1);
+        *dst = malloc(size + 1);
 
-	if (type == ERL_NIL_EXT) {
-		res = 0;
-		**dst = '\0';
-	} else if (type == ERL_BINARY_EXT) {
+        if (type == ERL_NIL_EXT) {
+                res = 0;
+                **dst = '\0';
+        } else if (type == ERL_BINARY_EXT) {
         res = ei_decode_binary(buf, index, *dst, &len);
-        (*dst)[len] = '\0'; /* binaries aren't null terminated */
+        (*dst)[len] = '\0';
     } else {
         res = ei_decode_string(buf, index, *dst);
     }
@@ -331,16 +320,16 @@ int ei_decode_string_or_binary_limited(char *buf, int *index, int maxsize, char 
         return -1;
     }
 
-	if (size > maxsize) {
-		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Requested decoding of %s with size %d into a buffer of size %d\n",
-						  type == ERL_BINARY_EXT ? "binary" : "string", size, maxsize);
-		return -1;
-	}
+        if (size > maxsize) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Requested decoding of %s with size %d into a buffer of size %d\n",
+                                                  type == ERL_BINARY_EXT ? "binary" : "string", size, maxsize);
+                return -1;
+        }
 
-	if (type == ERL_NIL_EXT) {
-		res = 0;
-		dst = '\0';
-	} else if (type == ERL_BINARY_EXT) {
+        if (type == ERL_NIL_EXT) {
+                res = 0;
+                dst = '\0';
+        } else if (type == ERL_BINARY_EXT) {
         res = ei_decode_binary(buf, index, dst, &len);
         dst[len] = '\0'; /* binaries aren't null terminated */
     } else {
@@ -350,206 +339,256 @@ int ei_decode_string_or_binary_limited(char *buf, int *index, int maxsize, char 
     return res;
 }
 
-switch_event_t *create_default_filter() {
-	switch_event_t *filter;
+switch_hash_t *create_default_filter() {
+        switch_hash_t *filter;
 
-//	switch_event_create_subclass(&filter, SWITCH_EVENT_CUSTOM, "mod_kazoo::filter");
-	switch_event_create(&filter, SWITCH_EVENT_CUSTOM);
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Acquired-UUID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "action", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Action", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "alt_event_type", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Answer-State", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Application", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Application-Data", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Application-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Application-Response", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Auth-Method", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Auth-Realm", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Auth-User", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Bridge-A-Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Bridge-B-Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Call-Direction", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Callee-ID-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Callee-ID-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Caller-ID-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Caller-ID-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Context", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Controls", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Destination-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Dialplan", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Network-Addr", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Caller-Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Call-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Channel-Call-State", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Channel-Call-UUID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Channel-Presence-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Channel-State", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Chat-Permissions", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Conference-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Conference-Profile-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Conference-Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "contact", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Detected-Tone", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "dialog_state", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "direction", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Distributed-From", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "DTMF-Digit", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "DTMF-Duration", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Event-Date-Timestamp", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Event-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Event-Subclass", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "expires", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Expires", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Ext-SIP-IP", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "File", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "FreeSWITCH-Hostname", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "from", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Hunt-Destination-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "ip", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Message-Account", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "metadata", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "old_node_channel_uuid", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Callee-ID-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Callee-ID-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Caller-ID-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Caller-ID-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Destination-Number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Direction", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Other-Leg-Channel-Name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Participant-Type", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Path", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "profile_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Profiles", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "proto-specific-event-name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Raw-Application-Data", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "realm", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Resigning-UUID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "set", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_auto_answer", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_auth_method", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_from_host", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_from_user", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_to_host", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_to_user", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sub-call-id", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "technology", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "to", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "URL", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "username", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_channel_is_moving", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_collected_digits", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_current_application", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_current_application_data", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_domain_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_effective_caller_id_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_effective_caller_id_number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_bad_rows", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_document_total_pages", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_document_transferred_pages", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_ecm_used", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_result_code", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_result_text", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_success", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_fax_transfer_rate", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_holding_uuid", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_hold_music", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_media_group_id", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_originate_disposition", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_playback_terminator_used", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_presence_id", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_record_ms", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_recovered", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_silence_hits_exhausted", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_auth_realm", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_host", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_user", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_tag", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_h_X-AUTH-IP", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_received_ip", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_host", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_user", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_tag", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sofia_profile_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_transfer_history", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_user_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_endpoint_disposition", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_originate_disposition", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_bridge_hangup_cause", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_hangup_cause", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_last_bridge_proto_specific_hangup_cause", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_proto_specific_hangup_cause", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "VM-Call-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "VM-sub-call-id", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "whistle_application_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "whistle_application_response", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "whistle_event_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_auto_answer_notify", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "eavesdrop_group", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "origination_caller_id_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "origination_caller_id_number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "origination_callee_id_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "origination_callee_id_number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_auth_username", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "sip_auth_password", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_caller_id_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_caller_id_number", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_callee_id_name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "effective_callee_id_number", "undefined");
+        switch_core_hash_init(&filter);
 
-	/* Registration headers */
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "call-id", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "profile-name", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "from-user", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "from-host", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "presence-hosts", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "contact", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "rpid", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "status", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "expires", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "to-user", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "to-host", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "network-ip", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "network-port", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "username", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "realm", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "user-agent", "undefined");
+        switch_core_hash_insert(filter, "Acquired-UUID", "1");
+        switch_core_hash_insert(filter, "action", "1");
+        switch_core_hash_insert(filter, "Action", "1");
+        switch_core_hash_insert(filter, "alt_event_type", "1");
+        switch_core_hash_insert(filter, "Answer-State", "1");
+        switch_core_hash_insert(filter, "Application", "1");
+        switch_core_hash_insert(filter, "Application-Data", "1");
+        switch_core_hash_insert(filter, "Application-Name", "1");
+        switch_core_hash_insert(filter, "Application-Response", "1");
+        switch_core_hash_insert(filter, "att_xfer_replaced_by", "1");
+        switch_core_hash_insert(filter, "Auth-Method", "1");
+        switch_core_hash_insert(filter, "Auth-Realm", "1");
+        switch_core_hash_insert(filter, "Auth-User", "1");
+        switch_core_hash_insert(filter, "Bridge-A-Unique-ID", "1");
+        switch_core_hash_insert(filter, "Bridge-B-Unique-ID", "1");
+        switch_core_hash_insert(filter, "Call-Direction", "1");
+        switch_core_hash_insert(filter, "Caller-Callee-ID-Name", "1");
+        switch_core_hash_insert(filter, "Caller-Callee-ID-Number", "1");
+        switch_core_hash_insert(filter, "Caller-Caller-ID-Name", "1");
+        switch_core_hash_insert(filter, "Caller-Caller-ID-Number", "1");
+        switch_core_hash_insert(filter, "Caller-Context", "1");
+        switch_core_hash_insert(filter, "Caller-Controls", "1");
+        switch_core_hash_insert(filter, "Caller-Destination-Number", "1");
+        switch_core_hash_insert(filter, "Caller-Dialplan", "1");
+        switch_core_hash_insert(filter, "Caller-Network-Addr", "1");
+        switch_core_hash_insert(filter, "Caller-Unique-ID", "1");
+        switch_core_hash_insert(filter, "Call-ID", "1");
+        switch_core_hash_insert(filter, "Channel-Call-State", "1");
+        switch_core_hash_insert(filter, "Channel-Call-UUID", "1");
+        switch_core_hash_insert(filter, "Channel-Presence-ID", "1");
+        switch_core_hash_insert(filter, "Channel-State", "1");
+        switch_core_hash_insert(filter, "Chat-Permissions", "1");
+        switch_core_hash_insert(filter, "Conference-Name", "1");
+        switch_core_hash_insert(filter, "Conference-Profile-Name", "1");
+        switch_core_hash_insert(filter, "Conference-Unique-ID", "1");
+        switch_core_hash_insert(filter, "contact", "1");
+        switch_core_hash_insert(filter, "Detected-Tone", "1");
+        switch_core_hash_insert(filter, "dialog_state", "1");
+        switch_core_hash_insert(filter, "direction", "1");
+        switch_core_hash_insert(filter, "Distributed-From", "1");
+        switch_core_hash_insert(filter, "DTMF-Digit", "1");
+        switch_core_hash_insert(filter, "DTMF-Duration", "1");
+        switch_core_hash_insert(filter, "Event-Date-Timestamp", "1");
+        switch_core_hash_insert(filter, "Event-Name", "1");
+        switch_core_hash_insert(filter, "Event-Subclass", "1");
+        switch_core_hash_insert(filter, "expires", "1");
+        switch_core_hash_insert(filter, "Expires", "1");
+        switch_core_hash_insert(filter, "Ext-SIP-IP", "1");
+        switch_core_hash_insert(filter, "File", "1");
+        switch_core_hash_insert(filter, "FreeSWITCH-Hostname", "1");
+        switch_core_hash_insert(filter, "from", "1");
+        switch_core_hash_insert(filter, "Hunt-Destination-Number", "1");
+        switch_core_hash_insert(filter, "ip", "1");
+        switch_core_hash_insert(filter, "Message-Account", "1");
+        switch_core_hash_insert(filter, "metadata", "1");
+        switch_core_hash_insert(filter, "old_node_channel_uuid", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Callee-ID-Name", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Callee-ID-Number", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Caller-ID-Name", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Caller-ID-Number", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Destination-Number", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Direction", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Unique-ID", "1");
+        switch_core_hash_insert(filter, "Other-Leg-Channel-Name", "1");
+        switch_core_hash_insert(filter, "Participant-Type", "1");
+        switch_core_hash_insert(filter, "Path", "1");
+        switch_core_hash_insert(filter, "profile_name", "1");
+        switch_core_hash_insert(filter, "Profiles", "1");
+        switch_core_hash_insert(filter, "proto-specific-event-name", "1");
+        switch_core_hash_insert(filter, "Raw-Application-Data", "1");
+        switch_core_hash_insert(filter, "realm", "1");
+        switch_core_hash_insert(filter, "Resigning-UUID", "1");
+        switch_core_hash_insert(filter, "set", "1");
+        switch_core_hash_insert(filter, "sip_auto_answer", "1");
+        switch_core_hash_insert(filter, "sip_auth_method", "1");
+        switch_core_hash_insert(filter, "sip_from_host", "1");
+        switch_core_hash_insert(filter, "sip_from_user", "1");
+        switch_core_hash_insert(filter, "sip_to_host", "1");
+        switch_core_hash_insert(filter, "sip_to_user", "1");
+        switch_core_hash_insert(filter, "sub-call-id", "1");
+        switch_core_hash_insert(filter, "technology", "1");
+        switch_core_hash_insert(filter, "to", "1");
+        switch_core_hash_insert(filter, "Unique-ID", "1");
+        switch_core_hash_insert(filter, "URL", "1");
+        switch_core_hash_insert(filter, "username", "1");
+        switch_core_hash_insert(filter, "variable_channel_is_moving", "1");
+        switch_core_hash_insert(filter, "variable_collected_digits", "1");
+        switch_core_hash_insert(filter, "variable_current_application", "1");
+        switch_core_hash_insert(filter, "variable_current_application_data", "1");
+        switch_core_hash_insert(filter, "variable_domain_name", "1");
+        switch_core_hash_insert(filter, "variable_effective_caller_id_name", "1");
+        switch_core_hash_insert(filter, "variable_effective_caller_id_number", "1");
+        switch_core_hash_insert(filter, "variable_holding_uuid", "1");
+        switch_core_hash_insert(filter, "variable_hold_music", "1");
+        switch_core_hash_insert(filter, "variable_media_group_id", "1");
+        switch_core_hash_insert(filter, "variable_originate_disposition", "1");
+        switch_core_hash_insert(filter, "variable_playback_terminator_used", "1");
+        switch_core_hash_insert(filter, "variable_presence_id", "1");
+        switch_core_hash_insert(filter, "variable_record_ms", "1");
+        switch_core_hash_insert(filter, "variable_recovered", "1");
+        switch_core_hash_insert(filter, "variable_silence_hits_exhausted", "1");
+        switch_core_hash_insert(filter, "variable_sip_auth_realm", "1");
+        switch_core_hash_insert(filter, "variable_sip_from_host", "1");
+        switch_core_hash_insert(filter, "variable_sip_from_user", "1");
+        switch_core_hash_insert(filter, "variable_sip_from_tag", "1");
+        switch_core_hash_insert(filter, "variable_sip_h_X-AUTH-IP", "1");
+        switch_core_hash_insert(filter, "variable_sip_received_ip", "1");
+        switch_core_hash_insert(filter, "variable_sip_to_host", "1");
+        switch_core_hash_insert(filter, "variable_sip_to_user", "1");
+        switch_core_hash_insert(filter, "variable_sip_to_tag", "1");
+        switch_core_hash_insert(filter, "variable_sofia_profile_name", "1");
+        switch_core_hash_insert(filter, "variable_transfer_history", "1");
+        switch_core_hash_insert(filter, "variable_user_name", "1");
+        switch_core_hash_insert(filter, "variable_endpoint_disposition", "1");
+        switch_core_hash_insert(filter, "variable_originate_disposition", "1");
+        switch_core_hash_insert(filter, "variable_bridge_hangup_cause", "1");
+        switch_core_hash_insert(filter, "variable_hangup_cause", "1");
+        switch_core_hash_insert(filter, "variable_last_bridge_proto_specific_hangup_cause", "1");
+        switch_core_hash_insert(filter, "variable_proto_specific_hangup_cause", "1");
+        switch_core_hash_insert(filter, "VM-Call-ID", "1");
+        switch_core_hash_insert(filter, "VM-sub-call-id", "1");
+        switch_core_hash_insert(filter, "whistle_application_name", "1");
+        switch_core_hash_insert(filter, "whistle_application_response", "1");
+        switch_core_hash_insert(filter, "whistle_event_name", "1");
+        switch_core_hash_insert(filter, "sip_auto_answer_notify", "1");
+        switch_core_hash_insert(filter, "eavesdrop_group", "1");
+        switch_core_hash_insert(filter, "origination_caller_id_name", "1");
+        switch_core_hash_insert(filter, "origination_caller_id_number", "1");
+        switch_core_hash_insert(filter, "origination_callee_id_name", "1");
+        switch_core_hash_insert(filter, "origination_callee_id_number", "1");
+        switch_core_hash_insert(filter, "sip_auth_username", "1");
+        switch_core_hash_insert(filter, "sip_auth_password", "1");
+        switch_core_hash_insert(filter, "effective_caller_id_name", "1");
+        switch_core_hash_insert(filter, "effective_caller_id_number", "1");
+        switch_core_hash_insert(filter, "effective_callee_id_name", "1");
+        switch_core_hash_insert(filter, "effective_callee_id_number", "1");
 
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Hangup-Cause", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Unique-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_switch_r_sdp", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_local_sdp_str", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_to_uri", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_from_uri", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_sip_user_agent", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_duration", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_billsec", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_progresssec", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "variable_digits_dialed", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Member-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Floor", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Video", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Hear", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Speak", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Talking", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Current-Energy", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Energy-Level", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Mute-Detect", "undefined");
+        /* Registration headers */
+        switch_core_hash_insert(filter, "call-id", "1");
+        switch_core_hash_insert(filter, "profile-name", "1");
+        switch_core_hash_insert(filter, "from-user", "1");
+        switch_core_hash_insert(filter, "from-host", "1");
+        switch_core_hash_insert(filter, "presence-hosts", "1");
+        switch_core_hash_insert(filter, "contact", "1");
+        switch_core_hash_insert(filter, "rpid", "1");
+        switch_core_hash_insert(filter, "status", "1");
+        switch_core_hash_insert(filter, "expires", "1");
+        switch_core_hash_insert(filter, "to-user", "1");
+        switch_core_hash_insert(filter, "to-host", "1");
+        switch_core_hash_insert(filter, "network-ip", "1");
+        switch_core_hash_insert(filter, "network-port", "1");
+        switch_core_hash_insert(filter, "username", "1");
+        switch_core_hash_insert(filter, "realm", "1");
+        switch_core_hash_insert(filter, "user-agent", "1");
 
-	/* RTMP headers */
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Session-ID", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Profile", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Flash-Version", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-SWF-URL", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-TC-URL", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "RTMP-Page-URL", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "User", "undefined");
-	switch_event_add_header_string(filter, SWITCH_STACK_BOTTOM, "Domain", "undefined");
+        switch_core_hash_insert(filter, "Hangup-Cause", "1");
+        switch_core_hash_insert(filter, "Unique-ID", "1");
+        switch_core_hash_insert(filter, "variable_switch_r_sdp", "1");
+        switch_core_hash_insert(filter, "variable_sip_local_sdp_str", "1");
+        switch_core_hash_insert(filter, "variable_sip_to_uri", "1");
+        switch_core_hash_insert(filter, "variable_sip_from_uri", "1");
+        switch_core_hash_insert(filter, "variable_sip_user_agent", "1");
+        switch_core_hash_insert(filter, "variable_duration", "1");
+        switch_core_hash_insert(filter, "variable_billsec", "1");
+        switch_core_hash_insert(filter, "variable_progresssec", "1");
+        switch_core_hash_insert(filter, "variable_digits_dialed", "1");
+        switch_core_hash_insert(filter, "Member-ID", "1");
+        switch_core_hash_insert(filter, "Floor", "1");
+        switch_core_hash_insert(filter, "Video", "1");
+        switch_core_hash_insert(filter, "Hear", "1");
+        switch_core_hash_insert(filter, "Speak", "1");
+        switch_core_hash_insert(filter, "Talking", "1");
+        switch_core_hash_insert(filter, "Current-Energy", "1");
+        switch_core_hash_insert(filter, "Energy-Level", "1");
+        switch_core_hash_insert(filter, "Mute-Detect", "1");
 
-	return filter;
+        /* RTMP headers */
+        switch_core_hash_insert(filter, "RTMP-Session-ID", "1");
+        switch_core_hash_insert(filter, "RTMP-Profile", "1");
+        switch_core_hash_insert(filter, "RTMP-Flash-Version", "1");
+        switch_core_hash_insert(filter, "RTMP-SWF-URL", "1");
+        switch_core_hash_insert(filter, "RTMP-TC-URL", "1");
+        switch_core_hash_insert(filter, "RTMP-Page-URL", "1");
+        switch_core_hash_insert(filter, "User", "1");
+        switch_core_hash_insert(filter, "Domain", "1");
+
+        /* Fax headers */
+        switch_core_hash_insert(filter, "variable_fax_bad_rows", "1");
+        switch_core_hash_insert(filter, "variable_fax_document_total_pages", "1");
+        switch_core_hash_insert(filter, "variable_fax_document_transferred_pages", "1");
+        switch_core_hash_insert(filter, "variable_fax_ecm_used", "1");
+        switch_core_hash_insert(filter, "variable_fax_result_code", "1");
+        switch_core_hash_insert(filter, "variable_fax_result_text", "1");
+        switch_core_hash_insert(filter, "variable_fax_success", "1");
+        switch_core_hash_insert(filter, "variable_fax_transfer_rate", "1");
+        switch_core_hash_insert(filter, "variable_fax_local_station_id", "1");
+        switch_core_hash_insert(filter, "variable_fax_remote_station_id", "1");
+        switch_core_hash_insert(filter, "variable_fax_remote_country", "1");
+        switch_core_hash_insert(filter, "variable_fax_remote_vendor", "1");
+        switch_core_hash_insert(filter, "variable_fax_remote_model", "1");
+        switch_core_hash_insert(filter, "variable_fax_image_resolution", "1");
+        switch_core_hash_insert(filter, "variable_fax_file_image_resolution", "1");
+        switch_core_hash_insert(filter, "variable_fax_image_size", "1");
+        switch_core_hash_insert(filter, "variable_fax_image_pixel_size", "1");
+        switch_core_hash_insert(filter, "variable_fax_file_image_pixel_size", "1");
+        switch_core_hash_insert(filter, "variable_fax_longest_bad_row_run", "1");
+        switch_core_hash_insert(filter, "variable_fax_encoding", "1");
+        switch_core_hash_insert(filter, "variable_fax_encoding_name", "1");
+        switch_core_hash_insert(filter, "variable_fax_header", "1");
+        switch_core_hash_insert(filter, "variable_fax_ident", "1");
+        switch_core_hash_insert(filter, "variable_fax_timezone", "1");
+        switch_core_hash_insert(filter, "variable_fax_doc_id", "1");
+        switch_core_hash_insert(filter, "variable_fax_doc_database", "1");
+
+        /* Secure headers */
+                /*
+        switch_core_hash_insert(filter, "variable_sdp_secure_savp_only", "1");
+        switch_core_hash_insert(filter, "variable_rtp_has_crypto", "1");
+        switch_core_hash_insert(filter, "variable_rtp_secure_media", "1");
+        switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed", "1");
+        switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed_audio", "1");
+        switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed_video", "1");
+        switch_core_hash_insert(filter, "variable_zrtp_secure_media", "1");
+        switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed", "1");
+        switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed_audio", "1");
+        switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed_video", "1");
+        switch_core_hash_insert(filter, "sdp_secure_savp_only", "1");
+        switch_core_hash_insert(filter, "rtp_has_crypto", "1");
+        switch_core_hash_insert(filter, "rtp_secure_media", "1");
+        switch_core_hash_insert(filter, "rtp_secure_media_confirmed", "1");
+        switch_core_hash_insert(filter, "rtp_secure_media_confirmed_audio", "1");
+        switch_core_hash_insert(filter, "rtp_secure_media_confirmed_video", "1");
+        switch_core_hash_insert(filter, "zrtp_secure_media", "1");
+        switch_core_hash_insert(filter, "zrtp_secure_media_confirmed", "1");
+        switch_core_hash_insert(filter, "zrtp_secure_media_confirmed_audio", "1");
+        switch_core_hash_insert(filter, "zrtp_secure_media_confirmed_video", "1");
+                */
+
+        /* Device Redirect headers */
+                /*
+        switch_core_hash_insert(filter, "variable_last_bridge_hangup_cause", "1");
+        switch_core_hash_insert(filter, "variable_sip_redirected_by", "1");
+                */
+
+        return filter;
 }
 
 /* For Emacs:
