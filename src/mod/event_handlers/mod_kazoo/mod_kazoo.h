@@ -48,9 +48,9 @@ struct ei_event_stream_s {
         switch_socket_t *socket;
         switch_mutex_t *socket_mutex;
         switch_bool_t connected;
-    char remote_ip[25];
+        char remote_ip[25];
         uint16_t remote_port;
-    char local_ip[25];
+        char local_ip[25];
         uint16_t local_port;
         erlang_pid pid;
         uint32_t flags;
@@ -79,14 +79,6 @@ struct ei_node_s {
 };
 typedef struct ei_node_s ei_node_t;
 
-/*
-struct nat_map_s {
-        int nat_map;
-        struct nat_map_s *next;
-};
-typedef struct nat_map_s nat_map_t;
-*/
-
 struct globals_s {
         switch_memory_pool_t *pool;
         switch_atomic_t threads;
@@ -113,9 +105,9 @@ struct globals_s {
         uint32_t flags;
         int send_all_headers;
         int send_all_private_headers;
-    	int connection_timeout;
-    	int receive_timeout;
-    	int pre_allocated_msg_size;
+        int connection_timeout;
+        int receive_timeout;
+        int pre_allocated_msg_size;
 } globals;
 typedef struct globals_s globals_t;
 

@@ -336,9 +336,9 @@ static switch_status_t config(void) {
         char *cf = "kazoo.conf";
         switch_xml_t cfg, xml, child, param;
         globals.send_all_headers = globals.send_all_private_headers = 0;
-    	globals.connection_timeout = 500;
-    	globals.receive_timeout = 5;
-    	globals.pre_allocated_msg_size = 0;
+        globals.connection_timeout = 500;
+        globals.receive_timeout = 5;
+        globals.pre_allocated_msg_size = 0;
 
 
         if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
@@ -381,13 +381,13 @@ static switch_status_t config(void) {
                                         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-private-headers: %s\n", val);
                                         globals.send_all_private_headers = switch_true(val);
                                 } else if (!strcmp(var, "connection-timeout")) {
-                        				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set connection-timeout: %s\n", val);
-                        				globals.connection_timeout = atoi(val);
+                                                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set connection-timeout: %s\n", val);
+                                                        globals.connection_timeout = atoi(val);
                                 } else if (!strcmp(var, "receive-timeout")) {
-                        				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-timeout: %s\n", val);
-                        				globals.receive_timeout = atoi(val);
+                                                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-timeout: %s\n", val);
+                                                        globals.receive_timeout = atoi(val);
                                 } else if (!strcmp(var, "pre_allocated_msg_size")) {
-                                		globals.pre_allocated_msg_size = atoi(val);
+                                                globals.pre_allocated_msg_size = atoi(val);
                                 }
                         }
                 }
