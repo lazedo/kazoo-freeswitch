@@ -338,7 +338,9 @@ static switch_status_t config(void) {
         globals.send_all_headers = globals.send_all_private_headers = 0;
         globals.connection_timeout = 500;
         globals.receive_timeout = 200;
-        globals.pre_allocated_msg_size = 0;
+        globals.receive_msg_preallocate = 2000;
+        globals.event_stream_preallocate = 4000;
+        globals.send_msg_batch = 10;
 
         if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
                 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
@@ -385,8 +387,12 @@ static switch_status_t config(void) {
                                 } else if (!strcmp(var, "receive-timeout")) {
                                                         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-timeout: %s\n", val);
                                                         globals.receive_timeout = atoi(val);
-                                } else if (!strcmp(var, "pre_allocated_msg_size")) {
-                                                globals.pre_allocated_msg_size = atoi(val);
+                                } else if (!strcmp(var, "receive-msg-preallocate")) {
+                                                globals.receive_msg_preallocate = atoi(val);
+                                } else if (!strcmp(var, "event-stream-preallocate")) {
+                                                globals.event_stream_preallocate = atoi(val);
+                                } else if (!strcmp(var, "send-msg-batch-size")) {
+                                                globals.send_msg_batch = atoi(val);
                                 }
                         }
                 }
@@ -405,6 +411,22 @@ static switch_status_t config(void) {
 
                 switch_xml_free(xml);
         }
+
+
+		if (globals.receive_msg_preallocate < 0) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid receive message preallocate value, disabled\n");
+                globals.receive_msg_preallocate = 0;
+		}
+
+		if (globals.event_stream_preallocate < 0) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid event stream preallocate value, disabled\n");
+                globals.event_stream_preallocate = 0;
+		}
+
+		if (globals.send_msg_batch < 1) {
+                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid send message batch size, reverting to default\n");
+                globals.send_msg_batch = 10;
+		}
 
         if (!globals.event_filter) {
                 switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Event filter not found in configuration, using default\n");

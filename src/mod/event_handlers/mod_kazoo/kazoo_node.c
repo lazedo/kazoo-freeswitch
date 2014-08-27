@@ -1076,14 +1076,15 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
 
         while (switch_test_flag(ei_node, LFLAG_RUNNING) && switch_test_flag(&globals, LFLAG_RUNNING)) {
                 int status;
+                int send_msg_count = 0;
                 void *pop;
 
                 if (!received_msg) {
                         switch_malloc(received_msg, sizeof(*received_msg));
                         /* create a new buf for the erlang message and a rbuf for the reply */
-                        if(globals.pre_allocated_msg_size > 0) {
-                                received_msg->buf.buff = malloc(globals.pre_allocated_msg_size);
-                                received_msg->buf.buffsz = globals.pre_allocated_msg_size;
+                        if(globals.receive_msg_preallocate > 0) {
+                                received_msg->buf.buff = malloc(globals.receive_msg_preallocate);
+                                received_msg->buf.buffsz = globals.receive_msg_preallocate;
                                 received_msg->buf.index = 0;
                                 if(received_msg->buf.buff == NULL) {
                                         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not pre-allocate memory for mod_kazoo message\n");
@@ -1094,7 +1095,8 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
                         }
                 }
 
-                if (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS) {
+                while (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS
+                	&& ++send_msg_count <= globals.send_msg_batch) {
                         ei_send_msg_t *send_msg = (ei_send_msg_t *) pop;
                         ei_helper_send(ei_node, &send_msg->pid, &send_msg->buf);
                         switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sent erlang message to %s <%d.%d.%d>\n"
@@ -1118,6 +1120,9 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
                                 ei_x_free(&received_msg->buf);
                                 switch_safe_free(received_msg);
                         }
+                        if (globals.receive_msg_preallocate > 0 && received_msg->buf.buffsz > globals.receive_msg_preallocate) {
+  	                            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased received message buffer size to %d\n", received_msg->buf.buffsz);
+						}
                         received_msg = NULL;
                         break;
                 case ERL_ERROR:
