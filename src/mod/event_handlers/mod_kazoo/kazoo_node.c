@@ -1094,12 +1094,12 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
                                 ei_x_new(&received_msg->buf);
                         }
                 }
-
+                
                 while (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS
-                	&& ++send_msg_count <= globals.send_msg_batch) {
-                        ei_send_msg_t *send_msg = (ei_send_msg_t *) pop;
-                        ei_helper_send(ei_node, &send_msg->pid, &send_msg->buf);
-                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sent erlang message to %s <%d.%d.%d>\n"
+                		&& ++send_msg_count <= globals.send_msg_batch) {
+                	    ei_send_msg_t *send_msg = (ei_send_msg_t *) pop;
+                	    ei_helper_send(ei_node, &send_msg->pid, &send_msg->buf);
+                	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sent erlang message to %s <%d.%d.%d>\n"
                                                           ,send_msg->pid.node
                                                           ,send_msg->pid.creation
                                                           ,send_msg->pid.num
@@ -1121,8 +1121,8 @@ static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) 
                                 switch_safe_free(received_msg);
                         }
                         if (globals.receive_msg_preallocate > 0 && received_msg->buf.buffsz > globals.receive_msg_preallocate) {
-  	                            switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased received message buffer size to %d\n", received_msg->buf.buffsz);
-						}
+                        	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased received message buffer size to %d\n", received_msg->buf.buffsz);
+                        }
                         received_msg = NULL;
                         break;
                 case ERL_ERROR:

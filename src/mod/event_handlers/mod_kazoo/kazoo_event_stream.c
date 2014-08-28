@@ -223,24 +223,24 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void 
                                 char high, low;
                                 switch_size_t size = 1;
 
-								if(globals.event_stream_preallocate > 0) {
-								        ebuf.buff = malloc(globals.event_stream_preallocate);
+                                if(globals.event_stream_preallocate > 0) {
+                                        ebuf.buff = malloc(globals.event_stream_preallocate);
                                         ebuf.buffsz = globals.event_stream_preallocate;
                                         ebuf.index = 0;
                                         if(ebuf.buff == NULL) {
-                                                switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not pre-allocate memory for mod_kazoo message\n");
-                                                break;
+                                        	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not pre-allocate memory for mod_kazoo message\n");
+                                        	    break;
                                         }
                                         ei_x_encode_version(&ebuf);
-								} else {								
-                                        ei_x_new_with_version(&ebuf);
-								}
-
+                                } else {
+                                	    ei_x_new_with_version(&ebuf);
+                                }
+                                
                                 ei_encode_switch_event(&ebuf, event);
-
-								if (globals.event_stream_preallocate > 0 && ebuf.buffsz > globals.event_stream_preallocate) {
-  	                                    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased event stream buffer size to %d\n", ebuf.buffsz);
-  	                            }
+                                
+                                if (globals.event_stream_preallocate > 0 && ebuf.buffsz > globals.event_stream_preallocate) {
+                                	    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased event stream buffer size to %d\n", ebuf.buffsz);
+                                }
 
                                 high = ebuf.index >> 8;
                                 low = ebuf.index & 0xFF;
