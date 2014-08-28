@@ -187,6 +187,9 @@
         <header name="variable_duration" />
         <header name="variable_billsec" />
         <header name="variable_progresssec" />
+        <header name="variable_progress_uepoch" />
+        <header name="variable_progress_media_uepoch" />
+        <header name="variable_start_uepoch" />
         <header name="variable_digits_dialed" />
         <header name="variable_sip_cid_type" />
 

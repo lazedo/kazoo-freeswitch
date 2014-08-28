@@ -509,6 +509,9 @@ switch_hash_t *create_default_filter() {
         switch_core_hash_insert(filter, "variable_duration", "1");
         switch_core_hash_insert(filter, "variable_billsec", "1");
         switch_core_hash_insert(filter, "variable_progresssec", "1");
+        switch_core_hash_insert(filter, "variable_progress_uepoch", "1");
+        switch_core_hash_insert(filter, "variable_progress_media_uepoch", "1");
+        switch_core_hash_insert(filter, "variable_start_uepoch", "1");
         switch_core_hash_insert(filter, "variable_digits_dialed", "1");
         switch_core_hash_insert(filter, "Member-ID", "1");
         switch_core_hash_insert(filter, "Floor", "1");
