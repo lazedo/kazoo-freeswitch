@@ -50,7 +50,7 @@ static void trace_handler(switch_event_t *event)
 //switch_event_t *clone = NULL;
 //time_t now = switch_epoch_time_now(NULL);
 
-	switch_assert(event != NULL);
+switch_assert(event != NULL);
 
 
 }
@@ -67,7 +67,7 @@ memset(&globals, 0, sizeof(globals));
 
 if (switch_event_bind_removable(modname, SWITCH_EVENT_ALL, SWITCH_EVENT_SUBCLASS_ANY, trace_handler, NULL, &globals.node) != SWITCH_STATUS_SUCCESS) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't bind!\n");
-    return SWITCH_STATUS_GENERR;
+return SWITCH_STATUS_GENERR;
   }
 
   /* indicate that the module should continue to be loaded */
@@ -82,14 +82,3 @@ SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_trace_shutdown)
 switch_event_unbind(&globals.node);
 return SWITCH_STATUS_SUCCESS;
 }
-
-/* For Emacs:
- * Local Variables:
- * mode:c
- * indent-tabs-mode:t
- * tab-width:4
- * c-basic-offset:4
- * End:
- * For VIM:
- * vim:set softtabstop=4 shiftwidth=4 tabstop=4 noet
- */
