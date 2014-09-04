@@ -53,13 +53,7 @@ static void trace_handler(switch_event_t *event)
 
   switch_assert(event != NULL);
 
-  if ( !(trace_event = switch_event_get_header(event, "variable_trace_event")) ) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "ignore event %s\n", switch_event_name(event->event_id));
-    return;
-  }
-
-  if ( switch_false(trace_event) ) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "trace event was %s\n", trace_event);
+  if ( !(trace_event = switch_event_get_header(event, "variable_trace_event")) || switch_false(trace_event) ) {
     return;
   }
 
