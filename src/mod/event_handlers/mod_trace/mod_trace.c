@@ -47,61 +47,29 @@ static struct {
   char* path;
   switch_memory_pool_t *pool;
   switch_mutex_t *mutex;
+  switch_file_t *fd;
 } globals;
 
 static void write_to_file(switch_event_t *event, char* buf) {
-  switch_file_t *fd;
-  char *path = switch_mprintf("%s%s%s", globals.path ? globals.path : "/tmp", SWITCH_PATH_SEPARATOR, "trace.dat");
-
-  unsigned int flags = 0;
-
-  size_t buf_len = strlen(buf), eol = 1;
-
-  flags |= SWITCH_FOPEN_WRITE;
-  flags |= SWITCH_FOPEN_CREATE;
-  flags |= SWITCH_FOPEN_APPEND;
+  switch_size_t buf_len = strlen(buf),
+    eol = 1;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grabbing mutex\n");
   switch_mutex_lock(globals.mutex);
 
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "attempting to open %s for appending %d len: %s\n", path, (int)buf_len, buf);
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing to file\n");
 
-  if( switch_file_open(&fd
-                       ,path
-                       ,flags
-                       ,SWITCH_FPROT_OS_DEFAULT
-                       ,globals.pool
-                      )
-      != SWITCH_STATUS_SUCCESS
-      ) {
-    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "failed to open path %s\n", path);
-    goto cleanup;
-  }
-
-  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing to path %s\n", path);
-
-  if( (switch_file_write(fd, buf, &buf_len)) == SWITCH_STATUS_SUCCESS ) {
-switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing eol\n");
-    switch_file_write(fd, "\n", &eol);
+  if( (switch_file_write(globals.fd, buf, &buf_len)) == SWITCH_STATUS_SUCCESS ) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing eol\n");
+    switch_file_write(globals.fd, "\n", &eol);
   } else {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "failed to write buffer\n");
   }
 
-switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "close the file\n");
-  switch_file_close(fd);
-  fd = NULL;
-
-switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "do cleanup\n");
- cleanup:
-
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "unlock the mutex\n");
-
   switch_mutex_unlock(globals.mutex);
 
-switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "free the path\n");
-  switch_safe_free(path);
-
-switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "return void\n");
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "return void\n");
   return;
 }
 
@@ -150,6 +118,9 @@ SWITCH_MODULE_DEFINITION(mod_trace, mod_trace_load, mod_trace_shutdown, NULL);
 /* Macro expands to: switch_status_t mod_trace_load(switch_loadable_module_interface_t **module_interface, switch_memory_pool_t *pool) */
 SWITCH_MODULE_LOAD_FUNCTION(mod_trace_load)
 {
+  char *path = switch_mprintf("%s%s%s", "/tmp", SWITCH_PATH_SEPARATOR, "trace.dat");
+  unsigned int flags = 0;
+
   /* connect my internal structure to the blank pointer passed to me */
   *module_interface = switch_loadable_module_create_module_interface(pool, modname);
 
@@ -168,6 +139,24 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_trace_load)
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Bound for events!\n");
 
+  flags |= SWITCH_FOPEN_WRITE;
+  flags |= SWITCH_FOPEN_CREATE;
+  flags |= SWITCH_FOPEN_APPEND;
+
+  if( switch_file_open(&globals.fd
+                       ,path
+                       ,flags
+                       ,SWITCH_FPROT_OS_DEFAULT
+                       ,globals.pool
+                      )
+      != SWITCH_STATUS_SUCCESS
+      ) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "failed to open path %s\n", path);
+    return SWITCH_STATUS_GENERR;
+  }
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "File is open for writing!\n");
+
   /* indicate that the module should continue to be loaded */
   return SWITCH_STATUS_SUCCESS;
 }
@@ -179,5 +168,10 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_trace_load)
 SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_trace_shutdown)
 {
   switch_event_unbind(&globals.node);
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "close the file\n");
+  switch_file_close(globals.fd);
+  globals.fd = NULL;
+
   return SWITCH_STATUS_SUCCESS;
 }
