@@ -104,8 +104,13 @@ static void trace_handler(switch_event_t *event)
     break;
   }
 
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "free buf\n");
   switch_safe_free(buf);
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "free trace_event\n");
   switch_safe_free(trace_event);
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "done with this event\n");
 
   return;
 }
