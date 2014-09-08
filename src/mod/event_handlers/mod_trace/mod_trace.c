@@ -44,11 +44,70 @@ typedef enum {
 static struct {
   switch_event_node_t *node;
   event_format_t format;
+  char* path;
+  switch_memory_pool_t *pool;
+  switch_mutex_t *mutex;
 } globals;
+
+static void write_to_file(switch_event_t *event, char* buf) {
+  switch_file_t *fd;
+  char *path = switch_mprintf("%s%s%s", globals.path ? globals.path : "/tmp", SWITCH_PATH_SEPARATOR, "trace.dat");
+
+  unsigned int flags = 0;
+
+  size_t buf_len = strlen(buf), eol = 1;
+
+  flags |= SWITCH_FOPEN_WRITE;
+  flags |= SWITCH_FOPEN_CREATE;
+  flags |= SWITCH_FOPEN_APPEND;
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grabbing mutex\n");
+  switch_mutex_lock(globals.mutex);
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "attempting to open %s for appending %d len: %s\n", path, (int)buf_len, buf);
+
+  if( switch_file_open(&fd
+                       ,path
+                       ,flags
+                       ,SWITCH_FPROT_OS_DEFAULT
+                       ,globals.pool
+                      )
+      != SWITCH_STATUS_SUCCESS
+      ) {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "failed to open path %s\n", path);
+    goto cleanup;
+  }
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing to path %s\n", path);
+
+  if( (switch_file_write(fd, buf, &buf_len)) == SWITCH_STATUS_SUCCESS ) {
+switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "writing eol\n");
+    switch_file_write(fd, "\n", &eol);
+  } else {
+    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "failed to write buffer\n");
+  }
+
+switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "close the file\n");
+  switch_file_close(fd);
+  fd = NULL;
+
+switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "do cleanup\n");
+ cleanup:
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "unlock the mutex\n");
+
+  switch_mutex_unlock(globals.mutex);
+
+switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "free the path\n");
+  switch_safe_free(path);
+
+switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "return void\n");
+  return;
+}
 
 static void trace_handler(switch_event_t *event)
 {
-  char* trace_event;
+  char *trace_event;
   char *buf;
 
   switch_assert(event != NULL);
@@ -61,18 +120,24 @@ static void trace_handler(switch_event_t *event)
 
   switch(globals.format) {
   case EVENT_FORMAT_PLAIN:
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "attempting to write event %s as PLAIN to file\n", switch_event_name(event->event_id));
     break;
   case EVENT_FORMAT_XML:
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "attempting to write event %s as XML to file\n", switch_event_name(event->event_id));
     break;
   case EVENT_FORMAT_JSON:
   default:
     if (switch_event_serialize_json(event, &buf) == SWITCH_STATUS_SUCCESS) {
-      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "serialized event %s to json: %s\n", switch_event_name(event->event_id), buf);
+      switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "attempting to write event %s as JSON to file\n", switch_event_name(event->event_id));
+      write_to_file(event, buf);
     } else {
       switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "failed to serialize event %s\n", switch_event_name(event->event_id));
     }
     break;
   }
+
+  switch_safe_free(buf);
+  switch_safe_free(trace_event);
 
   return;
 }
@@ -91,11 +156,17 @@ SWITCH_MODULE_LOAD_FUNCTION(mod_trace_load)
   memset(&globals, 0, sizeof(globals));
 
   globals.format = EVENT_FORMAT_JSON;
+  globals.pool = pool;
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Initializing mutex!\n");
+  switch_mutex_init(&globals.mutex, SWITCH_MUTEX_NESTED, globals.pool);
 
   if (switch_event_bind_removable(modname, SWITCH_EVENT_ALL, SWITCH_EVENT_SUBCLASS_ANY, trace_handler, NULL, &globals.node) != SWITCH_STATUS_SUCCESS) {
     switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Couldn't bind!\n");
     return SWITCH_STATUS_GENERR;
   }
+
+  switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Bound for events!\n");
 
   /* indicate that the module should continue to be loaded */
   return SWITCH_STATUS_SUCCESS;
