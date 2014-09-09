@@ -75,8 +75,8 @@ static void write_to_file(switch_event_t *event, char* buf) {
 
 static void trace_handler(switch_event_t *event)
 {
-  char *trace_event;
-  char *buf;
+  char *trace_event = NULL;
+  char *buf = NULL;
 
   switch_assert(event != NULL);
 
