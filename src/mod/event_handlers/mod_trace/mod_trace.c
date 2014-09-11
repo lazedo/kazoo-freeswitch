@@ -44,14 +44,14 @@ typedef enum {
 static struct {
   switch_event_node_t *node;
   event_format_t format;
-  char* path;
   switch_memory_pool_t *pool;
   switch_mutex_t *mutex;
   switch_file_t *fd;
 } globals;
 
 static void write_to_file(switch_event_t *event, char* buf) {
-  switch_size_t buf_len = strlen(buf),
+  switch_size_t
+    buf_len = strlen(buf),
     eol = 1;
 
   switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "grabbing mutex\n");
@@ -75,10 +75,9 @@ static void write_to_file(switch_event_t *event, char* buf) {
 
 static void trace_handler(switch_event_t *event)
 {
-  char *trace_event = NULL;
-  char *buf = NULL;
-
-  switch_assert(event != NULL);
+  char
+    *trace_event = NULL,
+    *buf = NULL;
 
   if ( !(trace_event = switch_event_get_header(event, "variable_trace_event")) || switch_false(trace_event) ) {
     return;
