@@ -591,6 +591,8 @@ switch_hash_t *create_default_filter() {
         switch_core_hash_insert(filter, "variable_sip_redirected_by", "1");
                 */
 
+        switch_core_hash_insert(filter, "intercepted_by", "1");
+
         return filter;
 }
 

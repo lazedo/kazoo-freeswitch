@@ -9747,6 +9747,20 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
 					}
 				} else {
     			    switch_event_t *event = NULL;
+					char* kazoo_pickup = NULL;
+					if (sip->sip_request->rq_url->url_params) {
+						kazoo_pickup = switch_find_parameter(sip->sip_request->rq_url->url_params, "kazoo-pickup", switch_core_session_get_pool(session));
+					}
+					if(kazoo_pickup && sip->sip_replaces->rp_call_id) {
+						switch_channel_mark_hold(b_channel, SWITCH_FALSE);
+                        tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,intercept:%s", sip->sip_replaces->rp_call_id);
+				        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "PICKED_UUID\n");
+                        if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_INTERCEPTED) == SWITCH_STATUS_SUCCESS) {
+                            switch_channel_event_set_data(b_channel, event);
+                            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "intercepted_by", sip->sip_call_id->i_id);
+                            switch_event_fire(&event);
+						}
+					} else
 					if (!zstr(bridge_uuid)) {
 						switch_channel_mark_hold(b_channel, SWITCH_FALSE);
                         tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,intercept:%s,park", bridge_uuid);
@@ -9755,6 +9769,17 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
                             switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
                             switch_event_fire(&event);
                         }
+						/*
+					} else if(sip->sip_replaces->rp_call_id) {
+						switch_channel_mark_hold(b_channel, SWITCH_FALSE);
+                        tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,intercept:%s", sip->sip_replaces->rp_call_id);
+				        switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_INFO, "PICKED_UUID\n");
+                        if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_INTERCEPTED) == SWITCH_STATUS_SUCCESS) {
+                            switch_channel_event_set_data(b_channel, event);
+                            switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "intercepted_by", sip->sip_call_id->i_id);
+                            switch_event_fire(&event);
+						}
+						*/
 					} else {
 						const char *b_app = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_VARIABLE);
 						const char *b_data = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_DATA_VARIABLE);
