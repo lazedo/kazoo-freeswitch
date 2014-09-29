@@ -43,3 +43,5 @@ loggers/mod_console
 loggers/mod_logfile
 loggers/mod_syslog
 say/mod_say_en
+say/mod_say_fr
+say/mod_say_ru
