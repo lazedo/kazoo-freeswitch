@@ -4705,7 +4705,7 @@ void sofia_presence_handle_sip_i_message(int status,
 	char sip_acl_authed_by[512] = "";
 	char sip_acl_token[512] = "";
 	sip_unknown_t *un;
-	char proxied_client_ip[80];
+	char proxied_client_ip[80] = "";
 	auth_res_t auth_res = AUTH_FORBIDDEN;
 
 	if (sip) {
@@ -4722,7 +4722,8 @@ void sofia_presence_handle_sip_i_message(int status,
 		char network_ip[80];
 		int network_port = 0;
 		switch_channel_t *channel = NULL;
-		int network_ip_is_proxy = 0;
+        int network_ip_is_proxy = 0;
+		int network_ip_is_proxied = 0;
 		const char *bounce = NULL;
 		const char *msg_id = NULL;
 
@@ -4791,13 +4792,11 @@ void sofia_presence_handle_sip_i_message(int status,
 					if (token) {
 						switch_set_string(acl_token, token);
 					}
-					if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES)) {
-						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Approved by acl \"%s[%s]\". Access Granted.\n",
-										  network_ip, switch_str_nil(last_acl), acl_token);
-						switch_set_string(sip_acl_authed_by, last_acl);
-						switch_set_string(sip_acl_token, acl_token);
-						auth_res = AUTH_OK;
-					}
+                    switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Approved by acl \"%s[%s]\". Access Granted.\n",
+                        network_ip, switch_str_nil(last_acl), acl_token);
+                    switch_set_string(sip_acl_authed_by, last_acl);
+                    switch_set_string(sip_acl_token, acl_token);
+                    auth_res = AUTH_OK;
 				} else {
 					/* Check if network_ip is a proxy allowed to send us calls */
 					if (profile->proxy_acl_count) {
@@ -4827,7 +4826,9 @@ void sofia_presence_handle_sip_i_message(int status,
 									for (x = 0; x < profile->acl_count; x++) {
 										last_acl = profile->acl[x];
 										if ((ok = switch_check_network_list_ip_token(un->un_value, last_acl, &token))) {
-											switch_copy_string(proxied_client_ip, un->un_value, sizeof(proxied_client_ip));
+//											switch_copy_string(proxied_client_ip, un->un_value, sizeof(proxied_client_ip));
+                                            switch_set_string(proxied_client_ip, un->un_value);
+                                            network_ip_is_proxied = 1;
 											break;
 										}
 									}
@@ -4841,10 +4842,10 @@ void sofia_presence_handle_sip_i_message(int status,
 						if (!sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES)) {
 							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "IP %s Rejected by acl \"%s\"\n", network_ip, switch_str_nil(last_acl));
 
-							if (!acl_context) {
-								nua_respond(nh, SIP_403_FORBIDDEN, TAG_END());
-								goto end;
-							}
+//							if (!acl_context) {
+//								nua_respond(nh, SIP_403_FORBIDDEN, TAG_END());
+//								goto end;
+//							}
 						} else {
 							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Rejected by acl \"%s\". Falling back to Digest auth.\n",
 											  network_ip, switch_str_nil(last_acl));
@@ -4853,15 +4854,13 @@ void sofia_presence_handle_sip_i_message(int status,
 						if (token) {
 							switch_set_string(acl_token, token);
 						}
-						if (sofia_test_pflag(profile, PFLAG_AUTH_MESSAGES)) {
-							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Approved by acl \"%s[%s]\". Access Granted.\n",
-											  proxied_client_ip, switch_str_nil(last_acl), acl_token);
-							switch_set_string(sip_acl_authed_by, last_acl);
-							switch_set_string(sip_acl_token, acl_token);
+                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "IP %s Approved by acl \"%s[%s]\". Access Granted.\n",
+                                            proxied_client_ip, switch_str_nil(last_acl), acl_token);
+                        switch_set_string(sip_acl_authed_by, last_acl);
+                        switch_set_string(sip_acl_token, acl_token);
 
-							auth_res = AUTH_OK;
+                        auth_res = AUTH_OK;
 
-						}
 					}
 				}
 			}
@@ -5007,7 +5006,7 @@ void sofia_presence_handle_sip_i_message(int status,
 				}
 
 				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_received_ip", network_ip);
-				if(network_ip_is_proxy) {
+				if(network_ip_is_proxy && network_ip_is_proxied) {
 					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_proxied_ip", proxied_client_ip);
 					switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "variable_sip_h_X-AUTH-IP", proxied_client_ip);
 				}
