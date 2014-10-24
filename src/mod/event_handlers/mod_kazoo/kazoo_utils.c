@@ -593,6 +593,11 @@ switch_hash_t *create_default_filter() {
 
         switch_core_hash_insert(filter, "intercepted_by", "1");
 
+        // SMS
+        switch_core_hash_insert(filter, "Message-ID", "1");
+        switch_core_hash_insert(filter, "Delivery-Failure", "1");
+        switch_core_hash_insert(filter, "Delivery-Result-Code", "1");
+
         return filter;
 }
 
