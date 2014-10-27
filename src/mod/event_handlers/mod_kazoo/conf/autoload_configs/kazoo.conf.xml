@@ -112,6 +112,7 @@
         <header name="variable_hold_music" />
         <header name="variable_media_group_id" />
         <header name="variable_originate_disposition" />
+        <header name="variable_origination_uuid" />
         <header name="variable_playback_terminator_used" />
         <header name="variable_presence_id" />
         <header name="variable_record_ms" />
