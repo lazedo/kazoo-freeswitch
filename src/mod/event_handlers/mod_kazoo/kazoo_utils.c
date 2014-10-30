@@ -440,6 +440,7 @@ switch_hash_t *create_default_filter() {
         switch_core_hash_insert(filter, "variable_hold_music", "1");
         switch_core_hash_insert(filter, "variable_media_group_id", "1");
         switch_core_hash_insert(filter, "variable_originate_disposition", "1");
+        switch_core_hash_insert(filter, "variable_origination_uuid", "1");
         switch_core_hash_insert(filter, "variable_playback_terminator_used", "1");
         switch_core_hash_insert(filter, "variable_presence_id", "1");
         switch_core_hash_insert(filter, "variable_record_ms", "1");
