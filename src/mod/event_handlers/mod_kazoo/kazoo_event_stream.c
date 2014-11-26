@@ -247,11 +247,11 @@ static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void 
 
 				while (i) {
 					byte = ebuf.index >> (8 * --i);
-					switch_socket_send_nonblock(event_stream->socket, &byte, &size);
+					switch_socket_send(event_stream->socket, &byte, &size);
 				}
 
 				size = (switch_size_t)ebuf.index;
-				switch_socket_send_nonblock(event_stream->socket, ebuf.buff, &size);
+				switch_socket_send(event_stream->socket, ebuf.buff, &size);
 
 				ei_x_free(&ebuf);
 			}
