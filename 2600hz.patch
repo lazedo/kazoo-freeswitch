@@ -1,0 +1,4928 @@
+diff --git a/2600hz.patch b/2600hz.patch
+new file mode 100644
+index 0000000..e69de29
+diff --git a/build/modules.conf.in b/build/modules.conf.in
+index 66b649f..ac2f41e 100644
+--- a/build/modules.conf.in
++++ b/build/modules.conf.in
+@@ -99,6 +99,7 @@ event_handlers/mod_cdr_csv
+ #event_handlers/mod_cdr_pg_csv
+ event_handlers/mod_cdr_sqlite
+ #event_handlers/mod_erlang_event
++event_handlers/mod_kazoo
+ #event_handlers/mod_event_multicast
+ event_handlers/mod_event_socket
+ #event_handlers/mod_event_zmq
+diff --git a/configure.ac b/configure.ac
+index 7ae8101..6d82219 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1563,6 +1563,7 @@ AC_CONFIG_FILES([Makefile
+ 		src/mod/event_handlers/mod_cdr_pg_csv/Makefile
+ 		src/mod/event_handlers/mod_cdr_sqlite/Makefile
+ 		src/mod/event_handlers/mod_erlang_event/Makefile
++		src/mod/event_handlers/mod_kazoo/Makefile
+ 		src/mod/event_handlers/mod_event_multicast/Makefile
+ 		src/mod/event_handlers/mod_event_socket/Makefile
+ 		src/mod/event_handlers/mod_event_test/Makefile
+diff --git a/src/include/switch_types.h b/src/include/switch_types.h
+index 910b44b..75cda18 100644
+--- a/src/include/switch_types.h
++++ b/src/include/switch_types.h
+@@ -566,9 +566,9 @@ typedef enum {
+ 	SWITCH_XML_SECTION_DIALPLAN = (1 << 2),
+ 	SWITCH_XML_SECTION_LANGUAGES = (1 << 3),
+ 	SWITCH_XML_SECTION_CHATPLAN = (1 << 4),
+-
++	SWITCH_XML_SECTION_CHANNELS = (1 << 5),
+ 	/* Nothing after this line */
+-	SWITCH_XML_SECTION_MAX = (1 << 4)
++	SWITCH_XML_SECTION_MAX = (1 << 5)
+ } switch_xml_section_enum_t;
+ typedef uint32_t switch_xml_section_t;
+ 
+diff --git a/src/mod/applications/mod_commands/mod_commands.c b/src/mod/applications/mod_commands/mod_commands.c
+index 6fc06ea..b28bd9c 100644
+--- a/src/mod/applications/mod_commands/mod_commands.c
++++ b/src/mod/applications/mod_commands/mod_commands.c
+@@ -5329,6 +5329,7 @@ SWITCH_STANDARD_API(uuid_setvar_function)
+ 
+ 			if ((psession = switch_core_session_locate(uuid))) {
+ 				switch_channel_t *channel;
++				switch_event_t *event;
+ 				channel = switch_core_session_get_channel(psession);
+ 
+ 				if (zstr(var_name)) {
+@@ -5339,6 +5340,11 @@ SWITCH_STANDARD_API(uuid_setvar_function)
+ 					stream->write_function(stream, "+OK\n");
+ 				}
+ 
++				if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
++					switch_channel_event_set_data(channel, event);
++					switch_event_fire(&event);
++				}
++
+ 				switch_core_session_rwunlock(psession);
+ 
+ 			} else {
+@@ -5373,6 +5379,7 @@ SWITCH_STANDARD_API(uuid_setvar_multi_function)
+ 
+ 		if ((psession = switch_core_session_locate(uuid))) {
+ 			switch_channel_t *channel = switch_core_session_get_channel(psession);
++			switch_event_t *event;
+ 			int x, y = 0;
+ 			argc = switch_separate_string(vars, ';', argv, (sizeof(argv) / sizeof(argv[0])));
+ 
+@@ -5390,6 +5397,11 @@ SWITCH_STANDARD_API(uuid_setvar_multi_function)
+ 				}
+ 			}
+ 
++			if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
++				switch_channel_event_set_data(channel, event);
++				switch_event_fire(&event);
++			}
++
+ 			switch_core_session_rwunlock(psession);
+ 			if (y) {
+ 				stream->write_function(stream, "+OK\n");
+diff --git a/src/mod/applications/mod_dptools/mod_dptools.c b/src/mod/applications/mod_dptools/mod_dptools.c
+index 2127787..edd25de 100644
+--- a/src/mod/applications/mod_dptools/mod_dptools.c
++++ b/src/mod/applications/mod_dptools/mod_dptools.c
+@@ -1446,6 +1446,7 @@ SWITCH_STANDARD_APP(multiset_function)
+ {
+ 	char delim = ' ';
+ 	char *arg = (char *) data;
++	switch_event_t *event;
+ 
+ 	if (!zstr(arg) && *arg == '^' && *(arg+1) == '^') {
+ 		arg += 2;
+@@ -1453,6 +1454,7 @@ SWITCH_STANDARD_APP(multiset_function)
+ 	}
+ 
+ 	if (arg) {
++		switch_channel_t *channel = switch_core_session_get_channel(session);
+ 		char *array[256] = {0};
+ 		int i, argc;
+ 
+@@ -1462,7 +1464,11 @@ SWITCH_STANDARD_APP(multiset_function)
+ 		for(i = 0; i < argc; i++) {
+ 			base_set(session, array[i], SWITCH_STACK_BOTTOM);
+ 		}
+-		
++
++		if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
++			switch_channel_event_set_data(channel, event);
++			switch_event_fire(&event);
++		}
+ 
+ 	} else {
+ 		base_set(session, data, SWITCH_STACK_BOTTOM);
+@@ -1471,7 +1477,15 @@ SWITCH_STANDARD_APP(multiset_function)
+ 
+ SWITCH_STANDARD_APP(set_function)
+ {
++	switch_channel_t *channel = switch_core_session_get_channel(session);
++	switch_event_t *event;
++
+ 	base_set(session, data, SWITCH_STACK_BOTTOM);
++
++	if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
++		switch_channel_event_set_data(channel, event);
++		switch_event_fire(&event);
++	}
+ }
+ 
+ SWITCH_STANDARD_APP(push_function)
+@@ -1573,12 +1587,20 @@ SWITCH_STANDARD_APP(bridge_export_function)
+ 
+ SWITCH_STANDARD_APP(unset_function)
+ {
++	switch_channel_t *channel = switch_core_session_get_channel(session);
++	switch_event_t *event;
++
+ 	if (zstr(data)) {
+ 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "No variable name specified.\n");
+ 	} else {
+ 		switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "UNSET [%s]\n", (char *) data);
+ 		switch_channel_set_variable(switch_core_session_get_channel(session), data, NULL);
+ 	}
++
++	if (switch_event_create(&event, SWITCH_EVENT_CHANNEL_DATA) == SWITCH_STATUS_SUCCESS) {
++		switch_channel_event_set_data(channel, event);
++		switch_event_fire(&event);
++	}
+ }
+ 
+ SWITCH_STANDARD_APP(multiunset_function)
+@@ -2720,12 +2742,18 @@ SWITCH_STANDARD_APP(playback_function)
+ 
+ SWITCH_STANDARD_APP(endless_playback_function)
+ {
++	switch_input_args_t args = { 0 };
+ 	switch_channel_t *channel = switch_core_session_get_channel(session);
+ 	switch_status_t status = SWITCH_STATUS_SUCCESS;
+ 	const char *file = data;
+ 
++	args.input_callback = on_dtmf;
++
++	switch_channel_set_variable(channel, SWITCH_PLAYBACK_TERMINATORS_VARIABLE, "none");
++
+ 	while (switch_channel_ready(channel)) {
+-		status = switch_ivr_play_file(session, NULL, file, NULL);
++
++		status = switch_ivr_play_file(session, NULL, file, &args);
+ 
+ 		if (status != SWITCH_STATUS_SUCCESS && status != SWITCH_STATUS_BREAK) {
+ 			break;
+diff --git a/src/mod/endpoints/mod_loopback/mod_loopback.c b/src/mod/endpoints/mod_loopback/mod_loopback.c
+index b0cde67..f091393 100644
+--- a/src/mod/endpoints/mod_loopback/mod_loopback.c
++++ b/src/mod/endpoints/mod_loopback/mod_loopback.c
+@@ -455,6 +455,8 @@ static switch_status_t channel_on_execute(switch_core_session_t *session)
+ 		switch_core_session_t *other_session = NULL;
+ 		switch_caller_profile_t *cp, *clone;
+ 		const char *other_uuid = NULL;
++		switch_event_t *event = NULL;
++
+ 		switch_set_flag(tech_pvt, TFLAG_BOWOUT);
+ 
+ 		if ((find_non_loopback_bridge(tech_pvt->other_session, &other_session, &other_uuid) == SWITCH_STATUS_SUCCESS)) {
+@@ -465,6 +467,12 @@ static switch_status_t channel_on_execute(switch_core_session_t *session)
+ 			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(tech_pvt->session), SWITCH_LOG_INFO, "BOWOUT Replacing loopback channel with real channel: %s\n",
+ 							  switch_channel_get_name(other_channel));
+ 
++			if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, "loopback::bowout") == SWITCH_STATUS_SUCCESS) {
++				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Resigning-UUID", switch_channel_get_uuid(channel));
++				switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "Acquired-UUID", switch_channel_get_uuid(other_channel));
++				switch_event_fire(&event);
++			}
++
+ 			if ((cp = switch_channel_get_caller_profile(channel))) {
+ 				clone = switch_caller_profile_clone(other_session, cp);
+ 				clone->originator_caller_profile = NULL;
+diff --git a/src/mod/endpoints/mod_sofia/mod_sofia.c b/src/mod/endpoints/mod_sofia/mod_sofia.c
+index dde3c88..26c5345 100644
+--- a/src/mod/endpoints/mod_sofia/mod_sofia.c
++++ b/src/mod/endpoints/mod_sofia/mod_sofia.c
+@@ -444,7 +444,9 @@ switch_status_t sofia_on_hangup(switch_core_session_t *session)
+ 			if ((val = switch_channel_get_variable(tech_pvt->channel, "sip_reason"))) {
+ 				switch_snprintf(reason, sizeof(reason), "%s", val);
+ 			} else {
+-				if (switch_channel_test_flag(channel, CF_INTERCEPT) || cause == SWITCH_CAUSE_PICKED_OFF || cause == SWITCH_CAUSE_LOSE_RACE) {
++				val = switch_channel_get_variable(channel, "ignore_completed_elsewhere");
++				if ((switch_channel_test_flag(channel, CF_INTERCEPT) || cause == SWITCH_CAUSE_PICKED_OFF || cause == SWITCH_CAUSE_LOSE_RACE)
++					&& (!val || switch_false(val))) {
+ 					switch_snprintf(reason, sizeof(reason), "SIP;cause=200;text=\"Call completed elsewhere\"");
+ 				} else if (cause > 0 && cause < 128) {
+ 					switch_snprintf(reason, sizeof(reason), "Q.850;cause=%d;text=\"%s\"", cause, switch_channel_cause2str(cause));
+@@ -2840,6 +2842,26 @@ static void xml_gateway_status(sofia_gateway_t *gp, switch_stream_handle_t *stre
+ 	stream->write_function(stream, "    <failed-calls-in>%u</failed-calls-in>\n", gp->ib_failed_calls);
+ 	stream->write_function(stream, "    <failed-calls-out>%u</failed-calls-out>\n", gp->ob_failed_calls);
+ 
++	if (gp->ib_vars) {
++		switch_event_header_t *hp;
++
++		stream->write_function(stream, "      <inbound-variables>\n");
++		for (hp = gp->ib_vars->headers; hp; hp = hp->next) {
++			stream->write_function(stream, "        <variable name=\"%s\" value=\"%s\" />\n", hp->name, hp->value);
++		}
++		stream->write_function(stream, "      </inbound-variables>\n");
++	}
++
++	if (gp->ob_vars) {
++		switch_event_header_t *hp;
++
++		stream->write_function(stream, "      <outbound-variables>\n");
++		for (hp = gp->ob_vars->headers; hp; hp = hp->next) {
++			stream->write_function(stream, "        <variable name=\"%s\" value=\"%s\" />\n", hp->name, hp->value);
++		}
++		stream->write_function(stream, "      </outbound-variables>\n");
++	}
++
+ 	if (gp->state == REG_STATE_FAILED || gp->state == REG_STATE_TRYING) {
+ 		time_t now = switch_epoch_time_now(NULL);
+ 		if (gp->retry > now) {
+diff --git a/src/mod/endpoints/mod_sofia/mod_sofia.h b/src/mod/endpoints/mod_sofia/mod_sofia.h
+index f4e3613..44fce9e 100644
+--- a/src/mod/endpoints/mod_sofia/mod_sofia.h
++++ b/src/mod/endpoints/mod_sofia/mod_sofia.h
+@@ -95,6 +95,10 @@ typedef struct private_object private_object_t;
+ #define MY_EVENT_ERROR "sofia::error"
+ #define MY_EVENT_PROFILE_START "sofia::profile_start"
+ 
++#define MY_EVENT_TRANSFEROR "sofia::transferor"
++#define MY_EVENT_TRANSFEREE "sofia::transferee"
++#define MY_EVENT_REPLACED "sofia::replaced"
++
+ #define MULTICAST_EVENT "multicast::event"
+ #define SOFIA_REPLACES_HEADER "_sofia_replaces_"
+ #define SOFIA_CHAT_PROTO "sip"
+diff --git a/src/mod/endpoints/mod_sofia/sofia.c b/src/mod/endpoints/mod_sofia/sofia.c
+index 94adf80..38ae12d 100644
+--- a/src/mod/endpoints/mod_sofia/sofia.c
++++ b/src/mod/endpoints/mod_sofia/sofia.c
+@@ -6630,7 +6630,8 @@ static void sofia_handle_sip_i_state(switch_core_session_t *session, int status,
+ 
+ 	if (channel && (status == 180 || status == 183) && switch_channel_direction(channel) == SWITCH_CALL_DIRECTION_OUTBOUND) {
+ 		const char *val;
+-		if ((val = switch_channel_get_variable(channel, "sip_auto_answer")) && switch_true(val)) {
++		if ((val = switch_channel_get_variable(channel, "sip_auto_answer")) && switch_true(val) &&
++				!((val = switch_channel_get_variable(channel, "sip_auto_answer_suppress_notify")) && switch_true(val))) {
+ 			nua_notify(nh, NUTAG_NEWSUB(1), NUTAG_WITH_THIS_MSG(de->data->e_msg),
+ 					   NUTAG_SUBSTATE(nua_substate_terminated),SIPTAG_SUBSCRIPTION_STATE_STR("terminated;reason=noresource"), SIPTAG_EVENT_STR("talk"), TAG_END());
+ 		}
+@@ -7668,6 +7669,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 	char *full_ref_to = NULL;
+ 	nightmare_xfer_helper_t *nightmare_xfer_helper;
+ 	switch_memory_pool_t *npool;
++	switch_event_t *event = NULL;
+ 
+ 	if (!(profile->mflags & MFLAG_REFER)) {
+ 		nua_respond(nh, SIP_403_FORBIDDEN, NUTAG_WITH_THIS_MSG(de->data->e_msg), TAG_END());
+@@ -7759,7 +7761,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 					if ((p = strchr(rep, ';'))) {
+ 						*p = '\0';
+ 					}
+-					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Replaces: [%s]\n", rep);
++					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER replaces: [%s]\n", rep);
+ 				} else {
+ 					switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_ERROR, "Memory Error!\n");
+ 					goto done;
+@@ -7889,11 +7891,31 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 									moh = NULL;
+ 								}
+ 
++								if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
++								    switch_channel_event_set_data(channel_b, event);
++									switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", br_a);
++									switch_event_fire(&event);
++								}
++
++								if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
++									switch_channel_event_set_data(channel_a, event);
++									switch_event_fire(&event);
++								}
++
++								if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
++								    switch_channel_event_set_data(a_channel, event);
++									switch_event_fire(&event);
++								}
++
+ 								if (moh) {
+ 									char *xdest;
+ 									xdest = switch_core_session_sprintf(a_session, "endless_playback:%s,park", moh);
++									switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s (bridged to %s) replaces %s with %s\n"
++													  ,switch_core_session_get_uuid(session), rep, br_a, xdest);
+ 									switch_ivr_session_transfer(a_session, xdest, "inline", NULL);
+ 								} else {
++									switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s (bridged to %s) replaces %s with park\n"
++													  ,switch_core_session_get_uuid(session), rep, br_a);
+ 									switch_ivr_session_transfer(a_session, "park", "inline", NULL);
+ 								}
+ 
+@@ -7926,6 +7948,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 
+ 						} else if (br_a && br_b) {
+ 							switch_core_session_t *tmp = NULL;
++							switch_event_t *event = NULL;
+ 
+ 							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_NOTICE, "Attended Transfer [%s][%s]\n",
+ 											  switch_str_nil(br_a), switch_str_nil(br_b));
+@@ -7968,6 +7991,31 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 
+ 							mark_transfer_record(session, br_a, br_b);
+ 
++                            if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
++                                switch_channel_event_set_data(channel_b, event);
++                                switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", br_a);
++                                switch_event_fire(&event);
++                            }
++
++                            if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
++                                switch_channel_event_set_data(channel_a, event);
++                                switch_event_fire(&event);
++                            }
++
++                            if ((tmp = switch_core_session_locate(br_a))) {
++                                switch_channel_t *tchannel = switch_core_session_get_channel(tmp);
++
++                                if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
++                                    switch_channel_event_set_data(tchannel, event);
++                                    switch_event_fire(&event);
++                                }
++
++                                switch_core_session_rwunlock(tmp);
++                            }
++
++							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s (bridged to %s) replaces %s (bridged to %s)\n"
++											  ,switch_core_session_get_uuid(session), br_a, rep, br_b);
++
+ 							switch_ivr_uuid_bridge(br_a, br_b);
+ 							switch_channel_set_variable(channel_b, SWITCH_ENDPOINT_DISPOSITION_VARIABLE, "ATTENDED_TRANSFER");
+ 							nua_notify(tech_pvt->nh, NUTAG_NEWSUB(1), SIPTAG_CONTENT_TYPE_STR("message/sipfrag;version=2.0"),
+@@ -7990,6 +8038,7 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 							} else {
+ 								switch_core_session_t *t_session, *hup_session;
+ 								switch_channel_t *hup_channel;
++								switch_event_t *event = NULL;
+ 								const char *ext;
+ 
+ 								if (br_a && !br_b) {
+@@ -8026,9 +8075,23 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 										switch_core_media_bug_transfer_recordings(hup_session, t_session);
+ 									}
+ 
++									if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
++										switch_channel_event_set_data(channel_a, event);
++										switch_event_fire(&event);
++									}
++
++									if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
++									    switch_channel_event_set_data(t_channel, event);
++										switch_event_fire(&event);
++									}
++
+ 									if (idest) {
++										switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s replaces %s with %s\n"
++														  ,switch_core_session_get_uuid(session), rep, idest);
+ 										switch_ivr_session_transfer(t_session, idest, "inline", NULL);
+ 									} else {
++										switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s replaces %s with %s\n"
++														  ,switch_core_session_get_uuid(session), rep, ext);
+ 										switch_ivr_session_transfer(t_session, ext, NULL, NULL);
+ 									}
+ 
+@@ -8060,6 +8123,20 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 						if ((a_session = switch_core_session_locate(br_a))) {
+ 							const char *port = NULL;
+ 							const char *rep_h = NULL;
++							switch_xml_t xml_root, xml_channel;
++							switch_event_t *xml_params, *event;
++
++							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s replaces %s (%s@%s) with %s on another server\n"
++											  ,switch_core_session_get_uuid(session), rep, exten, (char *) refer_to->r_url->url_host, br_a);
++
++							switch_event_create(&xml_params, SWITCH_EVENT_REQUEST_PARAMS);
++							switch_assert(xml_params);
++							switch_event_add_header_string(xml_params, SWITCH_STACK_BOTTOM, "purpose", "nightmare_xfer");
++							switch_event_add_header_string(xml_params, SWITCH_STACK_BOTTOM, "profile", profile->name);
++							switch_event_add_header_string(xml_params, SWITCH_STACK_BOTTOM, "refer-to-user", refer_to->r_url->url_user);
++							switch_event_add_header_string(xml_params, SWITCH_STACK_BOTTOM, "refer-to-host", refer_to->r_url->url_host);
++							switch_event_add_header_string(xml_params, SWITCH_STACK_BOTTOM, "refer-to-params", refer_to->r_url->url_params ? refer_to->r_url->url_params : "");
++							switch_event_add_header_string(xml_params, SWITCH_STACK_BOTTOM, "refer-to-headers", refer_to->r_url->url_headers ? refer_to->r_url->url_headers : "");
+ 
+ 							if (refer_to && refer_to->r_url && refer_to->r_url->url_port) {
+ 								port = refer_to->r_url->url_port;
+@@ -8067,9 +8144,27 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 
+ 							channel = switch_core_session_get_channel(a_session);
+ 
+-							exten = switch_core_session_sprintf(session, "sofia/%s/sip:%s@%s%s%s",
+-																profile->name, refer_to->r_url->url_user,
+-																refer_to->r_url->url_host, port ? ":" : "", port ? port : "");
++							if (switch_xml_locate("channels", "channel", "uuid", replaces->rp_call_id, &xml_root, &xml_channel, xml_params, SWITCH_FALSE) ==
++								SWITCH_STATUS_SUCCESS) {
++								switch_xml_t params = NULL, param = NULL;
++								if((params = switch_xml_child(xml_channel, "params")) && (param = switch_xml_find_child(params, "param", "name", "sip-url"))) {
++									const char *xml_url;
++									char *domain;
++									xml_url = switch_xml_attr(param, "value");
++									if ((domain = strchr(xml_url, '@'))) {
++										*domain++ = '\0';
++									}
++									exten = switch_core_session_sprintf(session, "sofia/%s/sip:%s@%s",
++																		profile->name, refer_to->r_url->url_user, domain);
++								}
++								switch_xml_free(xml_root);
++							} else {
++								exten = switch_core_session_sprintf(session, "sofia/%s/sip:%s@%s%s%s",
++																	profile->name, refer_to->r_url->url_user,
++																	refer_to->r_url->url_host, port ? ":" : "", port ? port : "");
++							}
++
++							switch_event_destroy(&xml_params);
+ 
+ 							switch_core_new_memory_pool(&npool);
+ 							nightmare_xfer_helper = switch_core_alloc(npool, sizeof(*nightmare_xfer_helper));
+@@ -8086,11 +8181,12 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 																								   "{sip_invite_params=%s}%s", refer_to->r_url->url_params,
+ 																								   exten);
+ 								}
+-								switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "INVITE RURI '%s'\n", nightmare_xfer_helper->exten_with_params);
+ 							} else {
+ 								nightmare_xfer_helper->exten_with_params = nightmare_xfer_helper->exten;
+ 							}
+ 
++							switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Nightmare transfer to '%s'\n", nightmare_xfer_helper->exten_with_params);
++
+ 							nightmare_xfer_helper->event = switch_core_strdup(npool, etmp);
+ 							nightmare_xfer_helper->reply_uuid = switch_core_strdup(npool, switch_core_session_get_uuid(session));
+ 							nightmare_xfer_helper->bridge_to_uuid = switch_core_strdup(npool, br_a);
+@@ -8142,6 +8238,17 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 								switch_event_add_header_string(nightmare_xfer_helper->vars, SWITCH_STACK_BOTTOM, SOFIA_REFER_TO_VARIABLE, full_ref_to);
+ 							}
+ 
++
++							if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
++								switch_channel_event_set_data(channel_a, event);
++								switch_event_fire(&event);
++							}
++
++							if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
++								switch_channel_event_set_data(channel, event);
++								switch_event_fire(&event);
++							}
++
+ 							switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "Good Luck, you'll need it......\n");
+ 							launch_nightmare_xfer(nightmare_xfer_helper);
+ 
+@@ -8181,6 +8288,10 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+ 		if (!zstr(br) && (b_session = switch_core_session_locate(br))) {
+ 			const char *var;
+ 			switch_channel_t *b_channel = switch_core_session_get_channel(b_session);
++			switch_event_t *event = NULL;
++
++			switch_log_printf(SWITCH_CHANNEL_SESSION_LOG(session), SWITCH_LOG_DEBUG, "REFER from %s transfers %s to %s@%s\n"
++							  ,switch_core_session_get_uuid(session), br, exten, (char *) refer_to->r_url->url_host);
+ 
+ 			switch_channel_set_variable(channel, "transfer_fallback_extension", from->a_user);
+ 			if (!zstr(full_ref_by)) {
+@@ -8218,6 +8329,16 @@ void sofia_handle_sip_i_refer(nua_t *nua, sofia_profile_t *profile, nua_handle_t
+                 switch_channel_set_variable(b_channel, "sip_h_X-FS-Refer-Params", refer_to->r_url->url_params);
+             }
+ 
++            if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEROR) == SWITCH_STATUS_SUCCESS) {
++                switch_channel_event_set_data(channel_a, event);
++                switch_event_fire(&event);
++            }
++
++			if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_TRANSFEREE) == SWITCH_STATUS_SUCCESS) {
++                switch_channel_event_set_data(b_channel, event);
++                switch_event_fire(&event);
++            }
++
+ 			switch_ivr_session_transfer(b_session, exten, NULL, NULL);
+ 			switch_core_session_rwunlock(b_session);
+ 		} else {
+@@ -9757,6 +9878,7 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
+ 					switch_core_session_t *os;
+ 					switch_codec_implementation_t read_impl = { 0 };
+ 					char *codec_str = "";
++					switch_event_t *event = NULL;
+ 
+ 					if (!zstr(bridge_uuid) && switch_channel_test_flag(b_channel, CF_LEG_HOLDING)) {
+ 						olu = bridge_uuid;
+@@ -9785,6 +9907,12 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
+ 						switch_channel_set_flag(tech_pvt->channel, CF_SLA_INTERCEPT);
+ 						tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool,
+ 																						   "%sanswer,intercept:%s", codec_str, bridge_uuid);
++
++						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
++							switch_channel_event_set_data(b_channel, event);
++							switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
++							switch_event_fire(&event);
++						}
+ 					} else {
+ 						switch_caller_profile_t *bcp = switch_channel_get_caller_profile(b_channel);
+ 
+@@ -9822,9 +9950,15 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
+ 																						   "%sanswer,sofia_sla:%s", codec_str, b_private->uuid);
+ 					}
+ 				} else {
++					switch_event_t *event = NULL;
+ 					if (!zstr(bridge_uuid)) {
+ 						switch_channel_mark_hold(b_channel, SWITCH_FALSE);
+ 						tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,intercept:%s", bridge_uuid);
++						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
++							switch_channel_event_set_data(b_channel, event);
++							switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
++							switch_event_fire(&event);
++						}
+ 					} else {
+ 						const char *b_app = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_VARIABLE);
+ 						const char *b_data = switch_channel_get_variable(b_channel, SWITCH_CURRENT_APPLICATION_DATA_VARIABLE);
+@@ -9835,6 +9969,11 @@ void sofia_handle_sip_i_invite(switch_core_session_t *session, nua_t *nua, sofia
+ 							tech_pvt->caller_profile->destination_number = switch_core_sprintf(tech_pvt->caller_profile->pool, "answer,%s", b_app);
+ 						}
+ 
++						if (switch_event_create_subclass(&event, SWITCH_EVENT_CUSTOM, MY_EVENT_REPLACED) == SWITCH_STATUS_SUCCESS) {
++							switch_channel_event_set_data(b_channel, event);
++							switch_event_add_header_string(event, SWITCH_STACK_BOTTOM, "att_xfer_replaced_by", sip->sip_call_id->i_id);
++							switch_event_fire(&event);
++						}
+ 
+ 						switch_channel_hangup(b_channel, SWITCH_CAUSE_ATTENDED_TRANSFER);
+ 					}
+diff --git a/src/mod/event_handlers/mod_kazoo/Makefile.am b/src/mod/event_handlers/mod_kazoo/Makefile.am
+new file mode 100644
+index 0000000..98e00b1
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/Makefile.am
+@@ -0,0 +1,7 @@
++include $(top_srcdir)/build/modmake.rulesam
++MODNAME=mod_kazoo
++mod_LTLIBRARIES = mod_kazoo.la
++mod_kazoo_la_SOURCES  = mod_kazoo.c kazoo_utils.c kazoo_node.c kazoo_event_stream.c kazoo_fetch_agent.c
++mod_kazoo_la_CFLAGS   = $(AM_CFLAGS) @ERLANG_CFLAGS@ -D_REENTRANT
++mod_kazoo_la_LIBADD   = $(switch_builddir)/libfreeswitch.la
++mod_kazoo_la_LDFLAGS  = -avoid-version -module -no-undefined -shared @ERLANG_LDFLAGS@
+diff --git a/src/mod/event_handlers/mod_kazoo/conf/autoload_configs/kazoo.conf.xml b/src/mod/event_handlers/mod_kazoo/conf/autoload_configs/kazoo.conf.xml
+new file mode 100644
+index 0000000..1483899
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/conf/autoload_configs/kazoo.conf.xml
+@@ -0,0 +1,215 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<configuration name="kazoo.conf" description="General purpose Erlang c-node produced to better fit the Kazoo project">
++  <settings>
++    <param name="listen-ip" value="0.0.0.0" />
++    <param name="listen-port" value="8031" />
++    <!--<param name="cookie-file" value="/etc/freeswitch/autoload_configs/.erlang.cookie" />-->
++    <param name="cookie" value="change_me" />
++    <param name="shortname" value="false" />
++    <param name="nodename" value="freeswitch" />
++    <param name="send-msg-batch-size" value="10" />
++    <param name="receive-timeout" value="1" />
++    <!--<param name="receive-msg-preallocate" value="0" />-->
++    <!--<param name="event-stream-preallocate" value="0" />-->
++    <!--<param name="event-stream-framing" value="2" />-->
++    <!--<param name="kazoo-var-prefix" value="ecallmgr" />-->
++    <!--<param name="compat-rel" value="12"/> -->
++  </settings>
++  <event-filter type="whitelist">
++    <header name="Acquired-UUID" />
++    <header name="action" />
++    <header name="Action" />
++    <header name="alt_event_type" />
++    <header name="Answer-State" />
++    <header name="Application" />
++    <header name="Application-Data" />
++    <header name="Application-Name" />
++    <header name="Application-Response" />
++    <header name="att_xfer_replaced_by" />
++    <header name="Auth-Method" />
++    <header name="Auth-Realm" />
++    <header name="Auth-User" />
++    <header name="Bridge-A-Unique-ID" />
++    <header name="Bridge-B-Unique-ID" />
++    <header name="Call-Direction" />
++    <header name="Caller-Callee-ID-Name" />
++    <header name="Caller-Callee-ID-Number" />
++    <header name="Caller-Caller-ID-Name" />
++    <header name="Caller-Caller-ID-Number" />
++    <header name="Caller-Context" />
++    <header name="Caller-Controls" />
++    <header name="Caller-Destination-Number" />
++    <header name="Caller-Dialplan" />
++    <header name="Caller-Network-Addr" />
++    <header name="Caller-Unique-ID" />
++    <header name="Call-ID" />
++    <header name="Channel-Call-State" />
++    <header name="Channel-Call-UUID" />
++    <header name="Channel-Presence-ID" />
++    <header name="Channel-State" />
++    <header name="Chat-Permissions" />
++    <header name="Conference-Name" />
++    <header name="Conference-Profile-Name" />
++    <header name="Conference-Unique-ID" />
++    <header name="Conference-Size" />
++    <header name="New-ID" />
++    <header name="Old-ID" />
++    <header name="Detected-Tone" />
++    <header name="dialog_state" />
++    <header name="direction" />
++    <header name="Distributed-From" />
++    <header name="DTMF-Digit" />
++    <header name="DTMF-Duration" />
++    <header name="Event-Date-Timestamp" />
++    <header name="Event-Name" />
++    <header name="Event-Subclass" />
++    <header name="Expires" />
++    <header name="Ext-SIP-IP" />
++    <header name="File" />
++    <header name="FreeSWITCH-Hostname" />
++    <header name="from" />
++    <header name="Hunt-Destination-Number" />
++    <header name="ip" />
++    <header name="Message-Account" />
++    <header name="metadata" />
++    <header name="old_node_channel_uuid" />
++    <header name="Other-Leg-Callee-ID-Name" />
++    <header name="Other-Leg-Callee-ID-Number" />
++    <header name="Other-Leg-Caller-ID-Name" />
++    <header name="Other-Leg-Caller-ID-Number" />
++    <header name="Other-Leg-Destination-Number" />
++    <header name="Other-Leg-Direction" />
++    <header name="Other-Leg-Unique-ID" />
++    <header name="Participant-Type" />
++    <header name="Path" />
++    <header name="profile_name" />
++    <header name="Profiles" />
++    <header name="proto-specific-event-name" />
++    <header name="Raw-Application-Data" />
++    <header name="Resigning-UUID" />
++    <header name="set" />
++    <header name="sip_auto_answer" />
++    <header name="sip_auth_method" />
++    <header name="sip_from_host" />
++    <header name="sip_from_user" />
++    <header name="sip_to_host" />
++    <header name="sip_to_user" />
++    <header name="sub-call-id" />
++    <header name="technology" />
++    <header name="to" />
++    <header name="Unique-ID" />
++    <header name="URL" />
++    <header name="variable_channel_is_moving" />
++    <header name="variable_collected_digits" />
++    <header name="variable_current_application" />
++    <header name="variable_current_application_data" />
++    <header name="variable_domain_name" />
++    <header name="variable_effective_caller_id_name" />
++    <header name="variable_effective_caller_id_number" />
++    <header name="variable_fax_bad_rows" />
++    <header name="variable_fax_document_total_pages" />
++    <header name="variable_fax_document_transferred_pages" />
++    <header name="variable_fax_ecm_used" />
++    <header name="variable_fax_result_code" />
++    <header name="variable_fax_result_text" />
++    <header name="variable_fax_success" />
++    <header name="variable_fax_transfer_rate" />
++    <header name="variable_holding_uuid" />
++    <header name="variable_hold_music" />
++    <header name="variable_media_group_id" />
++    <header name="variable_originate_disposition" />
++    <header name="variable_playback_terminator_used" />
++    <header name="variable_presence_id" />
++    <header name="variable_record_ms" />
++    <header name="variable_recovered" />
++    <header name="variable_silence_hits_exhausted" />
++    <header name="variable_sip_auth_realm" />
++    <header name="variable_sip_from_host" />
++    <header name="variable_sip_from_user" />
++    <header name="variable_sip_h_X-AUTH-IP" />
++    <header name="variable_sip_received_ip" />
++    <header name="variable_sip_to_host" />
++    <header name="variable_sip_to_user" />
++    <header name="variable_sofia_profile_name" />
++    <header name="variable_transfer_history" />
++    <header name="variable_user_name" />
++    <header name="variable_endpoint_disposition" />
++    <header name="variable_originate_disposition" />
++    <header name="variable_bridge_hangup_cause" />
++    <header name="variable_hangup_cause" />
++    <header name="variable_last_bridge_proto_specific_hangup_cause" />
++    <header name="variable_proto_specific_hangup_cause" />
++    <header name="VM-Call-ID" />
++    <header name="VM-sub-call-id" />
++    <header name="whistle_application_name" />
++    <header name="whistle_application_response" />
++    <header name="whistle_event_name" />
++    <header name="sip_auto_answer_notify" />
++    <header name="eavesdrop_group" />
++    <header name="origination_caller_id_name" />
++    <header name="origination_caller_id_number" />
++    <header name="origination_callee_id_name" />
++    <header name="origination_callee_id_number" />
++    <header name="sip_auth_username" />
++    <header name="sip_auth_password" />
++    <header name="effective_caller_id_name" />
++    <header name="effective_caller_id_number" />
++    <header name="effective_callee_id_name" />
++    <header name="effective_callee_id_number" />
++
++    <!-- Registrations -->
++    <header name="call-id" />
++    <header name="profile-name" />
++    <header name="from-user" />
++    <header name="from-host" />
++    <header name="presence-hosts" />
++    <header name="contact" />
++    <header name="rpid" />
++    <header name="status" />
++    <header name="expires" />
++    <header name="to-user" />
++    <header name="to-host" />
++    <header name="network-ip" />
++    <header name="network-port" />
++    <header name="username" />
++    <header name="realm" />
++    <header name="user-agent" />
++
++    <!-- CDR Headers -->
++    <header name="Hangup-Cause" />
++    <header name="Unique-ID" />
++    <header name="variable_switch_r_sdp" />
++    <header name="variable_sip_local_sdp_str" />
++    <header name="variable_sip_to_uri" />
++    <header name="variable_sip_from_uri" />
++    <header name="variable_effective_caller_id_number" />
++    <header name="Caller-Caller-ID-Number" />
++    <header name="variable_effective_caller_id_name" />
++    <header name="Caller-Caller-ID-Name" />
++    <header name="Caller-Callee-ID-Name" />
++    <header name="Caller-Callee-ID-Number" />
++    <header name="Other-Leg-Unique-ID" />
++    <header name="variable_sip_user_agent" />
++    <header name="variable_duration" />
++    <header name="variable_billsec" />
++    <header name="variable_progresssec" />
++    <header name="variable_progress_uepoch" />
++    <header name="variable_progress_media_uepoch" />
++    <header name="variable_start_uepoch" />
++    <header name="variable_digits_dialed" />
++    <header name="variable_sip_cid_type" />
++
++    <!-- Conference Headers -->
++    <header name="Hear" />
++    <header name="Speak" />
++    <header name="Video" />
++    <header name="Talking" />
++    <header name="Mute-Detect" />
++    <header name="Member-ID" />
++    <header name="Member-Type" />
++    <header name="Energy-Level" />
++    <header name="Current-Energy" />
++    <header name="Floor" />
++
++  </event-filter>
++</configuration>
+diff --git a/src/mod/event_handlers/mod_kazoo/kazoo_event_stream.c b/src/mod/event_handlers/mod_kazoo/kazoo_event_stream.c
+new file mode 100644
+index 0000000..cf43ce1
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/kazoo_event_stream.c
+@@ -0,0 +1,584 @@
++/*
++ * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
++ *
++ * Version: MPL 1.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ *
++ * The Initial Developer of the Original Code is
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Portions created by the Initial Developer are Copyright (C)
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Karl Anderson <karl@2600hz.com>
++ * Darren Schreiber <darren@2600hz.com>
++ *
++ *
++ * kazoo_event_streams.c -- Event Publisher
++ *
++ */
++#include "mod_kazoo.h"
++
++/* Blatantly repurposed from switch_eventc */
++static char *my_dup(const char *s) {
++	size_t len = strlen(s) + 1;
++	void *new = malloc(len);
++	switch_assert(new);
++
++	return (char *) memcpy(new, s, len);
++}
++
++#ifndef DUP
++#define DUP(str) my_dup(str)
++#endif
++
++static const char* private_headers[] = {"variable_sip_h_", "sip_h_", "P-", "X-"};
++
++static int is_private_header(const char *name) {
++	for(int i=0; i < 4; i++) {
++		if(!strncmp(name, private_headers[i], strlen(private_headers[i]))) {
++			return 1;
++		}
++	}
++	return 0;
++}
++
++static switch_status_t kazoo_event_dup(switch_event_t **clone, switch_event_t *event, switch_hash_t *filter) {
++	switch_event_header_t *header;
++
++	if (switch_event_create_subclass(clone, SWITCH_EVENT_CLONE, event->subclass_name) != SWITCH_STATUS_SUCCESS) {
++		return SWITCH_STATUS_GENERR;
++	}
++
++	(*clone)->event_id = event->event_id;
++	(*clone)->event_user_data = event->event_user_data;
++	(*clone)->bind_user_data = event->bind_user_data;
++	(*clone)->flags = event->flags;
++
++	for (header = event->headers; header; header = header->next) {
++		if (event->subclass_name && !strcmp(header->name, "Event-Subclass")) {
++			continue;
++		}
++
++		if (strncmp(header->name, globals.kazoo_var_prefix, globals.var_prefix_length)
++			&& filter
++			&& !switch_core_hash_find(filter, header->name)
++			&& (!globals.send_all_headers)
++			&& (!(globals.send_all_private_headers && is_private_header(header->name)))
++			)
++			{
++				continue;
++			}
++
++        if (header->idx) {
++            int i;
++            for (i = 0; i < header->idx; i++) {
++                switch_event_add_header_string(*clone, SWITCH_STACK_PUSH, header->name, header->array[i]);
++            }
++        } else {
++            switch_event_add_header_string(*clone, SWITCH_STACK_BOTTOM, header->name, header->value);
++        }
++    }
++
++    if (event->body) {
++        (*clone)->body = DUP(event->body);
++    }
++
++    (*clone)->key = event->key;
++
++    return SWITCH_STATUS_SUCCESS;
++}
++
++static void event_handler(switch_event_t *event) {
++	switch_event_t *clone = NULL;
++	ei_event_stream_t *event_stream = (ei_event_stream_t *) event->bind_user_data;
++
++	/* if mod_kazoo or the event stream isn't running dont push a new event */
++	if (!switch_test_flag(event_stream, LFLAG_RUNNING) || !switch_test_flag(&globals, LFLAG_RUNNING)) {
++		return;
++	}
++
++	if (event->event_id == SWITCH_EVENT_CUSTOM) {
++		ei_event_binding_t *event_binding = event_stream->bindings;
++		unsigned short int found = 0;
++
++		if (!event->subclass_name) {
++			return;
++		}
++
++		while(event_binding != NULL) {
++			if (event_binding->type == SWITCH_EVENT_CUSTOM) {
++				if(event_binding->subclass_name
++				   && !strcmp(event->subclass_name, event_binding->subclass_name)) {
++					found = 1;
++					break;
++				}
++			}
++			event_binding = event_binding->next;
++		}
++
++		if (!found) {
++			return;
++		}
++	}
++
++	/* try to clone the event and push it to the event stream thread */
++	/* TODO: someday maybe the filter comes from the event_stream (set during init only)
++	 * and is per-binding so we only send headers that a process requests */
++	if (kazoo_event_dup(&clone, event, globals.event_filter) == SWITCH_STATUS_SUCCESS) {
++		if (switch_queue_trypush(event_stream->queue, clone) != SWITCH_STATUS_SUCCESS) {
++			/* if we couldn't place the cloned event into the listeners */
++			/* event queue make sure we destroy it, real good like */
++			switch_event_destroy(&clone);
++		}
++	} else {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Memory error: Have a good trip? See you next fall!\n");
++	}
++}
++
++static void *SWITCH_THREAD_FUNC event_stream_loop(switch_thread_t *thread, void *obj) {
++    ei_event_stream_t *event_stream = (ei_event_stream_t *) obj;
++	ei_event_binding_t *event_binding;
++	switch_sockaddr_t *sa;
++	uint16_t port;
++    char ipbuf[25];
++    const char *ip_addr;
++	void *pop;
++	short event_stream_framing = globals.event_stream_framing;
++
++	switch_atomic_inc(&globals.threads);
++
++	switch_assert(event_stream != NULL);
++
++	/* figure out what socket we just opened */
++	switch_socket_addr_get(&sa, SWITCH_FALSE, event_stream->acceptor);
++	port = switch_sockaddr_get_port(sa);
++    ip_addr = switch_get_addr(ipbuf, sizeof(ipbuf), sa);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Starting erlang event stream %p on %s:%u for %s <%d.%d.%d>\n"
++					  ,(void *)event_stream, ip_addr, port, event_stream->pid.node, event_stream->pid.creation
++					  ,event_stream->pid.num, event_stream->pid.serial);
++
++	while (switch_test_flag(event_stream, LFLAG_RUNNING) && switch_test_flag(&globals, LFLAG_RUNNING)) {
++		const switch_pollfd_t *fds;
++		int32_t numfds;
++
++		/* check if a new connection is pending */
++		if (switch_pollset_poll(event_stream->pollset, 0, &numfds, &fds) == SWITCH_STATUS_SUCCESS) {
++			for (int32_t i = 0; i < numfds; i++) {
++				switch_socket_t *newsocket;
++
++				/* accept the new client connection */
++				if (switch_socket_accept(&newsocket, event_stream->acceptor, event_stream->pool) == SWITCH_STATUS_SUCCESS) {
++					switch_sockaddr_t *sa;
++
++                    if (switch_socket_opt_set(newsocket, SWITCH_SO_NONBLOCK, TRUE)) {
++                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Couldn't set socket as non-blocking\n");
++                    }
++
++                    if (switch_socket_opt_set(newsocket, SWITCH_SO_TCP_NODELAY, 1)) {
++                        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Couldn't disable Nagle.\n");
++                    }
++
++					/* close the current client, if there is one */
++					close_socket(&event_stream->socket);
++
++					switch_mutex_lock(event_stream->socket_mutex);
++					/* start sending to the new client */
++					event_stream->socket = newsocket;
++
++					switch_socket_addr_get(&sa, SWITCH_TRUE, newsocket);
++					event_stream->local_port = switch_sockaddr_get_port(sa);
++					switch_get_addr(event_stream->remote_ip, sizeof (event_stream->remote_ip), sa);
++
++					switch_socket_addr_get(&sa, SWITCH_FALSE, newsocket);
++					event_stream->remote_port = switch_sockaddr_get_port(sa);
++					switch_get_addr(event_stream->local_ip, sizeof (event_stream->local_ip), sa);
++
++					event_stream->connected = SWITCH_TRUE;
++					switch_mutex_unlock(event_stream->socket_mutex);
++
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Erlang event stream %p client %s:%u\n", (void *)event_stream, event_stream->remote_ip, event_stream->remote_port);
++				}
++			}
++		}
++
++		/* if there was an event waiting in our queue send it to the client */
++		if (switch_queue_pop_timeout(event_stream->queue, &pop, 500000) == SWITCH_STATUS_SUCCESS) {
++			switch_event_t *event = (switch_event_t *) pop;
++
++			if (event_stream->socket) {
++				ei_x_buff ebuf;
++				char byte;
++				short i = event_stream_framing;
++				switch_size_t size = 1;
++
++				if(globals.event_stream_preallocate > 0) {
++					ebuf.buff = malloc(globals.event_stream_preallocate);
++					ebuf.buffsz = globals.event_stream_preallocate;
++					ebuf.index = 0;
++					if(ebuf.buff == NULL) {
++						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not pre-allocate memory for mod_kazoo message\n");
++						break;
++					}
++					ei_x_encode_version(&ebuf);
++				} else {
++					ei_x_new_with_version(&ebuf);
++				}
++
++				ei_encode_switch_event(&ebuf, event);
++
++				if (globals.event_stream_preallocate > 0 && ebuf.buffsz > globals.event_stream_preallocate) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased event stream buffer size to %d\n", ebuf.buffsz);
++				}
++
++				while (i) {
++					byte = ebuf.index >> (8 * --i);
++					switch_socket_send(event_stream->socket, &byte, &size);
++				}
++
++				size = (switch_size_t)ebuf.index;
++				switch_socket_send(event_stream->socket, ebuf.buff, &size);
++
++				ei_x_free(&ebuf);
++			}
++
++			switch_event_destroy(&event);
++		}
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutting down erlang event stream %p\n", (void *)event_stream);
++
++	/* unbind from the system events */
++	event_binding = event_stream->bindings;
++	while(event_binding != NULL) {
++		switch_event_unbind(&event_binding->node);
++		event_binding = event_binding->next;
++	}
++	event_stream->bindings = NULL;
++
++	/* clear and destroy any remaining queued events */
++	while (switch_queue_trypop(event_stream->queue, &pop) == SWITCH_STATUS_SUCCESS) {
++		switch_event_t *event = (switch_event_t *) pop;
++		switch_event_destroy(&event);
++	}
++
++	/* remove the acceptor pollset */
++	switch_pollset_remove(event_stream->pollset, event_stream->pollfd);
++
++	/* close any open sockets */
++	close_socket(&event_stream->acceptor);
++
++	switch_mutex_lock(event_stream->socket_mutex);
++	event_stream->connected = SWITCH_FALSE;
++	close_socket(&event_stream->socket);
++	switch_mutex_unlock(event_stream->socket_mutex);
++
++	switch_mutex_destroy(event_stream->socket_mutex);
++
++	/* clean up the memory */
++	switch_core_destroy_memory_pool(&event_stream->pool);
++
++	switch_atomic_dec(&globals.threads);
++
++	return NULL;
++}
++
++ei_event_stream_t *new_event_stream(ei_event_stream_t **event_streams, const erlang_pid *from) {
++	switch_thread_t *thread;
++	switch_threadattr_t *thd_attr = NULL;
++	switch_memory_pool_t *pool = NULL;
++	ei_event_stream_t *event_stream;
++
++	/* create memory pool for this event stream */
++	if (switch_core_new_memory_pool(&pool) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of memory: How many Alzheimer's patients does it take to screw in a light bulb? To get to the other side.\n");
++		return NULL;
++	}
++
++	/* from the memory pool, allocate the event stream structure */
++	if (!(event_stream = switch_core_alloc(pool, sizeof (*event_stream)))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of memory: I may have Alzheimers but at least I dont have Alzheimers.\n");
++		return NULL;
++	}
++
++	/* prepare the event stream */
++	memset(event_stream, 0, sizeof(*event_stream));
++	event_stream->bindings = NULL;
++	event_stream->pool = pool;
++	event_stream->connected = SWITCH_FALSE;
++	memcpy(&event_stream->pid, from, sizeof(erlang_pid));
++	switch_queue_create(&event_stream->queue, MAX_QUEUE_LEN, pool);
++
++	/* create a socket for accepting the event stream client */
++    if (!(event_stream->acceptor = create_socket(pool))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Like car accidents, most hardware problems are due to driver error.\n");
++		/* TODO: clean up */
++        return NULL;
++    }
++
++	if (switch_socket_opt_set(event_stream->acceptor, SWITCH_SO_NONBLOCK, TRUE)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Hey, it compiles!\n");
++		/* TODO: clean up */
++        return NULL;
++	}
++
++	/* create a pollset so we can efficiently check for new client connections */
++	if (switch_pollset_create(&event_stream->pollset, 1000, pool, 0) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "My software never has bugs. It just develops random features.\n");
++		/* TODO: clean up */
++        return NULL;
++	}
++
++	switch_socket_create_pollfd(&event_stream->pollfd, event_stream->acceptor, SWITCH_POLLIN | SWITCH_POLLERR, NULL, pool);
++	if (switch_pollset_add(event_stream->pollset, event_stream->pollfd) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "If you saw a heat wave, would you wave back?\n");
++		/* TODO: clean up */
++        return NULL;
++	}
++
++	switch_mutex_init(&event_stream->socket_mutex, SWITCH_MUTEX_DEFAULT, pool);
++
++	/* add the new event stream to the link list
++	 * since the event streams link list is only
++	 * accessed from the same thread no locks
++	 * are required */
++	if (!*event_streams) {
++		*event_streams = event_stream;
++	} else {
++		event_stream->next = *event_streams;
++		*event_streams = event_stream;
++	}
++
++	/* when we start we are running */
++	switch_set_flag(event_stream, LFLAG_RUNNING);
++
++	switch_threadattr_create(&thd_attr, event_stream->pool);
++	switch_threadattr_detach_set(thd_attr, 1);
++	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
++	switch_thread_create(&thread, thd_attr, event_stream_loop, event_stream, event_stream->pool);
++
++	return event_stream;
++}
++
++unsigned long get_stream_port(const ei_event_stream_t *event_stream) {
++	switch_sockaddr_t *sa;
++	switch_socket_addr_get(&sa, SWITCH_FALSE, event_stream->acceptor);
++	return (unsigned long) switch_sockaddr_get_port(sa);
++}
++
++ei_event_stream_t *find_event_stream(ei_event_stream_t *event_stream, const erlang_pid *from) {
++	while (event_stream != NULL) {
++		if (ei_compare_pids(&event_stream->pid, from) == SWITCH_STATUS_SUCCESS) {
++			return event_stream;
++		}
++		event_stream = event_stream->next;
++	}
++
++	return NULL;
++}
++
++switch_status_t remove_event_stream(ei_event_stream_t **event_streams, const erlang_pid *from) {
++	ei_event_stream_t *event_stream, *prev = NULL;
++	int found = 0;
++
++	/* if there are no event bindings there is nothing to do */
++	if (!*event_streams) {
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	/* try to find the event stream for the client process */
++	event_stream = *event_streams;
++	while(event_stream != NULL) {
++		if (ei_compare_pids(&event_stream->pid, from) == SWITCH_STATUS_SUCCESS) {
++			found = 1;
++			break;
++		}
++
++		prev = event_stream;
++		event_stream = event_stream->next;
++	}
++
++	if (found) {
++		/* if we found an event stream remove it from
++		 * from the link list */
++		if (!prev) {
++			*event_streams = event_stream->next;
++		} else {
++			prev->next = event_stream->next;
++		}
++
++		/* stop the event stream thread */
++		switch_clear_flag(event_stream, LFLAG_RUNNING);
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t remove_event_streams(ei_event_stream_t **event_streams) {
++	ei_event_stream_t *event_stream = *event_streams;
++
++	while(event_stream != NULL) {
++		/* stop the event bindings publisher thread */
++		switch_clear_flag(event_stream, LFLAG_RUNNING);
++
++		event_stream = event_stream->next;
++	}
++
++	*event_streams = NULL;
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t add_event_binding(ei_event_stream_t *event_stream, const switch_event_types_t event_type, const char *subclass_name) {
++	ei_event_binding_t *event_binding = event_stream->bindings;
++
++	/* check if the event binding already exists, ignore if so */
++	while(event_binding != NULL) {
++		if (event_binding->type == SWITCH_EVENT_CUSTOM) {
++			if(subclass_name
++			   && event_binding->subclass_name
++			   && !strcmp(subclass_name, event_binding->subclass_name)) {
++				return SWITCH_STATUS_SUCCESS;
++			}
++		} else if (event_binding->type == event_type) {
++			return SWITCH_STATUS_SUCCESS;
++		}
++		event_binding = event_binding->next;
++	}
++
++	/* from the event stream memory pool, allocate the event binding structure */
++	if (!(event_binding = switch_core_alloc(event_stream->pool, sizeof (*event_binding)))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of random-access memory, attempting write-only memory\n");
++		return SWITCH_STATUS_FALSE;
++	}
++
++	/* prepare the event binding struct */
++	event_binding->type = event_type;
++	if (!subclass_name || zstr(subclass_name)) {
++		event_binding->subclass_name = NULL;
++	} else {
++		/* TODO: free strdup? */
++		event_binding->subclass_name = strdup(subclass_name);
++	}
++	event_binding->next = NULL;
++
++	/* bind to the event with a unique ID and capture the event_node pointer */
++	switch_uuid_str(event_binding->id, sizeof(event_binding->id));
++	if (switch_event_bind_removable(event_binding->id, event_type, subclass_name, event_handler, event_stream, &event_binding->node) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to bind to event %s %s!\n"
++						  ,switch_event_name(event_binding->type), event_binding->subclass_name ? event_binding->subclass_name : "");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Adding event binding %s to stream %p for %s <%d.%d.%d>: %s %s\n"
++					  ,event_binding->id, (void *)event_stream, event_stream->pid.node, event_stream->pid.creation
++					  ,event_stream->pid.num, event_stream->pid.serial, switch_event_name(event_binding->type)
++					  ,event_binding->subclass_name ? event_binding->subclass_name : "");
++
++	/* add the new binding to the list */
++	if (!event_stream->bindings) {
++		event_stream->bindings = event_binding;
++	} else {
++		event_binding->next = event_stream->bindings;
++		event_stream->bindings = event_binding;
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t remove_event_binding(ei_event_stream_t *event_stream, const switch_event_types_t event_type, const char *subclass_name) {
++	ei_event_binding_t *event_binding = event_stream->bindings, *prev = NULL;
++	int found = 0;
++
++	/* if there are no bindings then there is nothing to do */
++	if (!event_binding) {
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	/* try to find the event binding specified */
++	while(event_binding != NULL) {
++		if (event_binding->type == SWITCH_EVENT_CUSTOM
++			&& subclass_name
++			&& event_binding->subclass_name
++			&& !strcmp(subclass_name, event_binding->subclass_name)) {
++			found = 1;
++			break;
++		} else if (event_binding->type == event_type) {
++			found = 1;
++			break;
++		}
++
++		prev = event_binding;
++		event_binding = event_binding->next;
++	}
++
++	if (found) {
++		/* if the event binding exists, unbind from the system */
++		switch_event_unbind(&event_binding->node);
++
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Removing event binding %s from %p for %s <%d.%d.%d>: %s %s\n"
++						  ,event_binding->id, (void *)event_stream, event_stream->pid.node, event_stream->pid.creation
++						  ,event_stream->pid.num, event_stream->pid.serial, switch_event_name(event_binding->type)
++						  ,event_binding->subclass_name ? event_binding->subclass_name : "");
++
++		/* remove the event binding from the list */
++		if (!prev) {
++			event_stream->bindings = event_binding->next;
++		} else {
++			prev->next = event_binding->next;
++		}
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t remove_event_bindings(ei_event_stream_t *event_stream) {
++	ei_event_binding_t *event_binding = event_stream->bindings;
++
++	/* if there are no bindings then there is nothing to do */
++	if (!event_binding) {
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	/* try to find the event binding specified */
++	while(event_binding != NULL) {
++		/* if the event binding exists, unbind from the system */
++		switch_event_unbind(&event_binding->node);
++
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Removing event binding %s from %p for %s <%d.%d.%d>: %s %s\n"
++						  ,event_binding->id, (void *)event_stream, event_stream->pid.node, event_stream->pid.creation
++						  ,event_stream->pid.num, event_stream->pid.serial, switch_event_name(event_binding->type)
++						  ,event_binding->subclass_name ? event_binding->subclass_name : "");
++
++		event_binding = event_binding->next;
++	}
++
++	event_stream->bindings = NULL;
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++/* For Emacs:
++ * Local Variables:
++ * mode:c
++ * indent-tabs-mode:t
++ * tab-width:4
++ * c-basic-offset:4
++ * End:
++ * For VIM:
++ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
++ */
+diff --git a/src/mod/event_handlers/mod_kazoo/kazoo_fetch_agent.c b/src/mod/event_handlers/mod_kazoo/kazoo_fetch_agent.c
+new file mode 100644
+index 0000000..522722c
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/kazoo_fetch_agent.c
+@@ -0,0 +1,707 @@
++/*
++ * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
++ *
++ * Version: MPL 1.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ *
++ * The Initial Developer of the Original Code is
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Portions created by the Initial Developer are Copyright (C)
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Karl Anderson <karl@2600hz.com>
++ * Darren Schreiber <darren@2600hz.com>
++ *
++ *
++ * kazoo_fetch.c -- XML fetch request handler
++ *
++ */
++#include "mod_kazoo.h"
++
++struct xml_fetch_reply_s {
++	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	char *xml_str;
++	struct xml_fetch_reply_s *next;
++};
++typedef struct xml_fetch_reply_s xml_fetch_reply_t;
++
++struct fetch_handler_s {
++	erlang_pid pid;
++	struct fetch_handler_s *next;
++};
++typedef struct fetch_handler_s fetch_handler_t;
++
++struct ei_xml_client_s {
++	ei_node_t *ei_node;
++	fetch_handler_t *fetch_handlers;
++	struct ei_xml_client_s *next;
++};
++typedef struct ei_xml_client_s ei_xml_client_t;
++
++struct ei_xml_agent_s {
++	switch_memory_pool_t *pool;
++	switch_xml_section_t section;
++	switch_thread_rwlock_t *lock;
++	ei_xml_client_t *clients;
++	switch_mutex_t *current_client_mutex;
++	ei_xml_client_t *current_client;
++	switch_mutex_t *replies_mutex;
++	switch_thread_cond_t *new_reply;
++	xml_fetch_reply_t *replies;
++};
++typedef struct ei_xml_agent_s ei_xml_agent_t;
++
++static char *xml_section_to_string(switch_xml_section_t section) {
++	switch(section) {
++	case SWITCH_XML_SECTION_CONFIG:
++		return "configuration";
++	case SWITCH_XML_SECTION_DIRECTORY:
++		return "directory";
++	case SWITCH_XML_SECTION_DIALPLAN:
++		return "dialplan";
++	case SWITCH_XML_SECTION_CHATPLAN:
++		return "chatplan";
++	case SWITCH_XML_SECTION_CHANNELS:
++		return "channels";
++	default:
++		return "unknown";
++	}
++}
++
++static char *expand_vars(char *xml_str) {
++	char *var, *val;
++	char *rp = xml_str; /* read pointer */
++	char *ep, *wp, *buff; /* end pointer, write pointer, write buffer */
++
++	if (!(strstr(xml_str, "$${"))) {
++		return xml_str;
++	}
++
++	switch_zmalloc(buff, strlen(xml_str) * 2);
++	wp = buff;
++	ep = buff + (strlen(xml_str) * 2) - 1;
++
++	while (*rp && wp < ep) {
++		if (*rp == '$' && *(rp + 1) == '$' && *(rp + 2) == '{') {
++			char *e = switch_find_end_paren(rp + 2, '{', '}');
++
++			if (e) {
++				rp += 3;
++				var = rp;
++				*e++ = '\0';
++				rp = e;
++
++				if ((val = switch_core_get_variable_dup(var))) {
++					char *p;
++					for (p = val; p && *p && wp <= ep; p++) {
++						*wp++ = *p;
++					}
++					switch_safe_free(val);
++				}
++				continue;
++			}
++		}
++
++		*wp++ = *rp++;
++	}
++
++	*wp++ = '\0';
++
++	switch_safe_free(xml_str);
++	return buff;
++}
++
++static switch_xml_t fetch_handler(const char *section, const char *tag_name, const char *key_name, const char *key_value, switch_event_t *params, void *user_data) {
++	switch_xml_t xml = NULL;
++	switch_uuid_t uuid;
++	switch_time_t now = 0;
++	ei_xml_agent_t *agent = (ei_xml_agent_t *) user_data;
++	ei_xml_client_t *client;
++	fetch_handler_t *fetch_handler;
++	xml_fetch_reply_t reply, *pending, *prev = NULL;
++
++	now = switch_micro_time_now();
++
++	if (!switch_test_flag(&globals, LFLAG_RUNNING)) {
++		return xml;
++	}
++
++	/* read-lock the agent */
++	switch_thread_rwlock_rdlock(agent->lock);
++
++	/* serialize access to current, used to round-robin requests */
++	/* TODO: check globals for round-robin boolean or loop all clients */
++	switch_mutex_lock(agent->current_client_mutex);
++	if (!agent->current_client) {
++		client = agent->clients;
++	} else {
++		client = agent->current_client;
++	}
++	if (client) {
++		agent->current_client = client->next;
++	}
++	switch_mutex_unlock(agent->current_client_mutex);
++
++	/* no client, no work required */
++	if (!client || !client->fetch_handlers) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "No %s XML erlang handler currently available\n"
++						  ,section);
++		switch_thread_rwlock_unlock(agent->lock);
++		return xml;
++	}
++
++	/* prepare the reply collector */
++	switch_uuid_get(&uuid);
++	switch_uuid_format(reply.uuid_str, &uuid);
++	reply.next = NULL;
++	reply.xml_str = NULL;
++
++	/* add our reply placeholder to the replies list */
++	switch_mutex_lock(agent->replies_mutex);
++	if (!agent->replies) {
++		agent->replies = &reply;
++	} else {
++		reply.next = agent->replies;
++		agent->replies = &reply;
++	}
++	switch_mutex_unlock(agent->replies_mutex);
++
++	fetch_handler = client->fetch_handlers;
++	while (fetch_handler != NULL) {
++		ei_send_msg_t *send_msg;
++
++		switch_malloc(send_msg, sizeof(*send_msg));
++		memcpy(&send_msg->pid, &fetch_handler->pid, sizeof(erlang_pid));
++
++		ei_x_new_with_version(&send_msg->buf);
++
++		ei_x_encode_tuple_header(&send_msg->buf, 7);
++		ei_x_encode_atom(&send_msg->buf, "fetch");
++		ei_x_encode_atom(&send_msg->buf, section);
++		_ei_x_encode_string(&send_msg->buf, tag_name ? tag_name : "undefined");
++		_ei_x_encode_string(&send_msg->buf, key_name ? key_name : "undefined");
++		_ei_x_encode_string(&send_msg->buf, key_value ? key_value : "undefined");
++		_ei_x_encode_string(&send_msg->buf, reply.uuid_str);
++
++		if (params) {
++			ei_encode_switch_event_headers(&send_msg->buf, params);
++		} else {
++			ei_x_encode_empty_list(&send_msg->buf);
++		}
++
++		if (switch_queue_trypush(client->ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to send %s XML request to %s <%d.%d.%d>\n"
++							  ,section
++							  ,fetch_handler->pid.node
++							  ,fetch_handler->pid.creation
++							  ,fetch_handler->pid.num
++							  ,fetch_handler->pid.serial);
++			ei_x_free(&send_msg->buf);
++			switch_safe_free(send_msg);
++		} else {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sending %s XML request (%s) to %s <%d.%d.%d>\n"
++							  ,section
++							  ,reply.uuid_str
++							  ,fetch_handler->pid.node
++							  ,fetch_handler->pid.creation
++							  ,fetch_handler->pid.num
++							  ,fetch_handler->pid.serial);
++		}
++
++		fetch_handler = fetch_handler->next;
++	}
++
++	/* wait for a reply (if there isnt already one...amazingly improbable but lets not take shortcuts */
++    switch_mutex_lock(agent->replies_mutex);
++
++	switch_thread_rwlock_unlock(agent->lock);
++
++	if (!reply.xml_str) {
++		switch_time_t timeout;
++
++		timeout = switch_micro_time_now() + 3000000;
++		while (switch_micro_time_now() < timeout) {
++			/* unlock the replies list and go to sleep, calculate a three second timeout before we started the loop
++			 * plus 100ms to add a little hysteresis between the timeout and the while loop */
++			switch_thread_cond_timedwait(agent->new_reply, agent->replies_mutex, (timeout - switch_micro_time_now() + 100000));
++
++			/* if we woke up (and therefore have locked replies again) check if we got our reply
++			 * otherwise we either timed-out (the while condition will fail) or one of
++			 * our sibling processes got a reply and we should go back to sleep */
++			if (reply.xml_str) {
++				break;
++			}
++		}
++	}
++
++	/* find our reply placeholder in the linked list and remove it */
++	pending = agent->replies;
++	while (pending != NULL) {
++		if (pending->uuid_str == reply.uuid_str) {
++			break;
++		}
++
++		prev = pending;
++		pending = pending->next;
++	}
++
++	if (pending) {
++		if (!prev) {
++			agent->replies = reply.next;
++		} else {
++			prev->next = reply.next;
++		}
++	}
++
++	/* we are done with the replies link-list */
++	switch_mutex_unlock(agent->replies_mutex);
++
++	/* after all that did we get what we were after?! */
++	if (reply.xml_str) {
++		/* HELL YA WE DID */
++		reply.xml_str = expand_vars(reply.xml_str);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received %s XML (%s) after %dms: %s\n"
++						  ,section
++						  ,reply.uuid_str
++						  ,(unsigned int) (switch_micro_time_now() - now) / 1000
++						  ,reply.xml_str);
++
++		xml = switch_xml_parse_str_dynamic(reply.xml_str, SWITCH_FALSE);
++	} else {
++		/* facepalm */
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Request for %s XML (%s) timed-out after %dms\n"
++						  ,section
++						  ,reply.uuid_str
++						  ,(unsigned int) (switch_micro_time_now() - now) / 1000);
++	}
++
++	return xml;
++}
++
++static switch_status_t bind_fetch_agent(switch_xml_section_t section, switch_xml_binding_t **binding) {
++	switch_memory_pool_t *pool = NULL;
++	ei_xml_agent_t *agent;
++
++	/* create memory pool for this xml search binging (lives for duration of mod_kazoo runtime) */
++	if (switch_core_new_memory_pool(&pool) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of memory: They're not people; they're hippies!\n");
++		return SWITCH_STATUS_MEMERR;
++	}
++
++	/* allocate some memory to store the fetch bindings for this section */
++    if (!(agent = switch_core_alloc(pool, sizeof (*agent)))) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of memory: Oh, Jesus tap-dancing Christ!\n");
++        return SWITCH_STATUS_MEMERR;
++    }
++
++	/* try to bind to the switch */
++	if (switch_xml_bind_search_function_ret(fetch_handler, section, agent, binding) != SWITCH_STATUS_SUCCESS) {
++		switch_core_destroy_memory_pool(&pool);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not bind to FreeSWITCH %s XML requests\n"
++						  ,xml_section_to_string(section));
++		return SWITCH_STATUS_GENERR;
++	}
++
++	agent->pool = pool;
++	agent->section = section;
++	switch_thread_rwlock_create(&agent->lock, pool);
++	agent->clients = NULL;
++	switch_mutex_init(&agent->current_client_mutex, SWITCH_MUTEX_DEFAULT, pool);
++	agent->current_client = NULL;
++	switch_mutex_init(&agent->replies_mutex, SWITCH_MUTEX_DEFAULT, pool);
++	switch_thread_cond_create(&agent->new_reply, pool);
++	agent->replies = NULL;
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Bound to %s XML requests\n"
++					  ,xml_section_to_string(section));
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t unbind_fetch_agent(switch_xml_binding_t **binding) {
++	ei_xml_agent_t *agent;
++	ei_xml_client_t *client;
++
++	/* get a pointer to our user_data */
++	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(*binding);
++
++	/* unbind from the switch */
++	switch_xml_unbind_search_function(binding);
++
++	/* LOCK ALL THE THINGS */
++	switch_thread_rwlock_wrlock(agent->lock);
++	switch_mutex_lock(agent->current_client_mutex);
++	switch_mutex_lock(agent->replies_mutex);
++
++	/* cleanly destroy each client */
++	client = agent->clients;
++	while(client != NULL) {
++		ei_xml_client_t *tmp_client = client;
++		fetch_handler_t *fetch_handler;
++
++		fetch_handler = client->fetch_handlers;
++		while(fetch_handler != NULL) {
++			fetch_handler_t *tmp_fetch_handler = fetch_handler;
++
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Removed %s XML handler %s <%d.%d.%d>\n"
++							  ,xml_section_to_string(agent->section)
++							  ,fetch_handler->pid.node
++							  ,fetch_handler->pid.creation
++							  ,fetch_handler->pid.num
++							  ,fetch_handler->pid.serial);
++
++			fetch_handler = fetch_handler->next;
++			switch_safe_free(tmp_fetch_handler);
++		}
++
++		client = client->next;
++		switch_safe_free(tmp_client);
++	}
++
++	/* keep the pointers clean, even if its just for a moment */
++	agent->clients = NULL;
++	agent->current_client = NULL;
++
++	/* release the locks! */
++	switch_thread_rwlock_unlock(agent->lock);
++	switch_mutex_unlock(agent->current_client_mutex);
++	switch_mutex_unlock(agent->replies_mutex);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Unbound from %s XML requests\n"
++					  ,xml_section_to_string(agent->section));
++
++	/* cleanly destroy the bindings */
++	switch_thread_rwlock_destroy(agent->lock);
++	switch_mutex_destroy(agent->current_client_mutex);
++	switch_mutex_destroy(agent->replies_mutex);
++	switch_thread_cond_destroy(agent->new_reply);
++	switch_core_destroy_memory_pool(&agent->pool);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t remove_xml_client(ei_node_t *ei_node, switch_xml_binding_t *binding) {
++	ei_xml_agent_t *agent;
++	ei_xml_client_t *client, *prev = NULL;
++	int found = 0;
++
++	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
++
++	/* write-lock the agent */
++	switch_thread_rwlock_wrlock(agent->lock);
++
++	client = agent->clients;
++	while (client != NULL) {
++		if (client->ei_node == ei_node) {
++			found = 1;
++			break;
++		}
++
++		prev = client;
++		client = client->next;
++	}
++
++	if (found) {
++		fetch_handler_t *fetch_handler;
++
++		if (!prev) {
++			agent->clients = client->next;
++		} else {
++			prev->next = client->next;
++		}
++
++		/* the mutex lock is not required since we have the write lock
++		 * but hey its fun and safe so do it anyway */
++		switch_mutex_lock(agent->current_client_mutex);
++		if (agent->current_client == client) {
++			agent->current_client = agent->clients;
++		}
++		switch_mutex_unlock(agent->current_client_mutex);
++
++		fetch_handler = client->fetch_handlers;
++		while(fetch_handler != NULL) {
++			fetch_handler_t *tmp_fetch_handler = fetch_handler;
++
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Removed %s XML handler %s <%d.%d.%d>\n"
++							  ,xml_section_to_string(agent->section)
++							  ,fetch_handler->pid.node
++							  ,fetch_handler->pid.creation
++							  ,fetch_handler->pid.num
++							  ,fetch_handler->pid.serial);
++
++			fetch_handler = fetch_handler->next;
++			switch_safe_free(tmp_fetch_handler);
++		}
++
++		switch_safe_free(client);
++	}
++
++	switch_thread_rwlock_unlock(agent->lock);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static ei_xml_client_t *add_xml_client(ei_node_t *ei_node, ei_xml_agent_t *agent) {
++    ei_xml_client_t *client;
++
++	switch_malloc(client, sizeof(*client));
++
++	client->ei_node = ei_node;
++	client->fetch_handlers = NULL;
++	client->next = NULL;
++
++	if (agent->clients) {
++		client->next = agent->clients;
++	}
++
++	agent->clients = client;
++
++	return client;
++}
++
++static ei_xml_client_t *find_xml_client(ei_node_t *ei_node, ei_xml_agent_t *agent) {
++    ei_xml_client_t *client;
++
++	client = agent->clients;
++	while (client != NULL) {
++		if (client->ei_node == ei_node) {
++			return client;
++		}
++
++		client = client->next;
++	}
++
++	return NULL;
++}
++
++static switch_status_t remove_fetch_handler(ei_node_t *ei_node, erlang_pid *from, switch_xml_binding_t *binding) {
++	ei_xml_agent_t *agent;
++	ei_xml_client_t *client;
++	fetch_handler_t *fetch_handler, *prev = NULL;
++	int found = 0;
++
++	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
++
++    /* write-lock the agent */
++    switch_thread_rwlock_wrlock(agent->lock);
++
++	if (!(client = find_xml_client(ei_node, agent))) {
++		switch_thread_rwlock_unlock(agent->lock);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	fetch_handler = client->fetch_handlers;
++	while (fetch_handler != NULL) {
++		if (ei_compare_pids(&fetch_handler->pid, from) == SWITCH_STATUS_SUCCESS) {
++			found = 1;
++			break;
++		}
++
++		prev = fetch_handler;
++		fetch_handler = fetch_handler->next;
++	}
++
++	if (found) {
++		if (!prev) {
++			client->fetch_handlers = fetch_handler->next;
++		} else {
++			prev->next = fetch_handler->next;
++		}
++
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Removed %s XML handler %s <%d.%d.%d>\n"
++						  ,xml_section_to_string(agent->section)
++						  ,fetch_handler->pid.node
++						  ,fetch_handler->pid.creation
++						  ,fetch_handler->pid.num
++						  ,fetch_handler->pid.serial);
++
++		switch_safe_free(fetch_handler);
++	}
++
++	switch_thread_rwlock_unlock(agent->lock);
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_api_command_stream(ei_node_t *ei_node, switch_stream_handle_t *stream, switch_xml_binding_t *binding) {
++	ei_xml_agent_t *agent;
++    ei_xml_client_t *client;
++
++	if (!binding) {
++		return SWITCH_STATUS_GENERR;
++	}
++
++	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
++
++	/* read-lock the agent */
++	switch_thread_rwlock_rdlock(agent->lock);
++	client = agent->clients;
++	while (client != NULL) {
++		if (client->ei_node == ei_node) {
++			fetch_handler_t *fetch_handler;
++			fetch_handler = client->fetch_handlers;
++			while (fetch_handler != NULL) {
++				stream->write_function(stream, "XML %s handler <%d.%d.%d>\n"
++									   ,xml_section_to_string(agent->section)
++									   ,fetch_handler->pid.creation
++									   ,fetch_handler->pid.num
++									   ,fetch_handler->pid.serial);
++				fetch_handler = fetch_handler->next;
++			}
++			break;
++		}
++
++		client = client->next;
++	}
++	switch_thread_rwlock_unlock(agent->lock);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t bind_fetch_agents() {
++	bind_fetch_agent(SWITCH_XML_SECTION_CONFIG, &globals.config_fetch_binding);
++	bind_fetch_agent(SWITCH_XML_SECTION_DIRECTORY, &globals.directory_fetch_binding);
++	bind_fetch_agent(SWITCH_XML_SECTION_DIALPLAN, &globals.dialplan_fetch_binding);
++	bind_fetch_agent(SWITCH_XML_SECTION_CHATPLAN, &globals.chatplan_fetch_binding);
++	bind_fetch_agent(SWITCH_XML_SECTION_CHANNELS, &globals.channels_fetch_binding);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t unbind_fetch_agents() {
++	unbind_fetch_agent(&globals.config_fetch_binding);
++	unbind_fetch_agent(&globals.directory_fetch_binding);
++	unbind_fetch_agent(&globals.dialplan_fetch_binding);
++	unbind_fetch_agent(&globals.chatplan_fetch_binding);
++	unbind_fetch_agent(&globals.channels_fetch_binding);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t remove_xml_clients(ei_node_t *ei_node) {
++	remove_xml_client(ei_node, globals.config_fetch_binding);
++	remove_xml_client(ei_node, globals.directory_fetch_binding);
++	remove_xml_client(ei_node, globals.dialplan_fetch_binding);
++	remove_xml_client(ei_node, globals.chatplan_fetch_binding);
++	remove_xml_client(ei_node, globals.channels_fetch_binding);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t add_fetch_handler(ei_node_t *ei_node, erlang_pid *from, switch_xml_binding_t *binding) {
++	ei_xml_agent_t *agent;
++	ei_xml_client_t *client;
++	fetch_handler_t *fetch_handler;
++
++	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
++
++    /* write-lock the agent */
++    switch_thread_rwlock_wrlock(agent->lock);
++
++	if (!(client = find_xml_client(ei_node, agent))) {
++		client = add_xml_client(ei_node, agent);
++	}
++
++	fetch_handler = client->fetch_handlers;
++    while (fetch_handler != NULL) {
++		if (ei_compare_pids(&fetch_handler->pid, from) == SWITCH_STATUS_SUCCESS) {
++			switch_thread_rwlock_unlock(agent->lock);
++            return SWITCH_STATUS_SUCCESS;
++        }
++        fetch_handler = fetch_handler->next;
++    }
++
++	switch_malloc(fetch_handler, sizeof(*fetch_handler));
++
++	memcpy(&fetch_handler->pid, from, sizeof(erlang_pid));;
++
++	fetch_handler->next = NULL;
++	if (client->fetch_handlers) {
++		fetch_handler->next = client->fetch_handlers;
++	}
++
++	client->fetch_handlers = fetch_handler;
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Added %s XML handler %s <%d.%d.%d>\n"
++					  ,xml_section_to_string(agent->section)
++					  ,fetch_handler->pid.node
++					  ,fetch_handler->pid.creation
++					  ,fetch_handler->pid.num
++					  ,fetch_handler->pid.serial);
++
++	switch_thread_rwlock_unlock(agent->lock);
++
++	ei_link(ei_node, ei_self(&globals.ei_cnode), from);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t remove_fetch_handlers(ei_node_t *ei_node, erlang_pid *from) {
++	remove_fetch_handler(ei_node, from, globals.config_fetch_binding);
++	remove_fetch_handler(ei_node, from, globals.directory_fetch_binding);
++	remove_fetch_handler(ei_node, from, globals.dialplan_fetch_binding);
++	remove_fetch_handler(ei_node, from, globals.chatplan_fetch_binding);
++	remove_fetch_handler(ei_node, from, globals.channels_fetch_binding);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t fetch_reply(char *uuid_str, char *xml_str, switch_xml_binding_t *binding) {
++	ei_xml_agent_t *agent;
++	xml_fetch_reply_t *reply;
++	switch_status_t status = SWITCH_STATUS_NOTFOUND;
++
++	agent = (ei_xml_agent_t *)switch_xml_get_binding_user_data(binding);
++
++    switch_mutex_lock(agent->replies_mutex);
++	reply = agent->replies;
++	while (reply != NULL) {
++		if (!strncmp(reply->uuid_str, uuid_str, SWITCH_UUID_FORMATTED_LENGTH)) {
++			if (!reply->xml_str) {
++				reply->xml_str = xml_str;
++				switch_thread_cond_broadcast(agent->new_reply);
++				status = SWITCH_STATUS_SUCCESS;
++			}
++			break;
++		}
++
++		reply = reply->next;
++	}
++    switch_mutex_unlock(agent->replies_mutex);
++
++	return status;
++}
++
++switch_status_t handle_api_command_streams(ei_node_t *ei_node, switch_stream_handle_t *stream) {
++	handle_api_command_stream(ei_node, stream, globals.config_fetch_binding);
++	handle_api_command_stream(ei_node, stream, globals.directory_fetch_binding);
++	handle_api_command_stream(ei_node, stream, globals.dialplan_fetch_binding);
++	handle_api_command_stream(ei_node, stream, globals.chatplan_fetch_binding);
++	handle_api_command_stream(ei_node, stream, globals.channels_fetch_binding);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++/* For Emacs:
++ * Local Variables:
++ * mode:c
++ * indent-tabs-mode:t
++ * tab-width:4
++ * c-basic-offset:4
++ * End:
++ * For VIM:
++ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
++ */
+diff --git a/src/mod/event_handlers/mod_kazoo/kazoo_node.c b/src/mod/event_handlers/mod_kazoo/kazoo_node.c
+new file mode 100644
+index 0000000..1efe7e3
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/kazoo_node.c
+@@ -0,0 +1,1254 @@
++/*
++ * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
++ *
++ * Version: MPL 1.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ *
++ * The Initial Developer of the Original Code is
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Portions created by the Initial Developer are Copyright (C)
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Andrew Thompson <andrew@hijacked.us>
++ * Rob Charlton <rob.charlton@savageminds.com>
++ * Darren Schreiber <d@d-man.org>
++ * Mike Jerris <mike@jerris.com>
++ * Tamas Cseke <tamas.cseke@virtual-call-center.eu>
++ *
++ *
++ * handle_msg.c -- handle messages received from erlang nodes
++ *
++ */
++#include "mod_kazoo.h"
++
++struct api_command_struct_s {
++	char *cmd;
++	char *arg;
++	ei_node_t *ei_node;
++	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	erlang_pid pid;
++	switch_memory_pool_t *pool;
++};
++typedef struct api_command_struct_s api_command_struct_t;
++
++static char *REQUEST_ATOMS[] = {
++	"noevents",
++	"exit",
++	"link",
++	"nixevent",
++	"sendevent",
++	"sendmsg",
++	"bind",
++	"getpid",
++	"version",
++	"bgapi",
++	"api",
++	"event",
++	"fetch_reply"
++};
++
++typedef enum {
++	REQUEST_NOEVENTS,
++	REQUEST_EXIT,
++	REQUEST_LINK,
++	REQUEST_NIXEVENT,
++	REQUEST_SENDEVENT,
++	REQUEST_SENDMSG,
++	REQUEST_BIND,
++	REQUEST_GETPID,
++	REQUEST_VERSION,
++	REQUEST_BGAPI,
++	REQUEST_API,
++	REQUEST_EVENT,
++	REQUEST_FETCH_REPLY,
++	REQUEST_MAX
++} request_atoms_t;
++
++static switch_status_t find_request(char *atom, int *request) {
++	for (int i = 0; i < REQUEST_MAX; i++) {
++		if(!strncmp(atom, REQUEST_ATOMS[i], MAXATOMLEN)) {
++			*request = i;
++			return SWITCH_STATUS_SUCCESS;
++		}
++	}
++
++	return SWITCH_STATUS_FALSE;
++}
++
++static void destroy_node_handler(ei_node_t *ei_node) {
++	int pending = 0;
++	void *pop;
++
++	switch_clear_flag(ei_node, LFLAG_RUNNING);
++
++	/* wait for pending bgapi requests to complete */
++	while ((pending = switch_atomic_read(&ei_node->pending_bgapi))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Waiting for %d pending bgapi requests to complete\n", pending);
++		switch_yield(500000);
++	}
++
++	/* wait for receive handlers to complete */
++	while ((pending = switch_atomic_read(&ei_node->receive_handlers))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Waiting for %d receive handlers to complete\n", pending);
++		switch_yield(500000);
++	}
++
++	switch_mutex_lock(ei_node->event_streams_mutex);
++	remove_event_streams(&ei_node->event_streams);
++	switch_mutex_unlock(ei_node->event_streams_mutex);
++
++	remove_xml_clients(ei_node);
++
++	while (switch_queue_trypop(ei_node->received_msgs, &pop) == SWITCH_STATUS_SUCCESS) {
++		ei_received_msg_t *received_msg = (ei_received_msg_t *) pop;
++
++		ei_x_free(&received_msg->buf);
++		switch_safe_free(received_msg);
++	}
++
++	while (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS) {
++		ei_send_msg_t *send_msg = (ei_send_msg_t *) pop;
++
++		ei_x_free(&send_msg->buf);
++		switch_safe_free(send_msg);
++	}
++
++	close_socketfd(&ei_node->nodefd);
++
++	switch_mutex_destroy(ei_node->event_streams_mutex);
++
++	switch_core_destroy_memory_pool(&ei_node->pool);
++}
++
++static switch_status_t add_to_ei_nodes(ei_node_t *this_ei_node) {
++	switch_thread_rwlock_wrlock(globals.ei_nodes_lock);
++
++	if (!globals.ei_nodes) {
++		globals.ei_nodes = this_ei_node;
++	} else {
++		this_ei_node->next = globals.ei_nodes;
++		globals.ei_nodes = this_ei_node;
++	}
++
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t remove_from_ei_nodes(ei_node_t *this_ei_node) {
++	ei_node_t *ei_node, *prev = NULL;
++	int found = 0;
++
++	switch_thread_rwlock_wrlock(globals.ei_nodes_lock);
++
++	/* try to find the event bindings list for the requestor */
++	ei_node = globals.ei_nodes;
++	while(ei_node != NULL) {
++		if (ei_node == this_ei_node) {
++			found = 1;
++			break;
++		}
++
++		prev = ei_node;
++		ei_node = ei_node->next;
++	}
++
++	if (found) {
++		if (!prev) {
++			globals.ei_nodes = this_ei_node->next;
++		} else {
++			prev->next = ei_node->next;
++		}
++	}
++
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t api_exec(char *cmd, char *arg, char **reply) {
++	switch_stream_handle_t stream = { 0 };
++	switch_status_t status = SWITCH_STATUS_FALSE;
++
++	SWITCH_STANDARD_STREAM(stream);
++
++	if (switch_api_execute(cmd, arg, NULL, &stream) != SWITCH_STATUS_SUCCESS) {
++		*reply = switch_mprintf("%s: Command not found", cmd);
++		status = SWITCH_STATUS_NOTFOUND;
++	} else if (!stream.data || !strlen(stream.data)) {
++		*reply = switch_mprintf("%s: Command returned no output", cmd);
++		status = SWITCH_STATUS_FALSE;
++	} else {
++		*reply = strdup(stream.data);
++		status = SWITCH_STATUS_SUCCESS;
++	}
++
++	/* if the reply starts with the char "-" (the start of -USAGE ...) */
++	/* the args were missing or incorrect */
++	if (**reply == '-') {
++		status = SWITCH_STATUS_FALSE;
++	}
++
++	switch_safe_free(stream.data);
++
++	return status;
++}
++
++static void *SWITCH_THREAD_FUNC bgapi_exec(switch_thread_t *thread, void *obj) {
++	api_command_struct_t *acs = (api_command_struct_t *) obj;
++	switch_memory_pool_t *pool = acs->pool;
++	char *reply = NULL;
++	char *cmd = acs->cmd;
++	char *arg = acs->arg;
++	ei_node_t *ei_node = acs->ei_node;
++	ei_send_msg_t *send_msg;
++
++	switch_malloc(send_msg, sizeof(*send_msg));
++	memcpy(&send_msg->pid, &acs->pid, sizeof(erlang_pid));
++
++	if(!switch_test_flag(ei_node, LFLAG_RUNNING) || !switch_test_flag(&globals, LFLAG_RUNNING)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring command while shuting down\n");
++		switch_atomic_dec(&ei_node->pending_bgapi);
++		return NULL;
++	}
++
++	ei_x_new_with_version(&send_msg->buf);
++
++	ei_x_encode_tuple_header(&send_msg->buf, 3);
++
++	if (api_exec(cmd, arg, &reply) == SWITCH_STATUS_SUCCESS) {
++		ei_x_encode_atom(&send_msg->buf, "bgok");
++	} else {
++		ei_x_encode_atom(&send_msg->buf, "bgerror");
++	}
++
++	_ei_x_encode_string(&send_msg->buf, acs->uuid_str);
++	_ei_x_encode_string(&send_msg->buf, reply);
++
++	if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to send bgapi response %s to %s <%d.%d.%d>\n"
++						  ,acs->uuid_str
++						  ,acs->pid.node
++						  ,acs->pid.creation
++						  ,acs->pid.num
++						  ,acs->pid.serial);
++		ei_x_free(&send_msg->buf);
++		switch_safe_free(send_msg);
++	}
++
++	switch_atomic_dec(&ei_node->pending_bgapi);
++
++	switch_safe_free(reply);
++	switch_safe_free(acs->arg);
++	switch_core_destroy_memory_pool(&pool);
++
++	return NULL;
++}
++
++static void log_sendmsg_request(char *uuid, switch_event_t *event)
++{
++	char *cmd = switch_event_get_header(event, "call-command");
++	unsigned long cmd_hash;
++	switch_ssize_t hlen = -1;
++	unsigned long CMD_EXECUTE = switch_hashfunc_default("execute", &hlen);
++	unsigned long CMD_XFEREXT = switch_hashfunc_default("xferext", &hlen);
++	//	unsigned long CMD_HANGUP = switch_hashfunc_default("hangup", &hlen);
++	//	unsigned long CMD_NOMEDIA = switch_hashfunc_default("nomedia", &hlen);
++	//	unsigned long CMD_UNICAST = switch_hashfunc_default("unicast", &hlen);
++
++	if (zstr(cmd)) {
++		return;
++	}
++
++	cmd_hash = switch_hashfunc_default(cmd, &hlen);
++
++	if (cmd_hash == CMD_EXECUTE) {
++		char *app_name = switch_event_get_header(event, "execute-app-name");
++		char *app_arg = switch_event_get_header(event, "execute-app-arg");
++
++		if(app_name) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|executing %s %s \n", uuid, app_name, switch_str_nil(app_arg));
++		}
++	} else if (cmd_hash == CMD_XFEREXT) {
++		switch_event_header_t *hp;
++
++		for (hp = event->headers; hp; hp = hp->next) {
++			char *app_name;
++			char *app_arg;
++
++			if (!strcasecmp(hp->name, "application")) {
++				app_name = strdup(hp->value);
++				app_arg = strchr(app_name, ' ');
++
++				if (app_arg) {
++					*app_arg++ = '\0';
++				}
++
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|building xferext extension: %s %s\n", uuid, app_name, app_arg);
++			}
++		}
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "log|%s|transfered call to xferext extension\n", uuid);
++	}
++}
++
++static switch_status_t build_event(switch_event_t *event, ei_x_buff * buf) {
++	int propslist_length, arity;
++
++	if(!event) {
++		return SWITCH_STATUS_FALSE;
++	}
++
++	if (ei_decode_list_header(buf->buff, &buf->index, &propslist_length)) {
++		return SWITCH_STATUS_FALSE;
++	}
++
++	while (!ei_decode_tuple_header(buf->buff, &buf->index, &arity)) {
++		char key[1024];
++		char *value;
++
++		if (arity != 2) {
++			return SWITCH_STATUS_FALSE;
++		}
++
++		if (ei_decode_string_or_binary_limited(buf->buff, &buf->index, sizeof(key), key)) {
++			return SWITCH_STATUS_FALSE;
++		}
++
++		if (ei_decode_string_or_binary(buf->buff, &buf->index, &value)) {
++			return SWITCH_STATUS_FALSE;
++		}
++
++		if (!strcmp(key, "body")) {
++			switch_safe_free(event->body);
++			event->body = value;
++		} else	{
++			switch_event_add_header_string(event, SWITCH_STACK_BOTTOM | SWITCH_STACK_NODUP, key, value);
++		}
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t erlang_response_badarg(ei_x_buff * rbuf) {
++	if (rbuf) {
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_atom(rbuf, "error");
++		ei_x_encode_atom(rbuf, "badarg");
++	}
++
++	return SWITCH_STATUS_GENERR;
++}
++
++static switch_status_t erlang_response_baduuid(ei_x_buff * rbuf) {
++	if (rbuf) {
++		ei_x_format_wo_ver(rbuf, "{~a,~a}", "error", "baduuid");
++	}
++
++	return SWITCH_STATUS_NOTFOUND;
++}
++
++static switch_status_t erlang_response_notimplemented(ei_x_buff * rbuf) {
++	if (rbuf) {
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_atom(rbuf, "error");
++		ei_x_encode_atom(rbuf, "not_implemented");
++	}
++
++	return SWITCH_STATUS_NOTFOUND;
++}
++
++static switch_status_t erlang_response_ok(ei_x_buff *rbuf) {
++	if (rbuf) {
++		ei_x_encode_atom(rbuf, "ok");
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_request_noevents(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	ei_event_stream_t *event_stream;
++
++	switch_mutex_lock(ei_node->event_streams_mutex);
++	if ((event_stream = find_event_stream(ei_node->event_streams, pid))) {
++		remove_event_bindings(event_stream);
++	}
++	switch_mutex_unlock(ei_node->event_streams_mutex);
++
++	return erlang_response_ok(rbuf);
++}
++
++static switch_status_t handle_request_exit(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	switch_clear_flag(ei_node, LFLAG_RUNNING);
++
++	return erlang_response_ok(rbuf);
++}
++
++static switch_status_t handle_request_link(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	ei_link(ei_node, ei_self(&globals.ei_cnode), pid);
++
++	return erlang_response_ok(rbuf);
++}
++
++static switch_status_t handle_request_nixevent(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char event_name[MAXATOMLEN + 1];
++	switch_event_types_t event_type;
++	ei_event_stream_t *event_stream;
++	int custom = 0, length = 0;
++
++	if (ei_decode_list_header(buf->buff, &buf->index, &length)
++		|| length == 0) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch_mutex_lock(ei_node->event_streams_mutex);
++	if (!(event_stream = find_event_stream(ei_node->event_streams, pid))) {
++		switch_mutex_unlock(ei_node->event_streams_mutex);
++		return erlang_response_ok(rbuf);
++	}
++
++	for (int i = 1; i <= length; i++) {
++		if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)) {
++			switch_mutex_unlock(ei_node->event_streams_mutex);
++			return erlang_response_badarg(rbuf);
++		}
++
++		if (custom) {
++			remove_event_binding(event_stream, SWITCH_EVENT_CUSTOM, event_name);
++		} else if (switch_name_event(event_name, &event_type) == SWITCH_STATUS_SUCCESS) {
++			switch (event_type) {
++			case SWITCH_EVENT_CUSTOM:
++				custom++;
++				break;
++			case SWITCH_EVENT_ALL:
++				for (switch_event_types_t type = 0; type < SWITCH_EVENT_ALL; type++) {
++					if(type != SWITCH_EVENT_CUSTOM) {
++						remove_event_binding(event_stream, type, NULL);
++					}
++				}
++				break;
++			default:
++				remove_event_binding(event_stream, event_type, NULL);
++			}
++		} else {
++			switch_mutex_unlock(ei_node->event_streams_mutex);
++			return erlang_response_badarg(rbuf);
++		}
++	}
++	switch_mutex_unlock(ei_node->event_streams_mutex);
++
++	return erlang_response_ok(rbuf);
++}
++
++static switch_status_t handle_request_sendevent(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char event_name[MAXATOMLEN + 1];
++	char subclass_name[MAXATOMLEN + 1];
++	switch_event_types_t event_type;
++	switch_event_t *event = NULL;
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)
++		|| switch_name_event(event_name, &event_type) != SWITCH_STATUS_SUCCESS)
++        {
++			return erlang_response_badarg(rbuf);
++        }
++
++	if (!strncasecmp(event_name, "CUSTOM", MAXATOMLEN)) {
++		if(ei_decode_atom(buf->buff, &buf->index, subclass_name)) {
++			return erlang_response_badarg(rbuf);
++		}
++		switch_event_create_subclass(&event, event_type, subclass_name);
++	} else {
++		switch_event_create(&event, event_type);
++	}
++
++	if (build_event(event, buf) == SWITCH_STATUS_SUCCESS) {
++		switch_event_fire(&event);
++		return erlang_response_ok(rbuf);
++	}
++
++	if(event) {
++		switch_event_destroy(&event);
++	}
++
++	return erlang_response_badarg(rbuf);
++}
++
++static switch_status_t handle_request_sendmsg(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	switch_core_session_t *session;
++	switch_event_t *event = NULL;
++	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
++
++	if (ei_decode_string_or_binary_limited(buf->buff, &buf->index, sizeof(uuid_str), uuid_str)) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch_event_create(&event, SWITCH_EVENT_SEND_MESSAGE);
++	if (build_event(event, buf) != SWITCH_STATUS_SUCCESS) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	log_sendmsg_request(uuid_str, event);
++
++	if (zstr_buf(uuid_str) || !(session = switch_core_session_locate(uuid_str))) {
++		return erlang_response_baduuid(rbuf);
++	}
++	switch_core_session_queue_private_event(session, &event, SWITCH_FALSE);
++	switch_core_session_rwunlock(session);
++
++	return erlang_response_ok(rbuf);
++}
++
++static switch_status_t handle_request_bind(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char section_str[MAXATOMLEN + 1];
++	switch_xml_section_t section;
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, section_str)
++		|| !(section = switch_xml_parse_section_string(section_str))) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch(section) {
++	case SWITCH_XML_SECTION_CONFIG:
++		add_fetch_handler(ei_node, pid, globals.config_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_DIRECTORY:
++		add_fetch_handler(ei_node, pid, globals.directory_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_DIALPLAN:
++		add_fetch_handler(ei_node, pid, globals.dialplan_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_CHATPLAN:
++		add_fetch_handler(ei_node, pid, globals.chatplan_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_CHANNELS:
++		add_fetch_handler(ei_node, pid, globals.channels_fetch_binding);
++		break;
++	default:
++		return erlang_response_badarg(rbuf);
++	}
++
++	return erlang_response_ok(rbuf);
++}
++
++static switch_status_t handle_request_getpid(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	if (rbuf) {
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_atom(rbuf, "ok");
++		ei_x_encode_pid(rbuf, ei_self(&globals.ei_cnode));
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_request_version(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	if (rbuf) {
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_atom(rbuf, "ok");
++		_ei_x_encode_string(rbuf, VERSION);
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_request_bgapi(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	api_command_struct_t *acs = NULL;
++	switch_memory_pool_t *pool;
++	switch_thread_t *thread;
++	switch_threadattr_t *thd_attr = NULL;
++	switch_uuid_t uuid;
++	char cmd[MAXATOMLEN + 1];
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, cmd)) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch_core_new_memory_pool(&pool);
++	acs = switch_core_alloc(pool, sizeof(*acs));
++
++	if (ei_decode_string_or_binary(buf->buff, &buf->index, &acs->arg)) {
++		switch_core_destroy_memory_pool(&pool);
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "bgexec: %s(%s)\n", cmd, acs->arg);
++
++	acs->pool = pool;
++	acs->ei_node = ei_node;
++	acs->cmd = switch_core_strdup(pool, cmd);
++	memcpy(&acs->pid, pid, sizeof(erlang_pid));
++
++	switch_threadattr_create(&thd_attr, acs->pool);
++	switch_threadattr_detach_set(thd_attr, 1);
++	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
++
++	switch_uuid_get(&uuid);
++	switch_uuid_format(acs->uuid_str, &uuid);
++	switch_thread_create(&thread, thd_attr, bgapi_exec, acs, acs->pool);
++
++	switch_atomic_inc(&ei_node->pending_bgapi);
++
++	if (rbuf) {
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_atom(rbuf, "ok");
++		_ei_x_encode_string(rbuf, acs->uuid_str);
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_request_api(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char cmd[MAXATOMLEN + 1];
++	char *arg;
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, cmd)) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (ei_decode_string_or_binary(buf->buff, &buf->index, &arg)) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "exec: %s(%s)\n", cmd, arg);
++
++	if (rbuf) {
++		char *reply;
++
++		ei_x_encode_tuple_header(rbuf, 2);
++
++		if (api_exec(cmd, arg, &reply) == SWITCH_STATUS_SUCCESS) {
++			ei_x_encode_atom(rbuf, "ok");
++		} else {
++			ei_x_encode_atom(rbuf, "error");
++		}
++
++		_ei_x_encode_string(rbuf, reply);
++		switch_safe_free(reply);
++	}
++
++	switch_safe_free(arg);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_request_event(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char event_name[MAXATOMLEN + 1];
++	switch_event_types_t event_type;
++	ei_event_stream_t *event_stream;
++	int custom = 0, length = 0;
++
++	if (ei_decode_list_header(buf->buff, &buf->index, &length) || !length) {
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch_mutex_lock(ei_node->event_streams_mutex);
++	if (!(event_stream = find_event_stream(ei_node->event_streams, pid))) {
++		event_stream = new_event_stream(&ei_node->event_streams, pid);
++		/* ensure we are notified if the requesting processes dies so we can clean up */
++		ei_link(ei_node, ei_self(&globals.ei_cnode), pid);
++	}
++
++	for (int i = 1; i <= length; i++) {
++		if (ei_decode_atom_safe(buf->buff, &buf->index, event_name)) {
++			switch_mutex_unlock(ei_node->event_streams_mutex);
++			return erlang_response_badarg(rbuf);
++		}
++
++		if (custom) {
++			add_event_binding(event_stream, SWITCH_EVENT_CUSTOM, event_name);
++		} else if (switch_name_event(event_name, &event_type) == SWITCH_STATUS_SUCCESS) {
++			switch (event_type) {
++			case SWITCH_EVENT_CUSTOM:
++				custom++;
++				break;
++			case SWITCH_EVENT_ALL:
++				for (switch_event_types_t type = 0; type < SWITCH_EVENT_ALL; type++) {
++					if(type != SWITCH_EVENT_CUSTOM) {
++						add_event_binding(event_stream, type, NULL);
++					}
++				}
++				break;
++			default:
++				add_event_binding(event_stream, event_type, NULL);
++			}
++		} else {
++			switch_mutex_unlock(ei_node->event_streams_mutex);
++			return erlang_response_badarg(rbuf);
++		}
++	}
++	switch_mutex_unlock(ei_node->event_streams_mutex);
++
++	if (rbuf) {
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_atom(rbuf, "ok");
++
++		ei_x_encode_tuple_header(rbuf, 2);
++		ei_x_encode_string(rbuf, ei_node->local_ip);
++		ei_x_encode_ulong(rbuf, get_stream_port(event_stream));
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_request_fetch_reply(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char section_str[MAXATOMLEN + 1];
++	char uuid_str[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	char *xml_str;
++	switch_xml_section_t section;
++	switch_status_t result;
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, section_str)
++		|| !(section = switch_xml_parse_section_string(section_str))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without a configuration section\n");
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (ei_decode_string_or_binary_limited(buf->buff, &buf->index, sizeof(uuid_str), uuid_str)
++		|| zstr_buf(uuid_str)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without request UUID\n");
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (ei_decode_string_or_binary(buf->buff, &buf->index, &xml_str)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring a fetch reply without XML\n");
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (zstr(xml_str)) {
++		switch_safe_free(xml_str);
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Ignoring an empty fetch reply\n");
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch(section) {
++	case SWITCH_XML_SECTION_CONFIG:
++		result = fetch_reply(uuid_str, xml_str, globals.config_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_DIRECTORY:
++		result = fetch_reply(uuid_str, xml_str, globals.directory_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_DIALPLAN:
++		result = fetch_reply(uuid_str, xml_str, globals.dialplan_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_CHATPLAN:
++		result = fetch_reply(uuid_str, xml_str, globals.chatplan_fetch_binding);
++		break;
++	case SWITCH_XML_SECTION_CHANNELS:
++		result = fetch_reply(uuid_str, xml_str, globals.channels_fetch_binding);
++		break;
++	default:
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply for an unknown configuration section: %s\n", section_str);
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (result == SWITCH_STATUS_SUCCESS) {
++		return erlang_response_ok(rbuf);
++	} else {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved fetch reply for an unknown/expired UUID: %s\n", uuid_str);
++		return erlang_response_baduuid(rbuf);
++	}
++}
++
++static switch_status_t handle_kazoo_request(ei_node_t *ei_node, erlang_pid *pid, ei_x_buff *buf, ei_x_buff *rbuf) {
++	char atom[MAXATOMLEN + 1];
++	int type, size, arity = 0, request;
++
++	/* ...{_, _}} | ...atom()} = Buf */
++	ei_get_type(buf->buff, &buf->index, &type, &size);
++
++	/* is_tuple(Type) */
++	if (type == ERL_SMALL_TUPLE_EXT) {
++		/* ..._, _} = Buf */
++		ei_decode_tuple_header(buf->buff, &buf->index, &arity);
++	}
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, atom)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved mod_kazoo message that did not contain a command (ensure you are using Kazoo v2.14+).\n");
++		return erlang_response_badarg(rbuf);
++	}
++
++	if (find_request(atom, &request) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved mod_kazoo message for unimplemented feature (ensure you are using Kazoo v2.14+): %s\n", atom);
++		return erlang_response_badarg(rbuf);
++	}
++
++	switch(request) {
++	case REQUEST_NOEVENTS:
++		return handle_request_noevents(ei_node, pid, buf, rbuf);
++	case REQUEST_EXIT:
++		return handle_request_exit(ei_node, pid, buf, rbuf);
++	case REQUEST_LINK:
++		return handle_request_link(ei_node, pid, buf, rbuf);
++	case REQUEST_NIXEVENT:
++		return handle_request_nixevent(ei_node, pid, buf, rbuf);
++	case REQUEST_SENDEVENT:
++		return handle_request_sendevent(ei_node, pid, buf, rbuf);
++	case REQUEST_SENDMSG:
++		return handle_request_sendmsg(ei_node, pid, buf, rbuf);
++	case REQUEST_BIND:
++		return handle_request_bind(ei_node, pid, buf, rbuf);
++	case REQUEST_GETPID:
++		return handle_request_getpid(ei_node, pid, buf, rbuf);
++	case REQUEST_VERSION:
++		return handle_request_version(ei_node, pid, buf, rbuf);
++	case REQUEST_BGAPI:
++		return handle_request_bgapi(ei_node, pid, buf, rbuf);
++	case REQUEST_API:
++		return handle_request_api(ei_node, pid, buf, rbuf);
++	case REQUEST_EVENT:
++		return handle_request_event(ei_node, pid, buf, rbuf);
++	case REQUEST_FETCH_REPLY:
++		return handle_request_fetch_reply(ei_node, pid, buf, rbuf);
++	default:
++		return erlang_response_notimplemented(rbuf);
++	}
++}
++
++static switch_status_t handle_mod_kazoo_request(ei_node_t *ei_node, erlang_msg *msg, ei_x_buff *buf) {
++	char atom[MAXATOMLEN + 1];
++	int version, type, size, arity;
++
++	buf->index = 0;
++	ei_decode_version(buf->buff, &buf->index, &version);
++	ei_get_type(buf->buff, &buf->index, &type, &size);
++
++	/* is_tuple(Type) */
++	if (type != ERL_SMALL_TUPLE_EXT) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Received erlang message of an unexpected type (ensure you are using Kazoo v2.14+).\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	ei_decode_tuple_header(buf->buff, &buf->index, &arity);
++
++	if (ei_decode_atom_safe(buf->buff, &buf->index, atom)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved erlang message tuple that did not start with an atom (ensure you are using Kazoo v2.14+).\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	/* {'$gen_cast', {_, _}} = Buf */
++	if (arity == 2 && !strncmp(atom, "$gen_cast", 9)) {
++		return handle_kazoo_request(ei_node, &msg->from, buf, NULL);
++        /* {'$gen_call', {_, _}, {_, _}} = Buf */
++	} else if (arity == 3 && !strncmp(atom, "$gen_call", 9)) {
++		switch_status_t status;
++		ei_send_msg_t *send_msg;
++		erlang_ref ref;
++
++		switch_malloc(send_msg, sizeof(*send_msg));
++
++		ei_x_new(&send_msg->buf);
++
++		ei_x_new_with_version(&send_msg->buf);
++
++		/* ...{_, _}, {_, _}} = Buf */
++		ei_get_type(buf->buff, &buf->index, &type, &size);
++
++		/* is_tuple(Type) */
++		if (type != ERL_SMALL_TUPLE_EXT) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Received erlang call message of an unexpected type (ensure you are using Kazoo v2.14+).\n");
++			return SWITCH_STATUS_GENERR;
++		}
++
++		/* ..._, _}, {_, _}} = Buf */
++		ei_decode_tuple_header(buf->buff, &buf->index, &arity);
++
++		/* ...pid(), _}, {_, _}} = Buf */
++		if (ei_decode_pid(buf->buff, &buf->index, &send_msg->pid)) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Received erlang call without a reply pid (ensure you are using Kazoo v2.14+).\n");
++			return SWITCH_STATUS_GENERR;
++		}
++
++		/* ...ref()}, {_, _}} = Buf */
++		if (ei_decode_ref(buf->buff, &buf->index, &ref)) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Received erlang call without a reply tag (ensure you are using Kazoo v2.14+).\n");
++			return SWITCH_STATUS_GENERR;
++		}
++
++		/* send_msg->buf = {ref(), ... */
++		ei_x_encode_tuple_header(&send_msg->buf, 2);
++		ei_x_encode_ref(&send_msg->buf, &ref);
++
++		status = handle_kazoo_request(ei_node, &msg->from, buf, &send_msg->buf);
++
++		if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
++			ei_x_free(&send_msg->buf);
++			switch_safe_free(send_msg);
++		}
++
++		return status;
++	} else {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved inappropriate erlang message (ensure you are using Kazoo v2.14+)\n");
++		return SWITCH_STATUS_GENERR;
++	}
++}
++
++/* fake enough of the net_kernel module to be able to respond to net_adm:ping */
++static switch_status_t handle_net_kernel_request(ei_node_t *ei_node, erlang_msg *msg, ei_x_buff *buf) {
++	int version, size, type, arity;
++	char atom[MAXATOMLEN + 1];
++	ei_send_msg_t *send_msg;
++	erlang_ref ref;
++
++	switch_malloc(send_msg, sizeof(*send_msg));
++
++	ei_x_new(&send_msg->buf);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received net_kernel message, attempting to reply\n");
++
++	buf->index = 0;
++	ei_decode_version(buf->buff, &buf->index, &version);
++	ei_get_type(buf->buff, &buf->index, &type, &size);
++
++	/* is_tuple(Buff) */
++	if (type != ERL_SMALL_TUPLE_EXT) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received net_kernel message of an unexpected type\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	ei_decode_tuple_header(buf->buff, &buf->index, &arity);
++
++	/* {_, _, _} = Buf */
++	if (arity != 3) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received net_kernel tuple has an unexpected arity\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	/* {'$gen_call', _, _} = Buf */
++	if (ei_decode_atom_safe(buf->buff, &buf->index, atom) || strncmp(atom, "$gen_call", 9)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received net_kernel message tuple does not begin with the atom '$gen_call'\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	ei_get_type(buf->buff, &buf->index, &type, &size);
++
++	/* {_, Sender, _}=Buff, is_tuple(Sender) */
++	if (type != ERL_SMALL_TUPLE_EXT) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Second element of the net_kernel tuple is an unexpected type\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	ei_decode_tuple_header(buf->buff, &buf->index, &arity);
++
++	/* {_, _}=Sender */
++	if (arity != 2) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Second element of the net_kernel message has an unexpected arity\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	/* {Pid, Ref}=Sender */
++	if (ei_decode_pid(buf->buff, &buf->index, &send_msg->pid) || ei_decode_ref(buf->buff, &buf->index, &ref)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Unable to decode erlang pid or ref of the net_kernel tuple second element\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	ei_get_type(buf->buff, &buf->index, &type, &size);
++
++	/* {_, _, Request}=Buff, is_tuple(Request) */
++	if (type != ERL_SMALL_TUPLE_EXT) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Third element of the net_kernel message is an unexpected type\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	ei_decode_tuple_header(buf->buff, &buf->index, &arity);
++
++	/* {_, _}=Request */
++	if (arity != 2) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Third element of the net_kernel message has an unexpected arity\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	/* {is_auth, _}=Request */
++	if (ei_decode_atom_safe(buf->buff, &buf->index, atom) || strncmp(atom, "is_auth", MAXATOMLEN)) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "The net_kernel message third element does not begin with the atom 'is_auth'\n");
++		return SWITCH_STATUS_GENERR;
++	}
++
++	/* To ! {Tag, Reply} */
++	ei_x_new_with_version(&send_msg->buf);
++	ei_x_encode_tuple_header(&send_msg->buf, 2);
++	ei_x_encode_ref(&send_msg->buf, &ref);
++	ei_x_encode_atom(&send_msg->buf, "yes");
++
++	if (switch_queue_trypush(ei_node->send_msgs, send_msg) != SWITCH_STATUS_SUCCESS) {
++		ei_x_free(&send_msg->buf);
++		switch_safe_free(send_msg);
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_erl_send(ei_node_t *ei_node, erlang_msg *msg, ei_x_buff *buf) {
++	if (!strncmp(msg->toname, "net_kernel", MAXATOMLEN)) {
++		return handle_net_kernel_request(ei_node, msg, buf);
++	} else if (!strncmp(msg->toname, "mod_kazoo", MAXATOMLEN)) {
++		return handle_mod_kazoo_request(ei_node, msg, buf);
++	} else {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Recieved erlang message to unknown process \"%s\" (ensure you are using Kazoo v2.14+).\n", msg->toname);
++		return SWITCH_STATUS_GENERR;
++	}
++}
++
++static switch_status_t handle_erl_msg(ei_node_t *ei_node, erlang_msg *msg, ei_x_buff *buf) {
++	switch (msg->msgtype) {
++	case ERL_SEND:
++	case ERL_REG_SEND:
++		return handle_erl_send(ei_node, msg, buf);
++	case ERL_LINK:
++		/* we received an erlang link request?	Should we be linking or are they linking to us and this just informs us? */
++		return SWITCH_STATUS_SUCCESS;
++	case ERL_UNLINK:
++		/* we received an erlang unlink request?  Same question as the ERL_LINK, are we expected to do something? */
++		return SWITCH_STATUS_SUCCESS;
++	case ERL_EXIT:
++		/* we received a notice that a process we were linked to has exited, clean up any bindings */
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Received erlang exit notice for %s <%d.%d.%d>\n", msg->from.node, msg->from.creation, msg->from.num, msg->from.serial);
++
++		switch_mutex_lock(ei_node->event_streams_mutex);
++		remove_event_stream(&ei_node->event_streams, &msg->from);
++		switch_mutex_unlock(ei_node->event_streams_mutex);
++
++		remove_fetch_handlers(ei_node, &msg->from);
++		return SWITCH_STATUS_SUCCESS;
++	case ERL_EXIT2:
++		/* erlang nodes appear to send both the old and new style exit notices so just ignore these */
++		return SWITCH_STATUS_FALSE;
++	default:
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Received unexpected erlang message type %d\n", (int) (msg->msgtype));
++		return SWITCH_STATUS_FALSE;
++	}
++}
++
++static void *SWITCH_THREAD_FUNC receive_handler(switch_thread_t *thread, void *obj) {
++	ei_node_t *ei_node = (ei_node_t *) obj;
++
++	switch_atomic_inc(&globals.threads);
++	switch_atomic_inc(&ei_node->receive_handlers);
++
++	switch_assert(ei_node != NULL);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Starting erlang receive handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++
++	while (switch_test_flag(ei_node, LFLAG_RUNNING) && switch_test_flag(&globals, LFLAG_RUNNING)) {
++		void *pop;
++
++		if (switch_queue_pop_timeout(ei_node->received_msgs, &pop, 500000) == SWITCH_STATUS_SUCCESS) {
++			ei_received_msg_t *received_msg = (ei_received_msg_t *) pop;
++			handle_erl_msg(ei_node, &received_msg->msg, &received_msg->buf);
++			ei_x_free(&received_msg->buf);
++			switch_safe_free(received_msg);
++		}
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown erlang receive handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++
++	switch_atomic_dec(&ei_node->receive_handlers);
++	switch_atomic_dec(&globals.threads);
++
++	return NULL;
++}
++
++static void *SWITCH_THREAD_FUNC handle_node(switch_thread_t *thread, void *obj) {
++	ei_node_t *ei_node = (ei_node_t *) obj;
++	ei_received_msg_t *received_msg = NULL;
++
++	switch_atomic_inc(&globals.threads);
++
++	switch_assert(ei_node != NULL);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Starting node request handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++
++	add_to_ei_nodes(ei_node);
++
++	while (switch_test_flag(ei_node, LFLAG_RUNNING) && switch_test_flag(&globals, LFLAG_RUNNING)) {
++		int status;
++		int send_msg_count = 0;
++		void *pop;
++
++		if (!received_msg) {
++			switch_malloc(received_msg, sizeof(*received_msg));
++			/* create a new buf for the erlang message and a rbuf for the reply */
++			if(globals.receive_msg_preallocate > 0) {
++				received_msg->buf.buff = malloc(globals.receive_msg_preallocate);
++				received_msg->buf.buffsz = globals.receive_msg_preallocate;
++				received_msg->buf.index = 0;
++				if(received_msg->buf.buff == NULL) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Could not pre-allocate memory for mod_kazoo message\n");
++					goto exit;
++				}
++			} else {
++				ei_x_new(&received_msg->buf);
++			}
++		}
++
++		while (switch_queue_trypop(ei_node->send_msgs, &pop) == SWITCH_STATUS_SUCCESS
++			   && ++send_msg_count <= globals.send_msg_batch) {
++			ei_send_msg_t *send_msg = (ei_send_msg_t *) pop;
++			ei_helper_send(ei_node, &send_msg->pid, &send_msg->buf);
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Sent erlang message to %s <%d.%d.%d>\n"
++							  ,send_msg->pid.node
++							  ,send_msg->pid.creation
++							  ,send_msg->pid.num
++							  ,send_msg->pid.serial);
++			ei_x_free(&send_msg->buf);
++			switch_safe_free(send_msg);
++		}
++
++		/* wait for a erlang message, or timeout to check if the module is still running */
++		status = ei_xreceive_msg_tmo(ei_node->nodefd, &received_msg->msg, &received_msg->buf, globals.receive_timeout);
++
++		switch (status) {
++		case ERL_TICK:
++			/* erlang nodes send ticks to eachother to validate they are still reachable, we dont have to do anything here */
++			break;
++		case ERL_MSG:
++			if (switch_queue_trypush(ei_node->received_msgs, received_msg) != SWITCH_STATUS_SUCCESS) {
++				ei_x_free(&received_msg->buf);
++				switch_safe_free(received_msg);
++			}
++			if (globals.receive_msg_preallocate > 0 && received_msg->buf.buffsz > globals.receive_msg_preallocate) {
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "increased received message buffer size to %d\n", received_msg->buf.buffsz);
++			}
++			received_msg = NULL;
++			break;
++		case ERL_ERROR:
++			switch (erl_errno) {
++			case ETIMEDOUT:
++			case EAGAIN:
++				/* if ei_xreceive_msg_tmo just timed out, ignore it and let the while loop check if we are still running */
++				/* the erlang lib just wants us to try to receive again, so we will! */
++				break;
++			case EMSGSIZE:
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Erlang communication fault with node %p %s (%s:%d): my spoon is too big\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++				switch_clear_flag(ei_node, LFLAG_RUNNING);
++				break;
++			case EIO:
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_NOTICE, "Erlang communication fault with node %p %s (%s:%d): socket closed or I/O error\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++				switch_clear_flag(ei_node, LFLAG_RUNNING);
++				break;
++			default:
++				/* OH NOS! something has gone horribly wrong, shutdown the connection if status set by ei_xreceive_msg_tmo is less than or equal to 0 */
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Erlang communication fault with node %p %s (%s:%d): erl_errno=%d errno=%d\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port, erl_errno, errno);
++				if (status < 0) {
++					switch_clear_flag(ei_node, LFLAG_RUNNING);
++				}
++				break;
++			}
++			break;
++		default:
++			/* HUH? didnt plan for this, whatevs shutdown the connection if status set by ei_xreceive_msg_tmo is less than or equal to 0 */
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected erlang receive status %p %s (%s:%d): %d\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port, status);
++			if (status < 0) {
++				switch_clear_flag(ei_node, LFLAG_RUNNING);
++			}
++			break;
++		}
++	}
++
++ exit:
++
++    if (received_msg) {
++		ei_x_free(&received_msg->buf);
++		switch_safe_free(received_msg);
++	}
++
++	remove_from_ei_nodes(ei_node);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Shutdown erlang node handler %p: %s (%s:%d)\n", (void *)ei_node, ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++
++	destroy_node_handler(ei_node);
++
++	switch_atomic_dec(&globals.threads);
++	return NULL;
++}
++
++/* Create a thread to wait for messages from an erlang node and process them */
++switch_status_t new_kazoo_node(int nodefd, ErlConnect *conn) {
++	switch_thread_t *thread;
++	switch_threadattr_t *thd_attr = NULL;
++	switch_memory_pool_t *pool = NULL;
++	switch_sockaddr_t *sa;
++	ei_node_t *ei_node;
++	int i = 0;
++
++	/* create memory pool for this erlang node */
++	if (switch_core_new_memory_pool(&pool) != SWITCH_STATUS_SUCCESS) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of memory: Too bad drinking scotch isn't a paying job or Kenny's dad would be a millionare!\n");
++		return SWITCH_STATUS_MEMERR;
++	}
++
++	/* from the erlang node's memory pool, allocate some memory for the structure */
++	if (!(ei_node = switch_core_alloc(pool, sizeof (*ei_node)))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Out of memory: Stan, don't you know the first law of physics? Anything that's fun costs at least eight dollars.\n");
++		return SWITCH_STATUS_MEMERR;
++	}
++
++	memset(ei_node, 0, sizeof(*ei_node));
++
++	/* store the location of our pool */
++	ei_node->pool = pool;
++
++	/* save the file descriptor that the erlang interface lib uses to communicate with the new node */
++	ei_node->nodefd = nodefd;
++	ei_node->peer_nodename = switch_core_strdup(ei_node->pool, conn->nodename);
++	ei_node->created_time = switch_micro_time_now();
++
++	/* store the IP and node name we are talking with */
++	switch_os_sock_put(&ei_node->socket, (switch_os_socket_t *)&nodefd, pool);
++
++	switch_socket_addr_get(&sa, SWITCH_TRUE, ei_node->socket);
++	ei_node->local_port = switch_sockaddr_get_port(sa);
++	switch_get_addr(ei_node->remote_ip, sizeof (ei_node->remote_ip), sa);
++
++	switch_socket_addr_get(&sa, SWITCH_FALSE, ei_node->socket);
++	ei_node->remote_port = switch_sockaddr_get_port(sa);
++	switch_get_addr(ei_node->local_ip, sizeof (ei_node->local_ip), sa);
++
++	switch_queue_create(&ei_node->send_msgs, MAX_QUEUE_LEN, pool);
++	switch_queue_create(&ei_node->received_msgs, MAX_QUEUE_LEN, pool);
++
++	switch_mutex_init(&ei_node->event_streams_mutex, SWITCH_MUTEX_DEFAULT, pool);
++
++	/* when we start we are running */
++	switch_set_flag(ei_node, LFLAG_RUNNING);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "New erlang connection from node %s (%s:%d)\n", ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port);
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "New erlang connection to node %s (%s:%d)\n", ei_node->peer_nodename, ei_node->local_ip, ei_node->local_port);
++
++	for(i = 0; i < globals.num_worker_threads; i++) {
++		switch_threadattr_create(&thd_attr, ei_node->pool);
++		switch_threadattr_detach_set(thd_attr, 1);
++		switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
++		switch_thread_create(&thread, thd_attr, receive_handler, ei_node, ei_node->pool);
++	}
++
++	switch_threadattr_create(&thd_attr, ei_node->pool);
++	switch_threadattr_detach_set(thd_attr, 1);
++	switch_threadattr_stacksize_set(thd_attr, SWITCH_THREAD_STACKSIZE);
++	switch_thread_create(&thread, thd_attr, handle_node, ei_node, ei_node->pool);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++/* For Emacs:
++ * Local Variables:
++ * mode:c
++ * indent-tabs-mode:t
++ * tab-width:4
++ * c-basic-offset:4
++ * End:
++ * For VIM:
++ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
++ */
+diff --git a/src/mod/event_handlers/mod_kazoo/kazoo_utils.c b/src/mod/event_handlers/mod_kazoo/kazoo_utils.c
+new file mode 100644
+index 0000000..e1e356a
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/kazoo_utils.c
+@@ -0,0 +1,614 @@
++/*
++ * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
++ *
++ * Version: MPL 1.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ *
++ * The Initial Developer of the Original Code is
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Portions created by the Initial Developer are Copyright (C)
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Andrew Thompson <andrew@hijacked.us>
++ * Rob Charlton <rob.charlton@savageminds.com>
++ * Karl Anderson <karl@2600hz.com>
++ *
++ * Original from mod_erlang_event.
++ * ei_helpers.c -- helper functions for ei
++ *
++ */
++#include <switch.h>
++#include <ei.h>
++#include <sys/types.h>
++#include <netinet/in.h>
++#include <arpa/nameser.h>
++#include <resolv.h>
++#include "mod_kazoo.h"
++
++/* Stolen from code added to ei in R12B-5.
++ * Since not everyone has this version yet;
++ * provide our own version.
++ * */
++
++#define put8(s,n) do {							\
++        (s)[0] = (char)((n) & 0xff);			\
++        (s) += 1;								\
++	} while (0)
++
++#define put32be(s,n) do {						\
++        (s)[0] = ((n) >>  24) & 0xff;			\
++        (s)[1] = ((n) >>  16) & 0xff;			\
++        (s)[2] = ((n) >>  8) & 0xff;			\
++        (s)[3] = (n) & 0xff;					\
++        (s) += 4;								\
++	} while (0)
++
++#ifdef EI_DEBUG
++static void ei_x_print_reg_msg(ei_x_buff *buf, char *dest, int send) {
++    char *mbuf = NULL;
++    int i = 1;
++
++    ei_s_print_term(&mbuf, buf->buff, &i);
++
++    if (send) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Encoded term %s to '%s'\n", mbuf, dest);
++    } else {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Decoded term %s for '%s'\n", mbuf, dest);
++    }
++
++    free(mbuf);
++}
++
++static void ei_x_print_msg(ei_x_buff *buf, erlang_pid *pid, int send) {
++    char *pbuf = NULL;
++    int i = 0;
++    ei_x_buff pidbuf;
++
++    ei_x_new(&pidbuf);
++    ei_x_encode_pid(&pidbuf, pid);
++
++    ei_s_print_term(&pbuf, pidbuf.buff, &i);
++
++    ei_x_print_reg_msg(buf, pbuf, send);
++    free(pbuf);
++}
++#endif
++
++void ei_encode_switch_event_headers(ei_x_buff *ebuf, switch_event_t *event) {
++    switch_event_header_t *hp;
++    char *uuid = switch_event_get_header(event, "unique-id");
++    int i;
++
++    for (i = 0, hp = event->headers; hp; hp = hp->next, i++);
++
++    if (event->body)
++        i++;
++
++    ei_x_encode_list_header(ebuf, i + 1);
++
++    if (uuid) {
++		char *unique_id = switch_event_get_header(event, "unique-id");
++		ei_x_encode_binary(ebuf, unique_id, strlen(unique_id));
++    } else {
++        ei_x_encode_atom(ebuf, "undefined");
++    }
++
++    for (hp = event->headers; hp; hp = hp->next) {
++        ei_x_encode_tuple_header(ebuf, 2);
++        ei_x_encode_binary(ebuf, hp->name, strlen(hp->name));
++        switch_url_decode(hp->value);
++        ei_x_encode_binary(ebuf, hp->value, strlen(hp->value));
++    }
++
++    if (event->body) {
++        ei_x_encode_tuple_header(ebuf, 2);
++        ei_x_encode_binary(ebuf, "body", strlen("body"));
++        ei_x_encode_binary(ebuf, event->body, strlen(event->body));
++    }
++
++    ei_x_encode_empty_list(ebuf);
++}
++
++void close_socket(switch_socket_t ** sock) {
++	if (*sock) {
++		switch_socket_shutdown(*sock, SWITCH_SHUTDOWN_READWRITE);
++		switch_socket_close(*sock);
++		*sock = NULL;
++	}
++}
++
++void close_socketfd(int *sockfd) {
++	if (*sockfd) {
++		shutdown(*sockfd, SHUT_RDWR);
++		close(*sockfd);
++	}
++}
++
++switch_socket_t *create_socket(switch_memory_pool_t *pool) {
++	switch_sockaddr_t *sa;
++	switch_socket_t *socket;
++
++	if(switch_sockaddr_info_get(&sa, globals.ip, SWITCH_UNSPEC, 0, 0, pool)) {
++		return NULL;
++	}
++
++	if (switch_socket_create(&socket, switch_sockaddr_get_family(sa), SOCK_STREAM, SWITCH_PROTO_TCP, pool)) {
++		return NULL;
++	}
++
++	if (switch_socket_opt_set(socket, SWITCH_SO_REUSEADDR, 1)) {
++		return NULL;
++	}
++
++	if (switch_socket_bind(socket, sa)) {
++		return NULL;
++	}
++
++	if (switch_socket_listen(socket, 5)){
++		return NULL;
++	}
++
++	//	if (globals.nat_map && switch_nat_get_type()) {
++	//		switch_nat_add_mapping(port, SWITCH_NAT_TCP, NULL, SWITCH_FALSE);
++	//	}
++
++	return socket;
++}
++
++switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei_cnode_s *ei_cnode) {
++    struct hostent *nodehost;
++    char hostname[EI_MAXHOSTNAMELEN + 1] = "";
++    char nodename[MAXNODELEN + 1];
++    char cnodename[EI_MAXALIVELEN + 1];
++    //EI_MAX_COOKIE_SIZE+1
++    char *atsign;
++
++    /* copy the erlang interface nodename into something we can modify */
++    strncpy(cnodename, name, EI_MAXALIVELEN);
++
++    if ((atsign = strchr(cnodename, '@'))) {
++        /* we got a qualified node name, don't guess the host/domain */
++        snprintf(nodename, MAXNODELEN + 1, "%s", globals.ei_nodename);
++        /* truncate the alivename at the @ */
++        *atsign = '\0';
++    } else {
++        if ((nodehost = gethostbyaddr(ip_addr, sizeof (ip_addr), AF_INET))) {
++            memcpy(hostname, nodehost->h_name, EI_MAXHOSTNAMELEN);
++        }
++
++        if (zstr_buf(hostname) || !strncasecmp(globals.ip, "0.0.0.0", 7)) {
++            gethostname(hostname, EI_MAXHOSTNAMELEN);
++        }
++
++        snprintf(nodename, MAXNODELEN + 1, "%s@%s", globals.ei_nodename, hostname);
++    }
++
++	if (globals.ei_shortname) {
++		char *off;
++		if ((off = strchr(nodename, '.'))) {
++			*off = '\0';
++		}
++	}
++
++    /* init the ec stuff */
++    if (ei_connect_xinit(ei_cnode, hostname, cnodename, nodename, (Erl_IpAddr) ip_addr, globals.ei_cookie, 0) < 0) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to initialize the erlang interface connection structure\n");
++        return SWITCH_STATUS_FALSE;
++    }
++
++    return SWITCH_STATUS_SUCCESS;
++}
++
++switch_status_t ei_compare_pids(const erlang_pid *pid1, const erlang_pid *pid2) {
++    if ((!strcmp(pid1->node, pid2->node))
++		&& pid1->creation == pid2->creation
++		&& pid1->num == pid2->num
++		&& pid1->serial == pid2->serial) {
++        return SWITCH_STATUS_SUCCESS;
++    } else {
++        return SWITCH_STATUS_FALSE;
++    }
++}
++
++void ei_link(ei_node_t *ei_node, erlang_pid * from, erlang_pid * to) {
++    char msgbuf[2048];
++    char *s;
++    int index = 0;
++
++    index = 5; /* max sizes: */
++    ei_encode_version(msgbuf, &index); /*   1 */
++    ei_encode_tuple_header(msgbuf, &index, 3);
++    ei_encode_long(msgbuf, &index, ERL_LINK);
++    ei_encode_pid(msgbuf, &index, from); /* 268 */
++    ei_encode_pid(msgbuf, &index, to); /* 268 */
++
++    /* 5 byte header missing */
++    s = msgbuf;
++    put32be(s, index - 4); /*   4 */
++    put8(s, ERL_PASS_THROUGH); /*   1 */
++    /* sum:  542 */
++
++    if (write(ei_node->nodefd, msgbuf, index) == -1) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Failed to link to process on %s\n", ei_node->peer_nodename);
++    }
++}
++
++void ei_encode_switch_event(ei_x_buff *ebuf, switch_event_t *event) {
++    ei_x_encode_tuple_header(ebuf, 2);
++    ei_x_encode_atom(ebuf, "event");
++    ei_encode_switch_event_headers(ebuf, event);
++}
++
++int ei_helper_send(ei_node_t *ei_node, erlang_pid *to, ei_x_buff *buf) {
++    int ret = 0;
++
++    if (ei_node->nodefd) {
++#ifdef EI_DEBUG
++		ei_x_print_msg(buf, to, 1);
++#endif
++        ret = ei_send(ei_node->nodefd, to, buf->buff, buf->index);
++    }
++
++    return ret;
++}
++
++int ei_decode_atom_safe(char *buf, int *index, char *dst) {
++    int type, size;
++
++    ei_get_type(buf, index, &type, &size);
++
++	if (type != ERL_ATOM_EXT) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected erlang term type %d (size %d), needed atom\n", type, size);
++        return -1;
++	} else if (size > MAXATOMLEN) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Requested decoding of atom with size %d into a buffer of size %d\n", size, MAXATOMLEN);
++        return -1;
++	} else {
++		return ei_decode_atom(buf, index, dst);
++	}
++}
++
++int ei_decode_string_or_binary(char *buf, int *index, char **dst) {
++    int type, size, res;
++    long len;
++
++    ei_get_type(buf, index, &type, &size);
++
++    if (type != ERL_STRING_EXT && type != ERL_BINARY_EXT && type != ERL_NIL_EXT) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected erlang term type %d (size %d), needed binary or string\n", type, size);
++        return -1;
++    }
++
++	*dst = malloc(size + 1);
++
++	if (type == ERL_NIL_EXT) {
++		res = 0;
++		**dst = '\0';
++	} else if (type == ERL_BINARY_EXT) {
++        res = ei_decode_binary(buf, index, *dst, &len);
++        (*dst)[len] = '\0';
++    } else {
++        res = ei_decode_string(buf, index, *dst);
++    }
++
++    return res;
++}
++
++int ei_decode_string_or_binary_limited(char *buf, int *index, int maxsize, char *dst) {
++    int type, size, res;
++    long len;
++
++    ei_get_type(buf, index, &type, &size);
++
++    if (type != ERL_STRING_EXT && type != ERL_BINARY_EXT && type != ERL_NIL_EXT) {
++        switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unexpected erlang term type %d (size %d), needed binary or string\n", type, size);
++        return -1;
++    }
++
++	if (size > maxsize) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Requested decoding of %s with size %d into a buffer of size %d\n",
++						  type == ERL_BINARY_EXT ? "binary" : "string", size, maxsize);
++		return -1;
++	}
++
++	if (type == ERL_NIL_EXT) {
++		res = 0;
++		dst = '\0';
++	} else if (type == ERL_BINARY_EXT) {
++        res = ei_decode_binary(buf, index, dst, &len);
++        dst[len] = '\0'; /* binaries aren't null terminated */
++    } else {
++        res = ei_decode_string(buf, index, dst);
++    }
++
++    return res;
++}
++
++switch_hash_t *create_default_filter() {
++	switch_hash_t *filter;
++
++	switch_core_hash_init(&filter);
++
++	switch_core_hash_insert(filter, "Acquired-UUID", "1");
++	switch_core_hash_insert(filter, "action", "1");
++	switch_core_hash_insert(filter, "Action", "1");
++	switch_core_hash_insert(filter, "alt_event_type", "1");
++	switch_core_hash_insert(filter, "Answer-State", "1");
++	switch_core_hash_insert(filter, "Application", "1");
++	switch_core_hash_insert(filter, "Application-Data", "1");
++	switch_core_hash_insert(filter, "Application-Name", "1");
++	switch_core_hash_insert(filter, "Application-Response", "1");
++	switch_core_hash_insert(filter, "att_xfer_replaced_by", "1");
++	switch_core_hash_insert(filter, "Auth-Method", "1");
++	switch_core_hash_insert(filter, "Auth-Realm", "1");
++	switch_core_hash_insert(filter, "Auth-User", "1");
++	switch_core_hash_insert(filter, "Bridge-A-Unique-ID", "1");
++	switch_core_hash_insert(filter, "Bridge-B-Unique-ID", "1");
++	switch_core_hash_insert(filter, "Call-Direction", "1");
++	switch_core_hash_insert(filter, "Caller-Callee-ID-Name", "1");
++	switch_core_hash_insert(filter, "Caller-Callee-ID-Number", "1");
++	switch_core_hash_insert(filter, "Caller-Caller-ID-Name", "1");
++	switch_core_hash_insert(filter, "Caller-Caller-ID-Number", "1");
++	switch_core_hash_insert(filter, "Caller-Context", "1");
++	switch_core_hash_insert(filter, "Caller-Controls", "1");
++	switch_core_hash_insert(filter, "Caller-Destination-Number", "1");
++	switch_core_hash_insert(filter, "Caller-Dialplan", "1");
++	switch_core_hash_insert(filter, "Caller-Network-Addr", "1");
++	switch_core_hash_insert(filter, "Caller-Unique-ID", "1");
++	switch_core_hash_insert(filter, "Call-ID", "1");
++	switch_core_hash_insert(filter, "Channel-Call-State", "1");
++	switch_core_hash_insert(filter, "Channel-Call-UUID", "1");
++	switch_core_hash_insert(filter, "Channel-Presence-ID", "1");
++	switch_core_hash_insert(filter, "Channel-State", "1");
++	switch_core_hash_insert(filter, "Chat-Permissions", "1");
++	switch_core_hash_insert(filter, "Conference-Name", "1");
++	switch_core_hash_insert(filter, "Conference-Profile-Name", "1");
++	switch_core_hash_insert(filter, "Conference-Unique-ID", "1");
++	switch_core_hash_insert(filter, "contact", "1");
++	switch_core_hash_insert(filter, "Detected-Tone", "1");
++	switch_core_hash_insert(filter, "dialog_state", "1");
++	switch_core_hash_insert(filter, "direction", "1");
++	switch_core_hash_insert(filter, "Distributed-From", "1");
++	switch_core_hash_insert(filter, "DTMF-Digit", "1");
++	switch_core_hash_insert(filter, "DTMF-Duration", "1");
++	switch_core_hash_insert(filter, "Event-Date-Timestamp", "1");
++	switch_core_hash_insert(filter, "Event-Name", "1");
++	switch_core_hash_insert(filter, "Event-Subclass", "1");
++	switch_core_hash_insert(filter, "expires", "1");
++	switch_core_hash_insert(filter, "Expires", "1");
++	switch_core_hash_insert(filter, "Ext-SIP-IP", "1");
++	switch_core_hash_insert(filter, "File", "1");
++	switch_core_hash_insert(filter, "FreeSWITCH-Hostname", "1");
++	switch_core_hash_insert(filter, "from", "1");
++	switch_core_hash_insert(filter, "Hunt-Destination-Number", "1");
++	switch_core_hash_insert(filter, "ip", "1");
++	switch_core_hash_insert(filter, "Message-Account", "1");
++	switch_core_hash_insert(filter, "metadata", "1");
++	switch_core_hash_insert(filter, "old_node_channel_uuid", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Callee-ID-Name", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Callee-ID-Number", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Caller-ID-Name", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Caller-ID-Number", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Destination-Number", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Direction", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Unique-ID", "1");
++	switch_core_hash_insert(filter, "Other-Leg-Channel-Name", "1");
++	switch_core_hash_insert(filter, "Participant-Type", "1");
++	switch_core_hash_insert(filter, "Path", "1");
++	switch_core_hash_insert(filter, "profile_name", "1");
++	switch_core_hash_insert(filter, "Profiles", "1");
++	switch_core_hash_insert(filter, "proto-specific-event-name", "1");
++	switch_core_hash_insert(filter, "Raw-Application-Data", "1");
++	switch_core_hash_insert(filter, "realm", "1");
++	switch_core_hash_insert(filter, "Resigning-UUID", "1");
++	switch_core_hash_insert(filter, "set", "1");
++	switch_core_hash_insert(filter, "sip_auto_answer", "1");
++	switch_core_hash_insert(filter, "sip_auth_method", "1");
++	switch_core_hash_insert(filter, "sip_from_host", "1");
++	switch_core_hash_insert(filter, "sip_from_user", "1");
++	switch_core_hash_insert(filter, "sip_to_host", "1");
++	switch_core_hash_insert(filter, "sip_to_user", "1");
++	switch_core_hash_insert(filter, "sub-call-id", "1");
++	switch_core_hash_insert(filter, "technology", "1");
++	switch_core_hash_insert(filter, "to", "1");
++	switch_core_hash_insert(filter, "Unique-ID", "1");
++	switch_core_hash_insert(filter, "URL", "1");
++	switch_core_hash_insert(filter, "username", "1");
++	switch_core_hash_insert(filter, "variable_channel_is_moving", "1");
++	switch_core_hash_insert(filter, "variable_collected_digits", "1");
++	switch_core_hash_insert(filter, "variable_current_application", "1");
++	switch_core_hash_insert(filter, "variable_current_application_data", "1");
++	switch_core_hash_insert(filter, "variable_domain_name", "1");
++	switch_core_hash_insert(filter, "variable_effective_caller_id_name", "1");
++	switch_core_hash_insert(filter, "variable_effective_caller_id_number", "1");
++	switch_core_hash_insert(filter, "variable_holding_uuid", "1");
++	switch_core_hash_insert(filter, "variable_hold_music", "1");
++	switch_core_hash_insert(filter, "variable_media_group_id", "1");
++	switch_core_hash_insert(filter, "variable_originate_disposition", "1");
++	switch_core_hash_insert(filter, "variable_origination_uuid", "1");
++	switch_core_hash_insert(filter, "variable_playback_terminator_used", "1");
++	switch_core_hash_insert(filter, "variable_presence_id", "1");
++	switch_core_hash_insert(filter, "variable_record_ms", "1");
++	switch_core_hash_insert(filter, "variable_recovered", "1");
++	switch_core_hash_insert(filter, "variable_silence_hits_exhausted", "1");
++	switch_core_hash_insert(filter, "variable_sip_auth_realm", "1");
++	switch_core_hash_insert(filter, "variable_sip_from_host", "1");
++	switch_core_hash_insert(filter, "variable_sip_from_user", "1");
++	switch_core_hash_insert(filter, "variable_sip_from_tag", "1");
++	switch_core_hash_insert(filter, "variable_sip_h_X-AUTH-IP", "1");
++	switch_core_hash_insert(filter, "variable_sip_received_ip", "1");
++	switch_core_hash_insert(filter, "variable_sip_to_host", "1");
++	switch_core_hash_insert(filter, "variable_sip_to_user", "1");
++	switch_core_hash_insert(filter, "variable_sip_to_tag", "1");
++	switch_core_hash_insert(filter, "variable_sofia_profile_name", "1");
++	switch_core_hash_insert(filter, "variable_transfer_history", "1");
++	switch_core_hash_insert(filter, "variable_user_name", "1");
++	switch_core_hash_insert(filter, "variable_endpoint_disposition", "1");
++	switch_core_hash_insert(filter, "variable_originate_disposition", "1");
++	switch_core_hash_insert(filter, "variable_bridge_hangup_cause", "1");
++	switch_core_hash_insert(filter, "variable_hangup_cause", "1");
++	switch_core_hash_insert(filter, "variable_last_bridge_proto_specific_hangup_cause", "1");
++	switch_core_hash_insert(filter, "variable_proto_specific_hangup_cause", "1");
++	switch_core_hash_insert(filter, "VM-Call-ID", "1");
++	switch_core_hash_insert(filter, "VM-sub-call-id", "1");
++	switch_core_hash_insert(filter, "whistle_application_name", "1");
++	switch_core_hash_insert(filter, "whistle_application_response", "1");
++	switch_core_hash_insert(filter, "whistle_event_name", "1");
++	switch_core_hash_insert(filter, "sip_auto_answer_notify", "1");
++	switch_core_hash_insert(filter, "eavesdrop_group", "1");
++	switch_core_hash_insert(filter, "origination_caller_id_name", "1");
++	switch_core_hash_insert(filter, "origination_caller_id_number", "1");
++	switch_core_hash_insert(filter, "origination_callee_id_name", "1");
++	switch_core_hash_insert(filter, "origination_callee_id_number", "1");
++	switch_core_hash_insert(filter, "sip_auth_username", "1");
++	switch_core_hash_insert(filter, "sip_auth_password", "1");
++	switch_core_hash_insert(filter, "effective_caller_id_name", "1");
++	switch_core_hash_insert(filter, "effective_caller_id_number", "1");
++	switch_core_hash_insert(filter, "effective_callee_id_name", "1");
++	switch_core_hash_insert(filter, "effective_callee_id_number", "1");
++
++	/* Registration headers */
++	switch_core_hash_insert(filter, "call-id", "1");
++	switch_core_hash_insert(filter, "profile-name", "1");
++	switch_core_hash_insert(filter, "from-user", "1");
++	switch_core_hash_insert(filter, "from-host", "1");
++	switch_core_hash_insert(filter, "presence-hosts", "1");
++	switch_core_hash_insert(filter, "contact", "1");
++	switch_core_hash_insert(filter, "rpid", "1");
++	switch_core_hash_insert(filter, "status", "1");
++	switch_core_hash_insert(filter, "expires", "1");
++	switch_core_hash_insert(filter, "to-user", "1");
++	switch_core_hash_insert(filter, "to-host", "1");
++	switch_core_hash_insert(filter, "network-ip", "1");
++	switch_core_hash_insert(filter, "network-port", "1");
++	switch_core_hash_insert(filter, "username", "1");
++	switch_core_hash_insert(filter, "realm", "1");
++	switch_core_hash_insert(filter, "user-agent", "1");
++
++	switch_core_hash_insert(filter, "Hangup-Cause", "1");
++	switch_core_hash_insert(filter, "Unique-ID", "1");
++	switch_core_hash_insert(filter, "variable_switch_r_sdp", "1");
++	switch_core_hash_insert(filter, "variable_sip_local_sdp_str", "1");
++	switch_core_hash_insert(filter, "variable_sip_to_uri", "1");
++	switch_core_hash_insert(filter, "variable_sip_from_uri", "1");
++	switch_core_hash_insert(filter, "variable_sip_user_agent", "1");
++	switch_core_hash_insert(filter, "variable_duration", "1");
++	switch_core_hash_insert(filter, "variable_billsec", "1");
++	switch_core_hash_insert(filter, "variable_progresssec", "1");
++	switch_core_hash_insert(filter, "variable_progress_uepoch", "1");
++	switch_core_hash_insert(filter, "variable_progress_media_uepoch", "1");
++	switch_core_hash_insert(filter, "variable_start_uepoch", "1");
++	switch_core_hash_insert(filter, "variable_digits_dialed", "1");
++	switch_core_hash_insert(filter, "Member-ID", "1");
++	switch_core_hash_insert(filter, "Floor", "1");
++	switch_core_hash_insert(filter, "Video", "1");
++	switch_core_hash_insert(filter, "Hear", "1");
++	switch_core_hash_insert(filter, "Speak", "1");
++	switch_core_hash_insert(filter, "Talking", "1");
++	switch_core_hash_insert(filter, "Current-Energy", "1");
++	switch_core_hash_insert(filter, "Energy-Level", "1");
++	switch_core_hash_insert(filter, "Mute-Detect", "1");
++
++	/* RTMP headers */
++	switch_core_hash_insert(filter, "RTMP-Session-ID", "1");
++	switch_core_hash_insert(filter, "RTMP-Profile", "1");
++	switch_core_hash_insert(filter, "RTMP-Flash-Version", "1");
++	switch_core_hash_insert(filter, "RTMP-SWF-URL", "1");
++	switch_core_hash_insert(filter, "RTMP-TC-URL", "1");
++	switch_core_hash_insert(filter, "RTMP-Page-URL", "1");
++	switch_core_hash_insert(filter, "User", "1");
++	switch_core_hash_insert(filter, "Domain", "1");
++
++	/* Fax headers */
++	switch_core_hash_insert(filter, "variable_fax_bad_rows", "1");
++	switch_core_hash_insert(filter, "variable_fax_document_total_pages", "1");
++	switch_core_hash_insert(filter, "variable_fax_document_transferred_pages", "1");
++	switch_core_hash_insert(filter, "variable_fax_ecm_used", "1");
++	switch_core_hash_insert(filter, "variable_fax_result_code", "1");
++	switch_core_hash_insert(filter, "variable_fax_result_text", "1");
++	switch_core_hash_insert(filter, "variable_fax_success", "1");
++	switch_core_hash_insert(filter, "variable_fax_transfer_rate", "1");
++	switch_core_hash_insert(filter, "variable_fax_local_station_id", "1");
++	switch_core_hash_insert(filter, "variable_fax_remote_station_id", "1");
++	switch_core_hash_insert(filter, "variable_fax_remote_country", "1");
++	switch_core_hash_insert(filter, "variable_fax_remote_vendor", "1");
++	switch_core_hash_insert(filter, "variable_fax_remote_model", "1");
++	switch_core_hash_insert(filter, "variable_fax_image_resolution", "1");
++	switch_core_hash_insert(filter, "variable_fax_file_image_resolution", "1");
++	switch_core_hash_insert(filter, "variable_fax_image_size", "1");
++	switch_core_hash_insert(filter, "variable_fax_image_pixel_size", "1");
++	switch_core_hash_insert(filter, "variable_fax_file_image_pixel_size", "1");
++	switch_core_hash_insert(filter, "variable_fax_longest_bad_row_run", "1");
++	switch_core_hash_insert(filter, "variable_fax_encoding", "1");
++	switch_core_hash_insert(filter, "variable_fax_encoding_name", "1");
++	switch_core_hash_insert(filter, "variable_fax_header", "1");
++	switch_core_hash_insert(filter, "variable_fax_ident", "1");
++	switch_core_hash_insert(filter, "variable_fax_timezone", "1");
++	switch_core_hash_insert(filter, "variable_fax_doc_id", "1");
++	switch_core_hash_insert(filter, "variable_fax_doc_database", "1");
++
++	/* Secure headers */
++	/*
++	  switch_core_hash_insert(filter, "variable_sdp_secure_savp_only", "1");
++	  switch_core_hash_insert(filter, "variable_rtp_has_crypto", "1");
++	  switch_core_hash_insert(filter, "variable_rtp_secure_media", "1");
++	  switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed", "1");
++	  switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed_audio", "1");
++	  switch_core_hash_insert(filter, "variable_rtp_secure_media_confirmed_video", "1");
++	  switch_core_hash_insert(filter, "variable_zrtp_secure_media", "1");
++	  switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed", "1");
++	  switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed_audio", "1");
++	  switch_core_hash_insert(filter, "variable_zrtp_secure_media_confirmed_video", "1");
++	  switch_core_hash_insert(filter, "sdp_secure_savp_only", "1");
++	  switch_core_hash_insert(filter, "rtp_has_crypto", "1");
++	  switch_core_hash_insert(filter, "rtp_secure_media", "1");
++	  switch_core_hash_insert(filter, "rtp_secure_media_confirmed", "1");
++	  switch_core_hash_insert(filter, "rtp_secure_media_confirmed_audio", "1");
++	  switch_core_hash_insert(filter, "rtp_secure_media_confirmed_video", "1");
++	  switch_core_hash_insert(filter, "zrtp_secure_media", "1");
++	  switch_core_hash_insert(filter, "zrtp_secure_media_confirmed", "1");
++	  switch_core_hash_insert(filter, "zrtp_secure_media_confirmed_audio", "1");
++	  switch_core_hash_insert(filter, "zrtp_secure_media_confirmed_video", "1");
++	*/
++
++	/* Device Redirect headers */
++	/*
++	  switch_core_hash_insert(filter, "variable_last_bridge_hangup_cause", "1");
++	  switch_core_hash_insert(filter, "variable_sip_redirected_by", "1");
++	*/
++
++	switch_core_hash_insert(filter, "intercepted_by", "1");
++
++	// SMS
++	switch_core_hash_insert(filter, "Message-ID", "1");
++	switch_core_hash_insert(filter, "Delivery-Failure", "1");
++	switch_core_hash_insert(filter, "Delivery-Result-Code", "1");
++
++	return filter;
++}
++
++/* For Emacs:
++ * Local Variables:
++ * mode:c
++ * indent-tabs-mode:t
++ * tab-width:4
++ * c-basic-offset:4
++ * End:
++ * For VIM:
++ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
++ */
+diff --git a/src/mod/event_handlers/mod_kazoo/mod_kazoo.c b/src/mod/event_handlers/mod_kazoo/mod_kazoo.c
+new file mode 100644
+index 0000000..81c4343
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/mod_kazoo.c
+@@ -0,0 +1,766 @@
++/*
++ * FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ * Copyright (C) 2005-2012, Anthony Minessale II <anthm@freeswitch.org>
++ *
++ * Version: MPL 1.1
++ *
++ * The contents of this file are subject to the Mozilla Public License Version
++ * 1.1 (the "License"); you may not use this file except in compliance with
++ * the License. You may obtain a copy of the License at
++ * http://www.mozilla.org/MPL/
++ *
++ * Software distributed under the License is distributed on an "AS IS" basis,
++ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
++ * for the specific language governing rights and limitations under the
++ * License.
++ *
++ * The Original Code is FreeSWITCH Modular Media Switching Software Library / Soft-Switch Application
++ *
++ * The Initial Developer of the Original Code is
++ * Anthony Minessale II <anthm@freeswitch.org>
++ * Portions created by the Initial Developer are Copyright (C)
++ * the Initial Developer. All Rights Reserved.
++ *
++ * Contributor(s):
++ *
++ * Karl Anderson <karl@2600hz.com>
++ * Darren Schreiber <darren@2600hz.com>
++ *
++ *
++ * mod_kazoo.c -- Socket Controlled Event Handler
++ *
++ */
++#include "mod_kazoo.h"
++
++SWITCH_MODULE_LOAD_FUNCTION(mod_kazoo_load);
++SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown);
++SWITCH_MODULE_RUNTIME_FUNCTION(mod_kazoo_runtime);
++SWITCH_MODULE_DEFINITION(mod_kazoo, mod_kazoo_load, mod_kazoo_shutdown, mod_kazoo_runtime);
++
++SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_pref_ip, globals.ip);
++SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_pref_ei_cookie, globals.ei_cookie);
++SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_pref_ei_nodename, globals.ei_nodename);
++SWITCH_DECLARE_GLOBAL_STRING_FUNC(set_pref_kazoo_var_prefix, globals.kazoo_var_prefix);
++
++static switch_status_t api_erlang_status(switch_stream_handle_t *stream) {
++	switch_sockaddr_t *sa;
++	uint16_t port;
++	char ipbuf[25];
++	const char *ip_addr;
++	ei_node_t *ei_node;
++
++	switch_socket_addr_get(&sa, SWITCH_FALSE, globals.acceptor);
++
++	port = switch_sockaddr_get_port(sa);
++	ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
++
++	stream->write_function(stream, "Running %s\n", VERSION);
++	stream->write_function(stream, "Listening for new Erlang connections on %s:%u with cookie %s\n", ip_addr, port, globals.ei_cookie);
++	stream->write_function(stream, "Registered as Erlang node %s, visible as %s\n", globals.ei_cnode.thisnodename, globals.ei_cnode.thisalivename);
++
++	if (globals.ei_compat_rel) {
++		stream->write_function(stream, "Using Erlang compatibility mode: %d\n", globals.ei_compat_rel);
++	}
++
++	switch_thread_rwlock_rdlock(globals.ei_nodes_lock);
++	ei_node = globals.ei_nodes;
++	if (!ei_node) {
++		stream->write_function(stream, "No erlang nodes connected\n");
++	} else {
++		stream->write_function(stream, "Connected to:\n");
++		while(ei_node != NULL) {
++			unsigned int year, day, hour, min, sec, delta;
++
++			delta = (switch_micro_time_now() - ei_node->created_time) / 1000000;
++			sec = delta % 60;
++			min = delta / 60 % 60;
++			hour = delta / 3600 % 24;
++			day = delta / 86400 % 7;
++			year = delta / 31556926 % 12;
++			stream->write_function(stream, "  %s (%s:%d) up %d years, %d days, %d hours, %d minutes, %d seconds\n"
++								   ,ei_node->peer_nodename, ei_node->remote_ip, ei_node->remote_port, year, day, hour, min, sec);
++			ei_node = ei_node->next;
++		}
++	}
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t api_erlang_event_filter(switch_stream_handle_t *stream) {
++	switch_hash_index_t *hi = NULL;
++	int column = 0;
++
++	for (hi = (switch_hash_index_t *)switch_core_hash_first_iter(globals.event_filter, hi); hi; hi = switch_core_hash_next(&hi)) {
++		const void *key;
++		void *val;
++		switch_core_hash_this(hi, &key, NULL, &val);
++		stream->write_function(stream, "%-50s", (char *)key);
++		if (++column > 2) {
++			stream->write_function(stream, "\n");
++			column = 0;
++		}
++	}
++
++	if (++column > 2) {
++		stream->write_function(stream, "\n");
++		column = 0;
++	}
++
++	stream->write_function(stream, "%-50s", globals.kazoo_var_prefix);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t api_erlang_nodes_list(switch_stream_handle_t *stream) {
++	ei_node_t *ei_node;
++
++	switch_thread_rwlock_rdlock(globals.ei_nodes_lock);
++	ei_node = globals.ei_nodes;
++	while(ei_node != NULL) {
++		stream->write_function(stream, "%s (%s)\n", ei_node->peer_nodename, ei_node->remote_ip);
++		ei_node = ei_node->next;
++	}
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t api_erlang_nodes_count(switch_stream_handle_t *stream) {
++	ei_node_t *ei_node;
++	int count = 0;
++
++	switch_thread_rwlock_rdlock(globals.ei_nodes_lock);
++	ei_node = globals.ei_nodes;
++	while(ei_node != NULL) {
++		count++;
++		ei_node = ei_node->next;
++	}
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	stream->write_function(stream, "%d\n", count);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t api_complete_erlang_node(const char *line, const char *cursor, switch_console_callback_match_t **matches) {
++	switch_console_callback_match_t *my_matches = NULL;
++	switch_status_t status = SWITCH_STATUS_FALSE;
++	ei_node_t *ei_node;
++
++	switch_thread_rwlock_rdlock(globals.ei_nodes_lock);
++	ei_node = globals.ei_nodes;
++	while(ei_node != NULL) {
++		switch_console_push_match(&my_matches, ei_node->peer_nodename);
++		ei_node = ei_node->next;
++	}
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	if (my_matches) {
++		*matches = my_matches;
++		status = SWITCH_STATUS_SUCCESS;
++	}
++
++	return status;
++}
++
++static switch_status_t handle_node_api_event_stream(ei_event_stream_t *event_stream, switch_stream_handle_t *stream) {
++	ei_event_binding_t *binding;
++	int column = 0;
++
++	switch_mutex_lock(event_stream->socket_mutex);
++	if (event_stream->connected == SWITCH_FALSE) {
++		switch_sockaddr_t *sa;
++		uint16_t port;
++		char ipbuf[25] = {0};
++		const char *ip_addr;
++
++		switch_socket_addr_get(&sa, SWITCH_TRUE, event_stream->acceptor);
++		port = switch_sockaddr_get_port(sa);
++		ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
++
++		if (zstr(ip_addr)) {
++			ip_addr = globals.ip;
++		}
++
++		stream->write_function(stream, "%s:%d -> disconnected\n"
++							   ,ip_addr, port);
++	} else {
++		stream->write_function(stream, "%s:%d -> %s:%d\n"
++							   ,event_stream->local_ip, event_stream->local_port
++							   ,event_stream->remote_ip, event_stream->remote_port);
++	}
++
++	binding = event_stream->bindings;
++	while(binding != NULL) {
++		if (binding->type == SWITCH_EVENT_CUSTOM) {
++			stream->write_function(stream, "CUSTOM %-43s", binding->subclass_name);
++		} else {
++			stream->write_function(stream, "%-50s", switch_event_name(binding->type));
++		}
++
++		if (++column > 2) {
++			stream->write_function(stream, "\n");
++			column = 0;
++		}
++
++		binding = binding->next;
++	}
++	switch_mutex_unlock(event_stream->socket_mutex);
++
++	if (!column) {
++		stream->write_function(stream, "\n");
++	} else {
++		stream->write_function(stream, "\n\n");
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_node_api_event_streams(ei_node_t *ei_node, switch_stream_handle_t *stream) {
++	ei_event_stream_t *event_stream;
++
++	switch_mutex_lock(ei_node->event_streams_mutex);
++	event_stream = ei_node->event_streams;
++	while(event_stream != NULL) {
++		handle_node_api_event_stream(event_stream, stream);
++		event_stream = event_stream->next;
++	}
++	switch_mutex_unlock(ei_node->event_streams_mutex);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t handle_node_api_command(ei_node_t *ei_node, switch_stream_handle_t *stream, uint32_t command) {
++	unsigned int year, day, hour, min, sec, delta;
++
++	switch (command) {
++	case API_COMMAND_DISCONNECT:
++		stream->write_function(stream, "Disconnecting erlang node %s at managers request\n", ei_node->peer_nodename);
++		switch_clear_flag(ei_node, LFLAG_RUNNING);
++		break;
++	case API_COMMAND_REMOTE_IP:
++		delta = (switch_micro_time_now() - ei_node->created_time) / 1000000;
++		sec = delta % 60;
++		min = delta / 60 % 60;
++		hour = delta / 3600 % 24;
++		day = delta / 86400 % 7;
++		year = delta / 31556926 % 12;
++
++		stream->write_function(stream, "Uptime           %d years, %d days, %d hours, %d minutes, %d seconds\n", year, day, hour, min, sec);
++		stream->write_function(stream, "Local Address    %s:%d\n", ei_node->local_ip, ei_node->local_port);
++		stream->write_function(stream, "Remote Address   %s:%d\n", ei_node->remote_ip, ei_node->remote_port);
++		break;
++	case API_COMMAND_STREAMS:
++		handle_node_api_event_streams(ei_node, stream);
++		break;
++	case API_COMMAND_BINDINGS:
++		handle_api_command_streams(ei_node, stream);
++		break;
++	default:
++		break;
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t api_erlang_node_command(switch_stream_handle_t *stream, const char *nodename, uint32_t command) {
++	ei_node_t *ei_node;
++
++	switch_thread_rwlock_rdlock(globals.ei_nodes_lock);
++	ei_node = globals.ei_nodes;
++	while(ei_node != NULL) {
++		int length = strlen(ei_node->peer_nodename);
++
++		if (!strncmp(ei_node->peer_nodename, nodename, length)) {
++			handle_node_api_command(ei_node, stream, command);
++			switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++			return SWITCH_STATUS_SUCCESS;
++		}
++
++		ei_node = ei_node->next;
++	}
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++
++	return SWITCH_STATUS_NOTFOUND;
++}
++
++static int read_cookie_from_file(char *filename) {
++	int fd;
++	char cookie[MAXATOMLEN + 1];
++	char *end;
++	struct stat buf;
++	ssize_t res;
++
++	if (!stat(filename, &buf)) {
++		if ((buf.st_mode & S_IRWXG) || (buf.st_mode & S_IRWXO)) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "%s must only be accessible by owner only.\n", filename);
++			return 2;
++		}
++		if (buf.st_size > MAXATOMLEN) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "%s contains a cookie larger than the maximum atom size of %d.\n", filename, MAXATOMLEN);
++			return 2;
++		}
++		fd = open(filename, O_RDONLY);
++		if (fd < 1) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to open cookie file %s : %d.\n", filename, errno);
++			return 2;
++		}
++
++		if ((res = read(fd, cookie, MAXATOMLEN)) < 1) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to read cookie file %s : %d.\n", filename, errno);
++		}
++
++		cookie[MAXATOMLEN] = '\0';
++
++		/* replace any end of line characters with a null */
++		if ((end = strchr(cookie, '\n'))) {
++			*end = '\0';
++		}
++
++		if ((end = strchr(cookie, '\r'))) {
++			*end = '\0';
++		}
++
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie from file %s: %s\n", filename, cookie);
++
++		set_pref_ei_cookie(cookie);
++		return 0;
++	} else {
++		/* don't error here, because we might be blindly trying to read $HOME/.erlang.cookie, and that can fail silently */
++		return 1;
++	}
++}
++
++static switch_status_t config(void) {
++	char *cf = "kazoo.conf";
++	switch_xml_t cfg, xml, child, param;
++	globals.send_all_headers = globals.send_all_private_headers = 0;
++	globals.connection_timeout = 500;
++	globals.receive_timeout = 200;
++	globals.receive_msg_preallocate = 2000;
++	globals.event_stream_preallocate = 4000;
++	globals.send_msg_batch = 10;
++	globals.event_stream_framing = 2;
++
++	if (!(xml = switch_xml_open_cfg(cf, &cfg, NULL))) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Failed to open configuration file %s\n", cf);
++		return SWITCH_STATUS_FALSE;
++	} else {
++		if ((child = switch_xml_child(cfg, "settings"))) {
++			for (param = switch_xml_child(child, "param"); param; param = param->next) {
++				char *var = (char *) switch_xml_attr_soft(param, "name");
++				char *val = (char *) switch_xml_attr_soft(param, "value");
++
++				if (!strcmp(var, "listen-ip")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set bind ip address: %s\n", val);
++					set_pref_ip(val);
++				} else if (!strcmp(var, "cookie")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set cookie: %s\n", val);
++					set_pref_ei_cookie(val);
++				} else if (!strcmp(var, "cookie-file")) {
++					if (read_cookie_from_file(val) == 1) {
++						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to read cookie from %s\n", val);
++					}
++				} else if (!strcmp(var, "nodename")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set node name: %s\n", val);
++					set_pref_ei_nodename(val);
++				} else if (!strcmp(var, "shortname")) {
++					globals.ei_shortname = switch_true(val);
++				} else if (!strcmp(var, "kazoo-var-prefix")) {
++					set_pref_kazoo_var_prefix(val);
++				} else if (!strcmp(var, "compat-rel")) {
++					if (atoi(val) >= 7)
++						globals.ei_compat_rel = atoi(val);
++					else
++						switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Invalid compatibility release '%s' specified\n", val);
++				} else if (!strcmp(var, "nat-map")) {
++					globals.nat_map = switch_true(val);
++				} else if (!strcmp(var, "send-all-headers")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-headers: %s\n", val);
++					globals.send_all_headers = switch_true(val);
++				} else if (!strcmp(var, "send-all-private-headers")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-all-private-headers: %s\n", val);
++					globals.send_all_private_headers = switch_true(val);
++				} else if (!strcmp(var, "connection-timeout")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set connection-timeout: %s\n", val);
++					globals.connection_timeout = atoi(val);
++				} else if (!strcmp(var, "receive-timeout")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-timeout: %s\n", val);
++					globals.receive_timeout = atoi(val);
++				} else if (!strcmp(var, "receive-msg-preallocate")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set receive-msg-preallocate: %s\n", val);
++					globals.receive_msg_preallocate = atoi(val);
++				} else if (!strcmp(var, "event-stream-preallocate")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set event-stream-preallocate: %s\n", val);
++					globals.event_stream_preallocate = atoi(val);
++				} else if (!strcmp(var, "send-msg-batch-size")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set send-msg-batch-size: %s\n", val);
++					globals.send_msg_batch = atoi(val);
++				} else if (!strcmp(var, "event-stream-framing")) {
++					switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_INFO, "Set event-stream-framing: %s\n", val);
++					globals.event_stream_framing = atoi(val);
++				}
++			}
++		}
++
++		if ((child = switch_xml_child(cfg, "event-filter"))) {
++			switch_hash_t *filter;
++
++			switch_core_hash_init(&filter);
++			for (param = switch_xml_child(child, "header"); param; param = param->next) {
++				char *var = (char *) switch_xml_attr_soft(param, "name");
++				switch_core_hash_insert(filter, var, "1");
++			}
++
++			globals.event_filter = filter;
++		}
++
++		switch_xml_free(xml);
++	}
++
++	if (globals.receive_msg_preallocate < 0) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid receive message preallocate value, disabled\n");
++		globals.receive_msg_preallocate = 0;
++	}
++
++	if (globals.event_stream_preallocate < 0) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid event stream preallocate value, disabled\n");
++		globals.event_stream_preallocate = 0;
++	}
++
++	if (globals.send_msg_batch < 1) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid send message batch size, reverting to default\n");
++		globals.send_msg_batch = 10;
++	}
++
++	if (!globals.event_filter) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Event filter not found in configuration, using default\n");
++		globals.event_filter = create_default_filter();
++	}
++
++	if (globals.event_stream_framing < 1 || globals.event_stream_framing > 4) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Invalid event stream framing value, using default\n");
++		globals.event_stream_framing = 2;
++	}
++
++	if (zstr(globals.kazoo_var_prefix)) {
++		set_pref_kazoo_var_prefix("variable_ecallmgr*");
++		globals.var_prefix_length = 17; //ignore the *
++	} else {
++		/* we could use the global pool but then we would have to conditionally
++		 * free the pointer if it was not drawn from the XML */
++		char *buf;
++		int size = switch_snprintf(NULL, 0, "variable_%s*", globals.kazoo_var_prefix) + 1;
++
++		switch_malloc(buf, size);
++		switch_snprintf(buf, size, "variable_%s*", globals.kazoo_var_prefix);
++		switch_safe_free(globals.kazoo_var_prefix);
++		globals.kazoo_var_prefix = buf;
++		globals.var_prefix_length = size - 2; //ignore the *
++	}
++
++	if (!globals.num_worker_threads) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "Number of worker threads not found in configuration, using default\n");
++		globals.num_worker_threads = 10;
++	}
++
++	if (zstr(globals.ip)) {
++		set_pref_ip("0.0.0.0");
++	}
++
++	if (zstr(globals.ei_cookie)) {
++		int res;
++		char *home_dir = getenv("HOME");
++		char path_buf[1024];
++
++		if (!zstr(home_dir)) {
++			/* $HOME/.erlang.cookie */
++			switch_snprintf(path_buf, sizeof (path_buf), "%s%s%s", home_dir, SWITCH_PATH_SEPARATOR, ".erlang.cookie");
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Checking for cookie at path: %s\n", path_buf);
++
++			res = read_cookie_from_file(path_buf);
++			if (res) {
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING, "No cookie or valid cookie file specified, using default cookie\n");
++				set_pref_ei_cookie("ClueCon");
++			}
++		}
++	}
++
++	if (!globals.ei_nodename) {
++		set_pref_ei_nodename("freeswitch");
++	}
++
++	if (!globals.nat_map) {
++		globals.nat_map = 0;
++	}
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++static switch_status_t create_acceptor() {
++	switch_sockaddr_t *sa;
++	uint16_t port;
++    char ipbuf[25];
++    const char *ip_addr;
++
++	/* if the config has specified an erlang release compatibility then pass that along to the erlang interface */
++	if (globals.ei_compat_rel) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Compatability with OTP R%d requested\n", globals.ei_compat_rel);
++		ei_set_compat_rel(globals.ei_compat_rel);
++	}
++
++	if (!(globals.acceptor = create_socket(globals.pool))) {
++		return SWITCH_STATUS_SOCKERR;
++	}
++
++	switch_socket_addr_get(&sa, SWITCH_FALSE, globals.acceptor);
++
++	port = switch_sockaddr_get_port(sa);
++	ip_addr = switch_get_addr(ipbuf, sizeof (ipbuf), sa);
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Erlang connection acceptor listening on %s:%u\n", ip_addr, port);
++
++	/* try to initialize the erlang interface */
++	if (create_ei_cnode(ip_addr, globals.ei_nodename, &globals.ei_cnode) != SWITCH_STATUS_SUCCESS) {
++		return SWITCH_STATUS_SOCKERR;
++	}
++
++	/* tell the erlang port manager where we can be reached.  this returns a file descriptor pointing to epmd or -1 */
++	if ((globals.epmdfd = ei_publish(&globals.ei_cnode, port)) == -1) {
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR,
++						  "Failed to publish port to epmd. Try starting it yourself or run an erl shell with the -sname or -name option.\n");
++		return SWITCH_STATUS_SOCKERR;
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Connected to epmd and published erlang cnode name %s at port %d\n", globals.ei_cnode.thisnodename, port);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_STANDARD_API(exec_api_cmd)
++{
++	char *argv[1024] = { 0 };
++	int unknown_command = 1, argc = 0;
++	char *mycmd = NULL;
++
++	const char *usage_string = "USAGE:\n"
++		"--------------------------------------------------------------------------------------------------------------------\n"
++		"erlang status                            - provides an overview of the current status\n"
++		"erlang event_filter                      - lists the event headers that will be sent to Erlang nodes\n"
++		"erlang nodes list                        - lists connected Erlang nodes (usefull for monitoring tools)\n"
++		"erlang nodes count                       - provides a count of connected Erlang nodes (usefull for monitoring tools)\n"
++		"erlang node <node_name> disconnect       - disconnects an Erlang node\n"
++		"erlang node <node_name> connection       - Shows the connection info\n"
++		"erlang node <node_name> event_streams    - lists the event streams for an Erlang node\n"
++		"erlang node <node_name> fetch_bindings   - lists the XML fetch bindings for an Erlang node\n"
++		"---------------------------------------------------------------------------------------------------------------------\n";
++
++	if (zstr(cmd)) {
++		stream->write_function(stream, "%s", usage_string);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	if (!(mycmd = strdup(cmd))) {
++		return SWITCH_STATUS_MEMERR;
++	}
++
++	if (!(argc = switch_separate_string(mycmd, ' ', argv, (sizeof(argv) / sizeof(argv[0]))))) {
++		stream->write_function(stream, "%s", usage_string);
++		switch_safe_free(mycmd);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	if (zstr(argv[0])) {
++		stream->write_function(stream, "%s", usage_string);
++		switch_safe_free(mycmd);
++		return SWITCH_STATUS_SUCCESS;
++	}
++
++	if (!strncmp(argv[0], "status", 6)) {
++		unknown_command = 0;
++		api_erlang_status(stream);
++	} else if (!strncmp(argv[0], "event_filter", 6)) {
++		unknown_command = 0;
++		api_erlang_event_filter(stream);
++	} else if (!strncmp(argv[0], "nodes", 6) && !zstr(argv[1])) {
++		if (!strncmp(argv[1], "list", 6)) {
++			unknown_command = 0;
++			api_erlang_nodes_list(stream);
++		} else if (!strncmp(argv[1], "count", 6)) {
++			unknown_command = 0;
++			api_erlang_nodes_count(stream);
++		}
++	} else if (!strncmp(argv[0], "node", 6) && !zstr(argv[1]) && !zstr(argv[2])) {
++		if (!strncmp(argv[2], "disconnect", 6)) {
++			unknown_command = 0;
++			api_erlang_node_command(stream, argv[1], API_COMMAND_DISCONNECT);
++		} else if (!strncmp(argv[2], "connection", 2)) {
++			unknown_command = 0;
++			api_erlang_node_command(stream, argv[1], API_COMMAND_REMOTE_IP);
++		} else if (!strncmp(argv[2], "event_streams", 6)) {
++			unknown_command = 0;
++			api_erlang_node_command(stream, argv[1], API_COMMAND_STREAMS);
++		} else if (!strncmp(argv[2], "fetch_bindings", 6)) {
++			unknown_command = 0;
++			api_erlang_node_command(stream, argv[1], API_COMMAND_BINDINGS);
++		}
++	}
++
++	if (unknown_command) {
++		stream->write_function(stream, "%s", usage_string);
++	}
++
++	switch_safe_free(mycmd);
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_MODULE_LOAD_FUNCTION(mod_kazoo_load) {
++	switch_api_interface_t *api_interface;
++
++	memset(&globals, 0, sizeof(globals));
++
++	globals.pool = pool;
++	globals.ei_nodes = NULL;
++
++	if(config() != SWITCH_STATUS_SUCCESS) {
++		// TODO: what would we need to clean up here?
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Improper configuration!\n");
++		return SWITCH_STATUS_TERM;
++	}
++
++	if(create_acceptor() != SWITCH_STATUS_SUCCESS) {
++		// TODO: what would we need to clean up here
++		switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to create erlang connection acceptor!\n");
++		close_socket(&globals.acceptor);
++		return SWITCH_STATUS_TERM;
++	}
++
++	/* connect my internal structure to the blank pointer passed to me */
++	*module_interface = switch_loadable_module_create_module_interface(pool, modname);
++
++	/* create an api for cli debug commands */
++	SWITCH_ADD_API(api_interface, "erlang", "kazoo information", exec_api_cmd, "<command> [<args>]");
++	switch_console_set_complete("add erlang status");
++	switch_console_set_complete("add erlang event_filter");
++	switch_console_set_complete("add erlang nodes list");
++	switch_console_set_complete("add erlang nodes count");
++	switch_console_set_complete("add erlang node ::erlang::node disconnect");
++	switch_console_set_complete("add erlang node ::erlang::node connection");
++	switch_console_set_complete("add erlang node ::erlang::node event_streams");
++	switch_console_set_complete("add erlang node ::erlang::node fetch_bindings");
++	switch_console_add_complete_func("::erlang::node", api_complete_erlang_node);
++
++	switch_thread_rwlock_create(&globals.ei_nodes_lock, pool);
++
++	switch_set_flag(&globals, LFLAG_RUNNING);
++
++	/* create all XML fetch agents */
++	bind_fetch_agents();
++
++	/* indicate that the module should continue to be loaded */
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_MODULE_SHUTDOWN_FUNCTION(mod_kazoo_shutdown) {
++	int sanity = 0;
++
++	switch_console_set_complete("del erlang");
++	switch_console_del_complete_func("::erlang::node");
++
++	/* stop taking new requests and start shuting down the threads */
++	switch_clear_flag(&globals, LFLAG_RUNNING);
++
++	/* give everyone time to cleanly shutdown */
++	while (switch_atomic_read(&globals.threads)) {
++		switch_yield(100000);
++		if (++sanity >= 200) {
++			switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Unable to kill all threads, continuing. This probably wont end well.....good luck!\n");
++			break;
++		}
++	}
++
++	if (globals.event_filter) {
++		switch_core_hash_destroy(&globals.event_filter);
++	}
++
++	switch_thread_rwlock_wrlock(globals.ei_nodes_lock);
++	switch_thread_rwlock_unlock(globals.ei_nodes_lock);
++	switch_thread_rwlock_destroy(globals.ei_nodes_lock);
++
++	/* close the connection to epmd and the acceptor */
++	close_socketfd(&globals.epmdfd);
++	close_socket(&globals.acceptor);
++
++	/* remove all XML fetch agents */
++	unbind_fetch_agents();
++
++	/* Close the port we reserved for uPnP/Switch behind firewall, if necessary */
++	//	if (globals.nat_map && switch_nat_get_type()) {
++	//		switch_nat_del_mapping(globals.port, SWITCH_NAT_TCP);
++	//	}
++
++	/* clean up our allocated preferences */
++	switch_safe_free(globals.ip);
++	switch_safe_free(globals.ei_cookie);
++	switch_safe_free(globals.ei_nodename);
++	switch_safe_free(globals.kazoo_var_prefix);
++
++	return SWITCH_STATUS_SUCCESS;
++}
++
++SWITCH_MODULE_RUNTIME_FUNCTION(mod_kazoo_runtime) {
++	switch_os_socket_t os_socket;
++
++	switch_atomic_inc(&globals.threads);
++
++	switch_os_sock_get(&os_socket, globals.acceptor);
++
++	while (switch_test_flag(&globals, LFLAG_RUNNING)) {
++		int nodefd;
++		ErlConnect conn;
++
++		/* zero out errno because ei_accept doesn't differentiate between a */
++		/* failed authentication or a socket failure, or a client version */
++		/* mismatch or a godzilla attack (and a godzilla attack is highly likely) */
++		errno = 0;
++
++		/* wait here for an erlang node to connect, timming out to check if our module is still running every now-and-again */
++		if ((nodefd = ei_accept_tmo(&globals.ei_cnode, (int) os_socket, &conn, globals.connection_timeout)) == ERL_ERROR) {
++			if (erl_errno == ETIMEDOUT) {
++				continue;
++			} else if (errno) {
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_ERROR, "Erlang connection acceptor socket error %d %d\n", erl_errno, errno);
++			} else {
++				switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_WARNING,
++								  "Erlang node connection failed - ensure your cookie matches '%s' and you are using a good nodename\n", globals.ei_cookie);
++			}
++			continue;
++		}
++
++		if (!switch_test_flag(&globals, LFLAG_RUNNING)) {
++			break;
++		}
++
++		/* NEW ERLANG NODE CONNECTION! Hello friend! */
++		new_kazoo_node(nodefd, &conn);
++	}
++
++	switch_log_printf(SWITCH_CHANNEL_LOG, SWITCH_LOG_DEBUG, "Erlang connection acceptor shut down\n");
++
++	switch_atomic_dec(&globals.threads);
++
++	return SWITCH_STATUS_TERM;
++}
++
++
++/* For Emacs:
++ * Local Variables:
++ * mode:c
++ * indent-tabs-mode:t
++ * tab-width:4
++ * c-basic-offset:4
++ * End:
++ * For VIM:
++ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
++ */
+diff --git a/src/mod/event_handlers/mod_kazoo/mod_kazoo.h b/src/mod/event_handlers/mod_kazoo/mod_kazoo.h
+new file mode 100644
+index 0000000..85888e7
+--- /dev/null
++++ b/src/mod/event_handlers/mod_kazoo/mod_kazoo.h
+@@ -0,0 +1,165 @@
++#include <switch.h>
++#include <ei.h>
++
++#define MAX_ACL 100
++#define CMD_BUFLEN 1024 * 1000
++#define MAX_QUEUE_LEN 25000
++#define MAX_MISSED 500
++#define MAX_PID_CHARS 255
++#define VERSION "mod_kazoo v1.2.10-14"
++
++#define API_COMMAND_DISCONNECT 0
++#define API_COMMAND_REMOTE_IP 1
++#define API_COMMAND_STREAMS 2
++#define API_COMMAND_BINDINGS 3
++
++typedef enum {
++	LFLAG_RUNNING = (1 << 0)
++} event_flag_t;
++
++struct ei_send_msg_s {
++	ei_x_buff buf;
++	erlang_pid pid;
++};
++typedef struct ei_send_msg_s ei_send_msg_t;
++
++struct ei_received_msg_s {
++	ei_x_buff buf;
++	erlang_msg msg;
++};
++typedef struct ei_received_msg_s ei_received_msg_t;
++
++struct ei_event_binding_s {
++	char id[SWITCH_UUID_FORMATTED_LENGTH + 1];
++	switch_event_node_t *node;
++	switch_event_types_t type;
++	const char *subclass_name;
++	struct ei_event_binding_s *next;
++};
++typedef struct ei_event_binding_s ei_event_binding_t;
++
++struct ei_event_stream_s {
++	switch_memory_pool_t *pool;
++	ei_event_binding_t *bindings;
++	switch_queue_t *queue;
++	switch_socket_t *acceptor;
++	switch_pollset_t *pollset;
++	switch_pollfd_t *pollfd;
++	switch_socket_t *socket;
++	switch_mutex_t *socket_mutex;
++	switch_bool_t connected;
++	char remote_ip[25];
++	uint16_t remote_port;
++	char local_ip[25];
++	uint16_t local_port;
++	erlang_pid pid;
++	uint32_t flags;
++	struct ei_event_stream_s *next;
++};
++typedef struct ei_event_stream_s ei_event_stream_t;
++
++struct ei_node_s {
++	int nodefd;
++	switch_atomic_t pending_bgapi;
++	switch_atomic_t receive_handlers;
++	switch_memory_pool_t *pool;
++	ei_event_stream_t *event_streams;
++	switch_mutex_t *event_streams_mutex;
++	switch_queue_t *send_msgs;
++	switch_queue_t *received_msgs;
++	char *peer_nodename;
++	switch_time_t created_time;
++	switch_socket_t *socket;
++	char remote_ip[25];
++	uint16_t remote_port;
++	char local_ip[25];
++	uint16_t local_port;
++	uint32_t flags;
++	struct ei_node_s *next;
++};
++typedef struct ei_node_s ei_node_t;
++
++struct globals_s {
++	switch_memory_pool_t *pool;
++	switch_atomic_t threads;
++	switch_socket_t *acceptor;
++	struct ei_cnode_s ei_cnode;
++	switch_thread_rwlock_t *ei_nodes_lock;
++	ei_node_t *ei_nodes;
++	switch_xml_binding_t *config_fetch_binding;
++	switch_xml_binding_t *directory_fetch_binding;
++	switch_xml_binding_t *dialplan_fetch_binding;
++	switch_xml_binding_t *chatplan_fetch_binding;
++	switch_xml_binding_t *channels_fetch_binding;
++	switch_hash_t *event_filter;
++	int epmdfd;
++	int num_worker_threads;
++	switch_bool_t nat_map;
++	switch_bool_t ei_shortname;
++	int ei_compat_rel;
++	char *ip;
++	char *ei_cookie;
++	char *ei_nodename;
++	char *kazoo_var_prefix;
++	int var_prefix_length;
++	uint32_t flags;
++	int send_all_headers;
++	int send_all_private_headers;
++	int connection_timeout;
++	int receive_timeout;
++	int receive_msg_preallocate;
++	int event_stream_preallocate;
++	int send_msg_batch;
++	short event_stream_framing;
++} globals;
++typedef struct globals_s globals_t;
++
++/* kazoo_node.c */
++switch_status_t new_kazoo_node(int nodefd, ErlConnect *conn);
++
++/* kazoo_event_stream.c */
++ei_event_stream_t *find_event_stream(ei_event_stream_t *event_streams, const erlang_pid *from);
++ei_event_stream_t *new_event_stream(ei_event_stream_t **event_streams, const erlang_pid *from);
++switch_status_t remove_event_stream(ei_event_stream_t **event_streams, const erlang_pid *from);
++switch_status_t remove_event_streams(ei_event_stream_t **event_streams);
++unsigned long get_stream_port(const ei_event_stream_t *event_stream);
++switch_status_t add_event_binding(ei_event_stream_t *event_stream, const switch_event_types_t event_type, const char *subclass_name);
++switch_status_t remove_event_binding(ei_event_stream_t *event_stream, const switch_event_types_t event_type, const char *subclass_name);
++switch_status_t remove_event_bindings(ei_event_stream_t *event_stream);
++
++/* kazoo_fetch_agent.c */
++switch_status_t bind_fetch_agents();
++switch_status_t unbind_fetch_agents();
++switch_status_t remove_xml_clients(ei_node_t *ei_node);
++switch_status_t add_fetch_handler(ei_node_t *ei_node, erlang_pid *from, switch_xml_binding_t *binding);
++switch_status_t remove_fetch_handlers(ei_node_t *ei_node, erlang_pid *from);
++switch_status_t fetch_reply(char *uuid_str, char *xml_str, switch_xml_binding_t *binding);
++switch_status_t handle_api_command_streams(ei_node_t *ei_node, switch_stream_handle_t *stream);
++
++/* kazoo_utils.c */
++void close_socket(switch_socket_t **sock);
++void close_socketfd(int *sockfd);
++switch_socket_t *create_socket(switch_memory_pool_t *pool);
++switch_status_t create_ei_cnode(const char *ip_addr, const char *name, struct ei_cnode_s *ei_cnode);
++switch_status_t ei_compare_pids(const erlang_pid *pid1, const erlang_pid *pid2);
++void ei_encode_switch_event_headers(ei_x_buff *ebuf, switch_event_t *event);
++void ei_link(ei_node_t *ei_node, erlang_pid * from, erlang_pid * to);
++void ei_encode_switch_event(ei_x_buff * ebuf, switch_event_t *event);
++int ei_helper_send(ei_node_t *ei_node, erlang_pid* to, ei_x_buff *buf);
++int ei_decode_atom_safe(char *buf, int *index, char *dst);
++int ei_decode_string_or_binary_limited(char *buf, int *index, int maxsize, char *dst);
++int ei_decode_string_or_binary(char *buf, int *index, char **dst);
++switch_hash_t *create_default_filter();
++
++#define _ei_x_encode_string(buf, string) { ei_x_encode_binary(buf, string, strlen(string)); }
++
++/* For Emacs:
++ * Local Variables:
++ * mode:c
++ * indent-tabs-mode:t
++ * tab-width:4
++ * c-basic-offset:4
++ * End:
++ * For VIM:
++ * vim:set softtabstop=4 shiftwidth=4 tabstop=4:
++ */
+diff --git a/src/switch_ivr_play_say.c b/src/switch_ivr_play_say.c
+index 24a4ede..27d8f38 100644
+--- a/src/switch_ivr_play_say.c
++++ b/src/switch_ivr_play_say.c
+@@ -721,6 +721,7 @@ SWITCH_DECLARE(switch_status_t) switch_ivr_record_file(switch_core_session_t *se
+ 
+ 			if (score < fh->thresh) {
+ 				if (!--fh->silence_hits) {
++					switch_channel_set_variable(channel, "silence_hits_exhausted", "true");
+ 					break;
+ 				}
+ 			} else {
