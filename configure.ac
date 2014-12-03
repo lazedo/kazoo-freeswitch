@@ -1552,6 +1552,7 @@ AC_CONFIG_FILES([Makefile
 		src/mod/event_handlers/mod_cdr_pg_csv/Makefile
 		src/mod/event_handlers/mod_cdr_sqlite/Makefile
 		src/mod/event_handlers/mod_erlang_event/Makefile
+		src/mod/event_handlers/mod_kazoo/Makefile
 		src/mod/event_handlers/mod_event_multicast/Makefile
 		src/mod/event_handlers/mod_event_socket/Makefile
 		src/mod/event_handlers/mod_event_test/Makefile
